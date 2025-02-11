@@ -4,6 +4,11 @@
 import numpy as np
 import random
 import time
+import os
+from PIL import Image
+import re
+
+from dataset import save_scenario
 
 # Fire and smoke
 def sigmoid(x, scale=1.0):
@@ -517,24 +522,6 @@ def plot_ignition_map(ignition_map):
 
 
 
-def save_ignition_map(ignition_map, filename):
-    """
-    Save the ignition map to a text file.
-    
-    Args:
-        ignition_map (numpy.ndarray): NxN array of probabilities
-        filename (str): Name of the file to save (with .txt extension)
-    """
-    # Add .txt extension if not present
-    if not filename.endswith('.txt'):
-        filename += '.txt'
-    
-    # Save with high precision (8 decimal places) and scientific notation
-    np.savetxt(filename, ignition_map, fmt='%.8e', delimiter=',')
-    
-    # print(f"Ignition map saved to {filename}")
-
-
 def sample_ignition(ignition_map):
     """
     Sample a point from the ignition map according to its probability distribution.
@@ -557,39 +544,6 @@ def sample_ignition(ignition_map):
     y = flat_index % N
     
     return (x, y)
-
-
-def load_ignition_map(filename):
-    """
-    Load an ignition map from a text file.
-    
-    Args:
-        filename (str): Name of the file to load (with or without .txt extension)
-    
-    Returns:
-        numpy.ndarray: NxN array of probabilities loaded from the file
-    """
-    # Add .txt extension if not present
-    if not filename.endswith('.txt'):
-        filename += '.txt'
-    
-    try:
-        # Load the map using numpy's loadtxt function with comma delimiter
-        ignition_map = np.loadtxt(filename, delimiter=',')
-        
-        # Verify the map is square
-        if ignition_map.shape[0] != ignition_map.shape[1]:
-            raise ValueError("Loaded ignition map is not square")
-            
-        # print(f"Successfully loaded ignition map from {filename}")
-        return ignition_map
-        
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find file: {filename}")
-    except Exception as e:
-        raise Exception(f"Error loading ignition map: {str(e)}")
-    
-
 
 ###
 from multiprocessing import shared_memory
@@ -621,71 +575,3 @@ def generate_scenario(shared_mem_name,shape,dtype, T, filename):
     save_scenario(scenario, starting_time, filename)
 
     return scenario, starting_time
-
-def save_scenario(scenario, starting_time, filename):
-    """
-    Save a scenario and its starting time to a text file.
-    
-    Args:
-        scenario (numpy.ndarray): TxNxN array representing the wildfire evolution
-        starting_time (int): The time step when the fire starts
-        filename (str): Name of the file to save (with or without .txt extension)
-    """
-    if not filename.endswith('.txt'):
-        filename += '.txt'
-    
-    # Save starting_time on first line, then scenario data
-    with open(filename, 'w') as f:
-        # Write starting time
-        f.write(f"{starting_time}\n")
-        
-        # Write scenario dimensions on second line
-        T, N, _ = scenario.shape
-        f.write(f"{T},{N}\n")
-        
-        # Write scenario data
-        for t in range(T):
-            for i in range(N):
-                row = ','.join(map(str, scenario[t, i, :]))
-                f.write(row + '\n')
-    
-    #print(f"Successfully saved scenario to {filename}")
-
-def load_scenario(filename):
-    """
-    Load a scenario and its starting time from a text file.
-    
-    Args:
-        filename (str): Name of the file to load (with or without .txt extension)
-    
-    Returns:
-        tuple: (scenario, starting_time) where scenario is a TxNxN array and starting_time is an integer
-    """
-    if not filename.endswith('.txt'):
-        filename += '.txt'
-    
-    try:
-        with open(filename, 'r') as f:
-            # Read starting time
-            starting_time = int(f.readline().strip())
-            
-            # Read dimensions
-            T, N = map(int, f.readline().strip().split(','))
-            
-            # Initialize scenario array
-            scenario = np.zeros((T, N, N))
-            
-            # Read scenario data
-            for t in range(T):
-                for i in range(N):
-                    row = f.readline().strip().split(',')
-                    scenario[t, i, :] = list(map(float, row))
-        
-        # print(f"Successfully loaded scenario from {filename}")
-        return scenario, starting_time
-    
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find file: {filename}")
-    except Exception as e:
-        raise Exception(f"Error loading scenario: {str(e)}")
-    

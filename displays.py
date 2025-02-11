@@ -57,8 +57,8 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
     Save a PNG image of the grid with overlays for fire, smoke, and drones, including a smoke scale.
 
     Parameters:
-        grid: NxN numpy array for wildfire states (0: not burning, 1: burning, 2: burnt).
-        smoke_grid: NxN numpy array for smoke concentrations.
+        grid: MxN numpy array for wildfire states (0: not burning, 1: burning, 2: burnt).
+        smoke_grid: MxN numpy array for smoke concentrations.
         drones: List of drone locations (x,y).
         display: Set of options ('fire', 'smoke', 'drones') to decide what to overlay.
         timestep: Time step (for naming the file).
@@ -68,12 +68,14 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    N = grid.shape[0]
-    # print("in save_grid_image, N = ",N)
+    # Use grid dimensions directly for figure size
+    M, N = grid.shape
+    figsize = (N/10, M/10)  # Divide by 10 to convert pixels to inches (standard dpi is 100)
+    
+    fig, ax = plt.subplots(figsize=figsize, dpi=100)  # Set dpi explicitly to 100
 
     # Base grid: Smoke color or white background
-    base_grid = np.ones((N, N, 3))  # Initialize as white background (R=1, G=1, B=1)
+    base_grid = np.ones((M, N, 3))  # Initialize as white background (R=1, G=1, B=1)
     
     if 'smoke' in display:
         # Cap smoke values at 10
@@ -91,32 +93,33 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
     
     # Fire Overlay supersedes smoke if both are displayed
     if 'fire' in display:
-        for i in range(N):
+        for i in range(M):
             for j in range(N):
                 if grid[i, j] == 1:  # Burning cells
                     base_grid[i, j] = [1, 0, 0]  # Red (fire)
                 elif grid[i, j] == 2 and 'smoke' not in display:  # Burnt cells (only when smoke is not displayed)
-                    base_grid[i, j] = [0,0,0] # Black # [0.5, 0.5, 0.5]  # Gray
+                    base_grid[i, j] = [0,0,0] # Black
     
     # Plot the combined grid
-    ax.imshow(base_grid, interpolation="nearest")
+    ax.imshow(base_grid, interpolation="nearest", aspect='equal')
     
     # Drone Overlay (unaffected by fire/smoke logic)
     if 'drones' in display:
         for (y,x) in drones:
-            if x >= 0 and x < N and y >= 0 and y < N:
-                transformed_y = y  # Transform y coordinate
+            if x >= 0 and x < N and y >= 0 and y < M:
+                transformed_y = y
                 ax.scatter(x, transformed_y, c="black", s=5, marker="D", label="Drone")
 
     # add ground sensors and charging stations
     for (y,x) in ground_sensors_locations:
-        transformed_y = y  # Transform y coordinate
-        ax.scatter(x, transformed_y, c="green", s=10, marker="s", label="Ground Sensor")
+        if x >= 0 and x < N and y >= 0 and y < M:
+            transformed_y = y
+            ax.scatter(x, transformed_y, c="green", s=10, marker="s", label="Ground Sensor")
     
     for (y,x) in charging_stations_locations:
-        transformed_y = y  # Transform y coordinate
-        ax.scatter(x, transformed_y, c="blue", s=10, marker="*", label="Charging Station")
-
+        if x >= 0 and x < N and y >= 0 and y < M:
+            transformed_y = y
+            ax.scatter(x, transformed_y, c="blue", s=10, marker="*", label="Charging Station")
 
     # Add smoke colorbar only if smoke is displayed
     if 'smoke' in display:
@@ -224,14 +227,20 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     Create a video visualization of a saved scenario or burn_map
     
     Args:
-        filename (str): Name of the scenario file (with or without .txt extension)
+        scenario_or_filename: Either a filename (str) or a scenario array (numpy.ndarray)
+        drone_locations_history: List of drone locations for each timestep
+        burn_map: Boolean indicating if this is a burn probability map
+        out_filename: Name for the output file (without extension)
+        starting_time: Initial timestep
+        ground_sensor_locations: List of ground sensor coordinates
+        charging_stations_locations: List of charging station coordinates
     """
     # Remove .txt extension if present
     scenario = None
-    if type(scenario_or_filename) == str:
+    if isinstance(scenario_or_filename, str):  # Using isinstance instead of type()
         # the input is a file name
-        base_filename = scenario.replace('.txt', '')
-        filename = scenario
+        base_filename = scenario_or_filename.replace('.txt', '')  # Fixed variable name
+        filename = scenario_or_filename  # Fixed variable name
     else:
         base_filename = out_filename
         scenario = scenario_or_filename
@@ -245,39 +254,34 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     # Load the scenario
     if scenario is None:
         scenario, starting_time = load_scenario(filename)
-    T, N, _ = scenario.shape
+    T, height, width = scenario.shape  # Using height and width instead of N
+    print("scenario.shape = ", scenario.shape)
     
     if not burn_map:
-        # use function for fire maps
-    
         # Create an empty smoke grid (not used but required by display function)
-        smoke_grid = np.zeros((N, N))
+        smoke_grid = np.zeros((height, width))
         
         # Create images for each time step
         for t in range(T):
             save_grid_image(
                 grid=scenario[t],           # Current time step of scenario
                 smoke_grid=smoke_grid,      # Empty smoke grid
-                drones=drone_locations_history[t] if not drone_locations_history is None else None,              
-                display={'fire'} if drone_locations_history is None else {'fire', 'drones'},           # Only display fire
-                ground_sensors_locations = ground_sensor_locations, 
-                charging_stations_locations = charging_stations_locations,
+                drones=drone_locations_history[t] if drone_locations_history is not None else None,              
+                display={'fire'} if drone_locations_history is None else {'fire', 'drones'},
+                ground_sensors_locations=ground_sensor_locations, 
+                charging_stations_locations=charging_stations_locations,
                 timestep=t,
                 output_dir=output_dir
             )
     else:
-        # use function to plot ignition maps
-
         # Create images for each time step
         for t in range(T):
             save_ignition_map_image(
-                ignition_map=scenario[t],           # Current time step of scenario
+                ignition_map=scenario[t],
                 timestep=t,
                 output_dir=output_dir,
-                burn_map = True
+                burn_map=True
             )
-
-
     
     # Create video from saved images
     create_video_from_images(
