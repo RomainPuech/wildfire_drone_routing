@@ -1,0 +1,10 @@
+*__pycache__
+./venv
+.DS_Store
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw

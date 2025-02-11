@@ -43,23 +43,50 @@ def default_routing_strategy(drone, fire_grid, smoke_grid, wind_direction):
             drone.planned_movements = [(dx, dy)] * 5
         drone.move(*drone.planned_movements.pop(0))
 
+
+#TODO out of battery not implemented yet
 class Drone():
-    def __init__(self, x, y, battery=100, routing=default_routing_strategy):
+    def __init__(self, x, y, charging_stations_locations, N, time_battery=100, distance_battery=100):
+        if (x,y) not in charging_stations_locations and [x,y] not in charging_stations_locations:
+            raise ValueError("Drone should start on a charging station")
         self.x = x
         self.y = y
-        self.battery = battery
-        self.routing_strategy = routing
-        self.planned_movements = []
+        self.N = N
+        self.charging_stations_locations = charging_stations_locations
+        self.time_battery = time_battery
+        self.distance_battery = distance_battery
+        self.max_time_battery = self.time_battery
+        self.max_distance_battery = self.distance_battery
         self.fire_alert = False
         self.smoke_alert = False
+
     
     def get_position(self):
         return self.x, self.y
     
+    def get_battery(self):
+        return self.distance_battery, self.time_battery
+    
     def move(self, dx, dy):
         self.x += dx
         self.y += dy
-        self.battery -= 1
+        self.x = max(0,min(self.x,self.N-1))
+        self.y = max(0,min(self.y,self.N-1))
+        self.distance_battery -= (dx+dy) # manhathan distance for the moment
+        self.time_battery-=1
+        return self.x, self.y, self.distance_battery, self.time_battery
+    
+    def recharge(self):
+        if (self.x, self.y) in self.charging_stations_locations:
+            self.time_battery = self.max_time_battery
+            self.distance_battery = self.max_distance_battery
 
-    def route(self, fire_grid, smoke_grid, wind_direction):
-        return self.routing_strategy(self, fire_grid, smoke_grid, wind_direction)
+        return self.x, self.y, self.distance_battery, self.time_battery
+
+    
+    def route(self, action):
+        if action[0] == 'move':
+            return self.move(*action[1])
+        elif action[0] == 'recharge':
+            return self.recharge()
+
