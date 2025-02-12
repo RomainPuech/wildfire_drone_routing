@@ -229,6 +229,13 @@ def save_burn_map(burn_map, filename):
 ####### Functions to preprocess data #######
 
 def jpg_scenario_to_npy(jpg_folder_name, npy_folder_name = None, npy_filename = None):
+    """
+    Convert a scenario stored as a folder of JPG images to a NPY file.
+    Args:
+        jpg_folder_name (str): Path to the folder containing the JPG images
+        npy_folder_name (str): Path to the folder to save the NPY file
+        npy_filename (str): Name of the NPY file (without extension)
+    """
     if npy_folder_name is None:
         npy_folder_name = jpg_folder_name
     if npy_filename is None:
@@ -244,6 +251,12 @@ def jpg_scenario_to_npy(jpg_folder_name, npy_folder_name = None, npy_filename = 
     save_scenario_npy(scenario, 0, npy_folder_name + npy_filename + ".npy")
 
 def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None):
+    """
+    Convert all JPG scenarios in the sim2real dataset to NPY files for faster processing.
+    Args:
+        dataset_folder_name (str): Path to the dataset folder
+        npy_folder_name (str): Path to the folder to save the NPY files
+    """
     print(f"Converting JPG scenarios to NPY for {dataset_folder_name}")
     if npy_folder_name is None:
         npy_folder_name = dataset_folder_name
@@ -262,6 +275,11 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
 
 
 def compute_burn_map(folder_name):
+    """
+    Compute the burn map for a scenario stored as a folder of NPY files.
+    Args:
+        folder_name (str): Path to the folder containing the NPY files
+    """
     print(f"Computing burn map for {folder_name}")
     if not folder_name.endswith("/"):
         folder_name += "/"
@@ -305,6 +323,11 @@ def compute_burn_map(folder_name):
 ####### Prepocess the sim2real dataset #######
 
 def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name):
+    """
+    Compute the burn map for all scenarios in the sim2real dataset and save them as NPY files.
+    Args:
+        dataset_folder_name (str): Path to the dataset folder
+    """
     if not dataset_folder_name.endswith("/"):
         dataset_folder_name += "/"
     
@@ -314,6 +337,12 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name):
         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
 
 def preprocess_sim2real_dataset(dataset_folder_name):
+    """
+    Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
+    Args:
+        dataset_folder_name (str): Path to the dataset folder
+    """
+    print("Converting JPG scenarios to NPY...")
     sim2real_scenario_jpg_folders_to_npy(dataset_folder_name)
     print("Computing burn maps...")
     compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name)

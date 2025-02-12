@@ -6,7 +6,7 @@ import os
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from simulations import load_scenario
+from dataset import load_scenario_npy
 
 
 
@@ -70,8 +70,18 @@ def listdir_txt_limited(input_dir, max_n_scenarii=None):
                 if max_n_scenarii is not None and count >= max_n_scenarii:
                     break
 
+def listdir_npy_limited(input_dir, max_n_scenarii=None):
+    count = 0
+    with os.scandir(input_dir) as it:
+        for entry in it:
+            if entry.is_file() and entry.name.endswith('.npy'):
+                yield input_dir + entry.name
+                count += 1
+                if max_n_scenarii is not None and count >= max_n_scenarii:
+                    break
 
-from RoutingStrategy import GroundPlacementOptimization
+
+from Strategy import GroundPlacementOptimization
 def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
     if not input_dir.endswith('/'):
         input_dir += '/'
@@ -111,12 +121,12 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
     for device in devices.keys():
         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
-from RoutingStrategy import GroundPlacementOptimization
+from Strategy import GroundPlacementOptimization
 def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
     if not input_dir.endswith('/'):
         input_dir += '/'
 
-    iterable = listdir_txt_limited(input_dir, max_n_scenarii)
+    iterable = listdir_npy_limited(input_dir, max_n_scenarii)
 
     M = len(os.listdir(input_dir)) if max_n_scenarii is None else max_n_scenarii
 
@@ -127,7 +137,7 @@ def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, dron
     
     for file in tqdm.tqdm(iterable, total = M):
         
-        scenario, start_time = load_scenario(file)
+        scenario, start_time = load_scenario_npy(file)
         delta_t, device, _ = run_benchmark_scenario(scenario, start_time, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters)
         
         if delta_t == -1:
@@ -151,3 +161,11 @@ def run_ground_log(input_dir, output_file, ground_placement_strategy, ground_par
         all_placements.append((ground_sensor_locations,charging_stations_locations))
     with open(output_file, "w") as outfile:
         json.dump(all_placements, outfile)
+
+def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
+    if not dataset_folder_name.endswith('/'):
+        dataset_folder_name += '/'
+    
+    for layout_folder in os.listdir(dataset_folder_name):
+        if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
+        run_benchmark_scenarii_sequential(dataset_folder_name + layout_folder + "/scenarii/",ground_placement_strategy,drone_routing_strategy,ground_parameters,routing_parameters,max_n_scenarii)
