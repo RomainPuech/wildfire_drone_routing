@@ -13,7 +13,7 @@ This library is designed to benchmark sensor placement and drone routing strateg
 To use this library, first download the "sim2real" dataset from [Sim2Real-Fire GitHub repository](https://github.com/TJU-IDVLab/Sim2Real-Fire). Then, clone the repository and install the required dependencies:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/RomainPuech/wildfire_drone_routing.git
 cd wildfire_drone_routing
 pip install -r requirements.txt
 ```
