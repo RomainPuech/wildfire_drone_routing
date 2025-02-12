@@ -9,4 +9,7 @@
 *.pywz
 *.pyzw
 WFDataset
+Dataset
+DeepDataset
+WideDataset
 Z/*

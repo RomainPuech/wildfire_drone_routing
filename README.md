@@ -40,10 +40,10 @@ from Strategy import GroundPlacementStrategy, RoutingStrategy
 
 benchmark_on_sim2real_dataset(
     dataset_folder_name="./path_to_dataset",
-    ground_placement_strategy=GroundPlacementStrategy,
-    drone_routing_strategy=RoutingStrategy,
-    ground_parameters=(10, 10, 100),
-    routing_parameters=(10,)
+    ground_placement_strategy=<Your placement strategy>,
+    drone_routing_strategy=<Your routing strategy>,
+    ground_parameters=<(arg_placement1, arg_placement2, ...)>,
+    routing_parameters=<(arg_routing1, arg_routing2, ...)>
 )
 ```
 
@@ -58,10 +58,7 @@ from dataset import load_scenario_npy
 scenario, starting_time = load_scenario_npy("./path_to_scenario.npy")
 create_scenario_video(
     scenario_or_filename=scenario,
-    drone_locations_history=None,
-    burn_map=False,
-    out_filename="simulation",
-    starting_time=starting_time
+    drone_locations_history=None
 )
 ```
 
@@ -82,7 +79,7 @@ If you use this library in your research, please cite it using the following Bib
   author = {Romain Puech},
   title = {Wildfire Drone Routing},
   year = {2025},
-  howpublished = {\url{https://github.com/your-repo-url}},
+  howpublished = {\url{https://github.com/RomainPuech/wildfire_drone_routing}},
   note = {Accessed: YYYY-MM-DD}
 }
 ```
