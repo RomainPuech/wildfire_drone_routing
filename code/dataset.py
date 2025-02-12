@@ -33,7 +33,7 @@ def listdir_limited(input_dir, max_n_scenarii=None):
     with os.scandir(input_dir) as it:
         for entry in it:
             if entry.name != ".DS_Store":
-                yield input_dir + entry.name
+                yield  entry.name
                 count += 1
                 if not max_n_scenarii is None and count >= max_n_scenarii:
                     break
@@ -250,7 +250,7 @@ def save_scenario_jpg(scenario, starting_time, out_folder_name):
         img = Image.fromarray(scenario[t].astype(np.uint8))
         img.save(out_folder_name + f"{t}.jpg")
 
-def save_scenario(scenario, starting_time,filename, extension = ".npy"):
+def save_scenario(scenario, starting_time, filename, extension = ".npy"):
     """
     Save a scenario to a npy file or a folder of jpg images.
     Args:
@@ -337,20 +337,6 @@ def load_scenario(file_or_folder_name, extension = ".npy"):
     else:
         return load_scenario_jpg(file_or_folder_name)
     
-def save_scenario(scenario, filename, extension = ".npy"):
-    """
-    Save a scenario to a npy file or a folder of jpg images.
-    Args:
-        scenario (numpy.ndarray): TxNxM array representing the scenario
-        filename (str): Path to the file to save the scenario
-        extension (str): .npy if filename is a npy file, .jpg if filename is a folder of jpg images
-    """
-    if not extension.startswith("."):
-        extension = "." + extension
-    if extension == ".npy":
-        save_scenario_npy(scenario, 0, filename)
-    else:
-        save_scenario_jpg(scenario, filename)
 
 def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy"):
     """
@@ -424,6 +410,6 @@ def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout =
         dataset_folder_name (str): Path to the dataset folder
         n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
     """
-    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout)
+    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout)
     print("Computing burn maps...")
     compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name)
