@@ -6,7 +6,7 @@ import cv2
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
-from simulations import load_scenario
+from dataset import load_scenario
 
 def display_grid(grid, smoke_grid, drones, display):
     """
