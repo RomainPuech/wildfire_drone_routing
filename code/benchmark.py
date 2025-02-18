@@ -9,14 +9,24 @@ from concurrent.futures import ThreadPoolExecutor
 from dataset import load_scenario_npy
 from Strategy import SensorPlacementStrategy, DroneRoutingStrategy
 
+def get_automatic_layout_parameters(scenario:np.ndarray):
+    return {
+        "N": scenario.shape[0],
+        "M": scenario.shape[1],
+        "max_battery_distance": 100,
+        "max_battery_time": 100,
+        "n_drones": 50,
+        "n_ground_stations": 50,
+        "n_charging_stations": 50
+    }
 
 
-def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_layout_parameters:dict, time_step_parameters_function:callable, starting_time:int=0, return_history:bool=False):
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
     Args:
-        scenario (list): List of grid states representing the fire progression over time.
+        scenario np.ndarray: grid states representing the fire progression over time.
         sensor_placement_strategy (function): Strategy function for placing ground sensors and charging stations.
         drone_routing_strategy (function): Strategy function for routing drones.
         layout_parameters (dict): Custom parameters given to the strategy at initialization.
@@ -30,25 +40,49 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
-    
-    ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(,layout_parameters).get_locations()
+    # 1. Get initialization parameters
+    automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
+    if custom_initialization_parameters_function is not None:
+        custom_initialization_parameters = custom_initialization_parameters_function(automatic_initialization_parameters)
+
+    print(f"custom_initialization_parameters: {custom_initialization_parameters}")
+    print(f"automatic_initialization_parameters: {automatic_initialization_parameters}")
+
+    # 2. Get ground sensor locations
+    ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)
 
-    Routing_Strat = drone_routing_strategy(ground_sensor_locations, charging_stations_locations,*routing_static_parameters)
+    print(f"ground_sensor_locations: {ground_sensor_locations}")
+    print(f"charging_stations_locations: {charging_stations_locations}")
 
-    drones = [Drone(x,y,charging_stations_locations,len(scenario[0])) for (x,y) in Routing_Strat.initialize()]
+    # add computed positions to initialization parameters
+    automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations
+    automatic_initialization_parameters["charging_stations_locations"] = charging_stations_locations
+
+    # 3. Initialize drones
+
+    Routing_Strat = drone_routing_strategy(automatic_initialization_parameters, custom_initialization_parameters)
+    drones = [Drone(x,y,charging_stations_locations,scenario.shape[0],scenario.shape[1], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"]) for (x,y) in Routing_Strat.get_initial_drone_locations()]
     drone_locations = [drone.get_position() for drone in drones]
     drone_batteries = [drone.get_battery() for drone in drones]
-    drone_locations_history = [list(drone_locations)]
+    drone_locations_history = None
+    if return_history:
+        drone_locations_history = [list(drone_locations)]
+
+    print(f"drone_locations: {drone_locations}")
+    print(f"drone_batteries: {drone_batteries}")
 
     t_found = 0
     device = 'undetected'
     grid = None
+
     for time_step in range(-starting_time,len(scenario)):
-        if time_step >= 0:
+        if time_step >= 0: # The fire has started.
+            print(f"time_step: {time_step}")
+            # 1. Check if a fire is detected
             grid = scenario[time_step]
-            # check if a fire is detected
+            
             if ground_sensor_locations:
                 if (grid[rows_ground,cols_ground]==1).any():
                     device = 'ground sensor'
@@ -67,12 +101,25 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
         # no fire detected, onto next time step
         t_found +=1
-        # move the drones
-        actions = Routing_Strat.next_actions(drone_locations,drone_batteries,t_found)
+
+        ### Move the drones
+
+        # 1. Get the parameters
+        custom_step_parameters = custom_step_parameters_function() # TODO: add weather parameters
+        automatic_step_parameters = {
+            "drone_locations": drone_locations,
+            "drone_batteries": drone_batteries,
+            "t": t_found }
+        
+        # 2. Get the actions
+        actions = Routing_Strat.next_actions(automatic_step_parameters, custom_step_parameters)
+
+        # 3. Move the drones
         for drone_index, (drone,action) in enumerate(zip(drones,actions)):
-            new_x, new_y, new_distance_battery, new_time_battery = drone.route(action)
-            drone_locations[drone_index] = (new_x,new_y)
-            drone_batteries = (new_distance_battery,new_time_battery)
+            if action[0] == 'move':
+                new_x, new_y, new_distance_battery, new_time_battery = drone.route(action)
+                drone_locations[drone_index] = (new_x,new_y)
+                drone_batteries[drone_index] = (new_distance_battery,new_time_battery)
         if return_history:
             drone_locations_history.append(tuple(drone_locations))
 
@@ -121,7 +168,6 @@ def listdir_npy_limited(input_dir, max_n_scenarii=None):
                     break
 
 
-from Strategy import GroundPlacementOptimization
 def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
     """
     Run parallel benchmarks on multiple scenarios using thread pooling.
@@ -177,7 +223,6 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
     for device in devices.keys():
         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
-from Strategy import GroundPlacementOptimization
 def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None, starting_time=0):
     """
     Run sequential benchmarks on multiple scenarios.

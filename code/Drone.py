@@ -46,7 +46,7 @@ def default_routing_strategy(drone, fire_grid, smoke_grid, wind_direction):
 
 #TODO out of battery not implemented yet
 class Drone():
-    def __init__(self, x, y, charging_stations_locations, N, time_battery=100, distance_battery=100):
+    def __init__(self, x, y, charging_stations_locations, N, M, time_battery=100, distance_battery=100):
         if (x,y) not in charging_stations_locations and [x,y] not in charging_stations_locations:
             raise ValueError("Drone should start on a charging station")
         self.x = x

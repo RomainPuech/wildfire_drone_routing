@@ -4,22 +4,13 @@ import os
 import json
 import numpy as np
 
-
-def get_automatic_layout_parameters(scenario:np.ndarray):
-    return {
-        "N": scenario.shape[0],
-        "M": scenario.shape[1],
-        "max_battery_distance": 100,
-        "max_battery_time": 100,
-        "n_drones": 10,
-        "n_ground_stations": 10,
-        "n_charging_stations": 10
-    }
-
 def get_burnmap_dir(scenario:np.ndarray, filename:str):
     return {
         "risk_pertime_dir": filename
     }
+
+def return_no_custom_parameters():
+    return {}
 
 class DroneRoutingStrategy():
 
@@ -50,12 +41,12 @@ class DroneRoutingStrategy():
         Returns the initial locations of the drones
         """
         
-        n = len(self.automatic_parameters["charging_stations_locations"])
-        q = self.user_parameters["n_drones"] // n
-        r = self.user_parameters["n_drones"] % n
+        n = len(self.automatic_initialization_parameters["charging_stations_locations"])
+        q = self.automatic_initialization_parameters["n_drones"] // n
+        r = self.automatic_initialization_parameters["n_drones"] % n
         
         # By default drones are spread uniformly aross charging stations
-        return self.automatic_parameters["charging_stations_locations"]*q + self.automatic_parameters["charging_stations_locations"][:r]
+        return self.automatic_initialization_parameters["charging_stations_locations"]*q + self.automatic_initialization_parameters["charging_stations_locations"][:r]
 
     
     def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
@@ -69,7 +60,7 @@ class DroneRoutingStrategy():
             actions: list of tuples (action_type, action_parameters)
         """
         # suggest actions
-        return [('move',(random.randint(-5,5),random.randint(-5,5))) for _ in range(self.n_drones)]
+        return [('move',(random.randint(-5,5),random.randint(-5,5))) for _ in range(self.automatic_initialization_parameters["n_drones"])]
     
 
 class SensorPlacementStrategy():
@@ -127,6 +118,9 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
         self.ground_sensor_locations = []
         self.charging_station_locations = []
 
+        if "risk_pertime_dir" not in custom_initialization_parameters:
+            raise ValueError("risk_pertime_dir is not defined")
+
         if not custom_initialization_parameters["risk_pertime_dir"].endswith("/"):
             custom_initialization_parameters["risk_pertime_dir"] += "/"
         # Load the Julia module and function
@@ -135,9 +129,9 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
         # Call the Julia optimization function
         x_vars, y_vars = jl.ground_charging_opt_model_grid(custom_initialization_parameters["risk_pertime_dir"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         # save the result in a json file
-        with open(custom_initialization_parameters["risk_pertime_dir"][-1] + "_ground_sensor_locations.json", "w") as f:
+        with open(custom_initialization_parameters["risk_pertime_dir"][:-1] + "_ground_sensor_locations.json", "w") as f:
             json.dump(x_vars, f)
-        with open(custom_initialization_parameters["risk_pertime_dir"][-1] + "_charging_station_locations.json", "w") as f:
+        with open(custom_initialization_parameters["risk_pertime_dir"][:-1] + "_charging_station_locations.json", "w") as f:
             json.dump(y_vars, f)
         
         self.ground_sensor_locations = list(x_vars)
