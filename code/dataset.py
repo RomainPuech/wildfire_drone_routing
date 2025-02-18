@@ -113,16 +113,14 @@ def load_scenario_jpg(folder_path, binary=False):
         binary (bool, optional): If True, threshold images at 0.5 to create binary values. Defaults to False.
 
     Returns:
-        tuple: Contains:
-            - scenario (numpy.ndarray): TxNxN array representing the fire progression
-            - starting_time (int): Always 0 for JPG sequences
+        numpy.ndarray: TxNxN array representing the fire progression
 
     Raises:
         FileNotFoundError: If no JPG files found in folder
         ValueError: If images have inconsistent dimensions
 
     Example:
-        >>> scenario, start_time = load_scenario_jpg("fire_sequence/")
+        >>> scenario = load_scenario_jpg("fire_sequence/")
         >>> print(scenario.shape)
         (10, 100, 100)
     """
@@ -168,26 +166,24 @@ def load_scenario_jpg(folder_path, binary=False):
         scenario[t] = img_array
     
     # Starting time is always 0
-    starting_time = 0
-    
-    return scenario, starting_time
+    return scenario
 
 def load_scenario_npy(filename):
     """
-    Load a scenario and its starting time from a NumPy binary file.
+    Load a scenario from a NumPy binary file.
     
     Args:
         filename (str): Name of the file to load (with or without .npy extension)
     
     Returns:
-        tuple: (scenario, starting_time) where scenario is a TxNxN array and starting_time is an integer
+        numpy.ndarray: TxNxN array representing the fire progression
     """
     if not filename.endswith('.npy'):
         filename += '.npy'
     
     try:
         data = np.load(filename, allow_pickle=True).item()
-        return data['scenario'], data['starting_time']
+        return data['scenario']
     
     except FileNotFoundError:
         raise FileNotFoundError(f"Could not find file: {filename}")
@@ -213,35 +209,31 @@ def load_scenario_npy(filename):
 #     np.savetxt(filename, ignition_map, fmt='%.8e', delimiter=',')
     
 
-def save_scenario_npy(scenario, starting_time, out_filename="scenario"):
+def save_scenario_npy(scenario, out_filename="scenario"):
     """
     Save a wildfire scenario to a NumPy binary file.
 
     Args:
         scenario (numpy.ndarray): TxNxM array representing the fire progression over time
-        starting_time (int): The timestep when the fire starts
         out_filename (str, optional): Output filename. Defaults to "scenario". 
             ".npy" extension will be added if not present.
 
     Notes:
-        Saves the data as a dictionary with keys 'starting_time' and 'scenario'.
         The scenario data is converted to float32 type for storage efficiency.
     """
     if not out_filename.endswith('.npy'):
         out_filename += '.npy'
     
-    # Save metadata and scenario data together as a dictionary
+    # Save scenario data
     np.save(out_filename, {
-        'starting_time': starting_time,
         'scenario': scenario.astype(np.float32)
     })
 
-def save_scenario_jpg(scenario, starting_time, out_folder_name):
+def save_scenario_jpg(scenario, out_folder_name):
     """
     Save a scenario as a folder of JPG images.
     Args:
         scenario (numpy.ndarray): TxNxM array representing the scenario
-        starting_time (int): The time step when the fire starts (not used with jpg images)
         out_folder_name (str): Path to the folder to save the JPG images
     """
     if not out_folder_name.endswith("/"):
@@ -250,7 +242,7 @@ def save_scenario_jpg(scenario, starting_time, out_folder_name):
         img = Image.fromarray(scenario[t].astype(np.uint8))
         img.save(out_folder_name + f"{t}.jpg")
 
-def save_scenario(scenario, starting_time, filename, extension = ".npy"):
+def save_scenario(scenario, filename, extension = ".npy"):
     """
     Save a scenario to a npy file or a folder of jpg images.
     Args:
@@ -261,7 +253,7 @@ def save_scenario(scenario, starting_time, filename, extension = ".npy"):
     if not extension.startswith("."):
         extension = "." + extension
     if extension == ".npy":
-        save_scenario_npy(scenario, 0, filename)
+        save_scenario_npy(scenario, filename)
     else:
         save_scenario_jpg(scenario, filename)
 
@@ -274,7 +266,7 @@ def save_burn_map(burn_map, filename, extension = ".npy"):
         filename (str): Name of the npy file or folder of jpg images to save the burn map
         extension (str): .npy if filename is a npy file, .jpg if filename is a folder of jpg images
     """
-    save_scenario(burn_map, 0, filename, extension)
+    save_scenario(burn_map, filename, extension)
 
 ####### Functions to preprocess data #######
 
@@ -297,10 +289,10 @@ def jpg_scenario_to_npy(jpg_folder_name, npy_folder_name = None, npy_filename = 
     if not npy_folder_name.endswith("/"):
         npy_folder_name += "/"
     
-    scenario, _ = load_scenario_jpg(jpg_folder_name)
-    save_scenario_npy(scenario, 0, npy_folder_name + npy_filename + ".npy")
+    scenario = load_scenario_jpg(jpg_folder_name)
+    save_scenario_npy(scenario, npy_folder_name + npy_filename + ".npy")
 
-def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None):
+def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False):
     """
     Convert all JPG scenarios in the sim2real dataset to NPY files for faster processing.
     Args:
@@ -317,11 +309,15 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
         npy_folder_name += "/"
 
     for layout_folder in os.listdir(dataset_folder_name):
-        print(f"Converting JPG scenarios to NPY for {dataset_folder_name + layout_folder}")
+        if verbose: print(f"Converting JPG scenarios to NPY for {dataset_folder_name + layout_folder}")
+        if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/") :os.makedirs(dataset_folder_name + layout_folder + "/scenarii/", exist_ok=True)
         for scenario_folder in tqdm.tqdm(listdir_limited(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/", n_max_scenarii_per_layout)):
-            jpg_scenario_to_npy(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder, npy_folder_name + layout_folder + "/scenarii/", scenario_folder.strip("/"))
+            try:
+                jpg_scenario_to_npy(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder, npy_folder_name + layout_folder + "/scenarii/", scenario_folder.strip("/"))
+            except Exception as e:
+                print(f"Error converting {dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder} to NPY: {e}")
 
 def load_scenario(file_or_folder_name, extension = ".npy"):
     """
@@ -358,7 +354,7 @@ def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy")
     # Process all scenarios in a single pass
     for filename in tqdm.tqdm(os.listdir(folder_name)):
         if filename.endswith(extension):
-            scenario, _ = load_scenario(folder_name + filename, extension)
+            scenario = load_scenario(folder_name + filename, extension)
             T, curr_N, curr_M = scenario.shape
             
             # Initialize arrays on first file

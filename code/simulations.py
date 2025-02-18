@@ -1,3 +1,5 @@
+# WARNING: this file is deprecated, use the dataset.py file instead
+
 # Romain Puech, 2024
 # Simulations
 

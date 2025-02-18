@@ -7,20 +7,21 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 
 from dataset import load_scenario_npy
+from Strategy import SensorPlacementStrategy, DroneRoutingStrategy
 
 
 
-def run_benchmark_scenario(scenario, starting_time, ground_placement, routing_strategy, ground_parameters, routing_static_parameters, return_history=False):
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_layout_parameters:dict, time_step_parameters_function:callable, starting_time:int=0, return_history:bool=False):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
     Args:
         scenario (list): List of grid states representing the fire progression over time.
-        starting_time (int): Time step at which the wildfire starts.
-        ground_placement (function): Strategy function for placing ground sensors and charging stations.
-        routing_strategy (function): Strategy function for routing drones.
-        ground_parameters (tuple): Configuration parameters for the ground placement strategy.
-        routing_static_parameters (tuple): Configuration parameters for the routing strategy.
+        sensor_placement_strategy (function): Strategy function for placing ground sensors and charging stations.
+        drone_routing_strategy (function): Strategy function for routing drones.
+        layout_parameters (dict): Custom parameters given to the strategy at initialization.
+        time_step_parameters_function (function): Function called at each time step. Returns a dict of custom_parameters given to the strategy.
+        starting_time (int, optional): Time steps before the wildfire starts. Defaults to 0.
         return_history (bool, optional): If True, returns the history of drone positions. Defaults to False.
 
     Returns:
@@ -29,12 +30,12 @@ def run_benchmark_scenario(scenario, starting_time, ground_placement, routing_st
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
-
-    ground_sensor_locations, charging_stations_locations =  ground_placement(*ground_parameters).get_locations()
+    
+    ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(,layout_parameters).get_locations()
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)
 
-    Routing_Strat = routing_strategy(ground_sensor_locations, charging_stations_locations,*routing_static_parameters)
+    Routing_Strat = drone_routing_strategy(ground_sensor_locations, charging_stations_locations,*routing_static_parameters)
 
     drones = [Drone(x,y,charging_stations_locations,len(scenario[0])) for (x,y) in Routing_Strat.initialize()]
     drone_locations = [drone.get_position() for drone in drones]
@@ -43,9 +44,10 @@ def run_benchmark_scenario(scenario, starting_time, ground_placement, routing_st
 
     t_found = 0
     device = 'undetected'
-
-    for grid in scenario:
-        if t_found >= starting_time:
+    grid = None
+    for time_step in range(-starting_time,len(scenario)):
+        if time_step >= 0:
+            grid = scenario[time_step]
             # check if a fire is detected
             if ground_sensor_locations:
                 if (grid[rows_ground,cols_ground]==1).any():
@@ -135,6 +137,8 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
     Prints:
         Average time steps to fire detection and detection statistics by device type.
     """
+    # TODO: add starting time
+    raise NotImplementedError("Starting time is not implemented yet")
     if not input_dir.endswith('/'):
         input_dir += '/'
 
@@ -174,7 +178,7 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
 from Strategy import GroundPlacementOptimization
-def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
+def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None, starting_time=0):
     """
     Run sequential benchmarks on multiple scenarios.
 
@@ -185,7 +189,7 @@ def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, dron
         ground_parameters (tuple): Parameters for ground placement strategy.
         routing_parameters (tuple): Parameters for routing strategy.
         max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
-
+        starting_time (int, optional): Time step at which the wildfire starts.
     Prints:
         Average time steps to fire detection and detection statistics by device type.
     """
@@ -202,10 +206,11 @@ def run_benchmark_scenarii_sequential(input_dir, ground_placement_strategy, dron
     devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
     
     for file in tqdm.tqdm(iterable, total = M):
-        
-        scenario, start_time = load_scenario_npy(file)
-        delta_t, device, _ = run_benchmark_scenario(scenario, start_time, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters)
-        
+        scenario = load_scenario_npy(file)
+        N, M = scenario.shape[1:]
+        delta_t, device, _ = run_benchmark_scenario(scenario, ground_placement_strategy, 
+                                                  drone_routing_strategy, ground_parameters, 
+                                                  routing_parameters, starting_time=starting_time)
         if delta_t == -1:
             fails += 1
             delta_t = 0
@@ -238,7 +243,7 @@ def run_ground_log(input_dir, output_file, ground_placement_strategy, ground_par
     with open(output_file, "w") as outfile:
         json.dump(all_placements, outfile)
 
-def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
+def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None, starting_time=0):
     """
     Run benchmarks on a simulation-to-real-world dataset structure.
 
@@ -249,10 +254,14 @@ def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy
         ground_parameters (tuple): Parameters for ground placement strategy.
         routing_parameters (tuple): Parameters for routing strategy.
         max_n_scenarii (int, optional): Maximum number of scenarios to process per layout. If None, processes all scenarios.
+        starting_time (int, optional): Time step at which the wildfire starts.
     """
     if not dataset_folder_name.endswith('/'):
         dataset_folder_name += '/'
     
     for layout_folder in os.listdir(dataset_folder_name):
         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
-        run_benchmark_scenarii_sequential(dataset_folder_name + layout_folder + "/scenarii/",ground_placement_strategy,drone_routing_strategy,ground_parameters,routing_parameters,max_n_scenarii)
+        run_benchmark_scenarii_sequential(dataset_folder_name + layout_folder + "/scenarii/",
+                                        ground_placement_strategy, drone_routing_strategy,
+                                        ground_parameters, routing_parameters,
+                                        max_n_scenarii, starting_time=starting_time)
