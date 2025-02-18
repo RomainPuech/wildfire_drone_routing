@@ -8,9 +8,9 @@
 *.pyz
 *.pywz
 *.pyzw
-WFDataset
-Dataset
-DeepDataset
-WideDataset
+WFDataset/
+Dataset/
+DeepDataset/
+WideDataset/
 Z/*
 Danique/
