@@ -85,12 +85,12 @@ class SensorPlacementStrategy():
         """
         # Generate random positions using list comprehensions
         # YOUR CODE HERE
-        self.ground_sensor_locations = [(random.randint(0, automatic_initialization_parameters["M"]-1), 
-                                       random.randint(0, automatic_initialization_parameters["N"]-1)) 
+        self.ground_sensor_locations = [(random.randint(0, automatic_initialization_parameters["N"]-1), 
+                                       random.randint(0, automatic_initialization_parameters["M"]-1)) 
                                       for _ in range(automatic_initialization_parameters["n_ground_stations"])]
         
-        self.charging_station_locations = [(random.randint(0, automatic_initialization_parameters["M"]-1), 
-                                          random.randint(0, automatic_initialization_parameters["N"]-1)) 
+        self.charging_station_locations = [(random.randint(0, automatic_initialization_parameters["N"]-1), 
+                                          random.randint(0, automatic_initialization_parameters["M"]-1)) 
                                          for _ in range(automatic_initialization_parameters["n_charging_stations"])]
 
     def get_locations(self):

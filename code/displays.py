@@ -5,6 +5,8 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import shutil
+import time
 
 from dataset import load_scenario
 
@@ -248,14 +250,28 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     
     # Create output directory with same name as scenario file
     output_dir = 'display_' + base_filename
-    if not os.path.exists(output_dir):
+    if os.path.exists(output_dir):
+    # Create a backup subdirectory with a timestamp
+        backup_dir = os.path.join(output_dir, f"backup_{time.strftime('%Y%m%d_%H%M%S')}")
+        os.makedirs(backup_dir, exist_ok=True)
+
+        # Move existing files to the backup directory
+        for file in os.listdir(output_dir):
+            file_path = os.path.join(output_dir, file)
+            backup_path = os.path.join(backup_dir, file)
+            try:
+                if os.path.isfile(file_path):
+                    shutil.move(file_path, backup_path)
+            except Exception as e:
+                print(f"Error moving {file}: {e}")
+    else:
         os.makedirs(output_dir)
     
     # Load the scenario
     if scenario is None:
         scenario, starting_time = load_scenario(filename)
     T, height, width = scenario.shape  # Using height and width instead of N
-    print("scenario.shape = ", scenario.shape)
+    # print("scenario.shape = ", scenario.shape)
     
     if not burn_map:
         # Create an empty smoke grid (not used but required by display function)
@@ -290,4 +306,4 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
         frames_per_image=3
     )
     
-    print(f"Video saved as {base_filename}.mp4")
+    # print(f"Video saved as {base_filename}.mp4")
