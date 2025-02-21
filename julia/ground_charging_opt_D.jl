@@ -16,11 +16,13 @@ Pkg.add("Gurobi")
 Pkg.add("Clustering")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP
 
+
+
 function L_inf_distance(a,b)
     """
     Returns the L-infinity distance between a and b in R^n
     """
-    return return maximum(abs.(a .- b))
+    return maximum(abs.(a .- b))
 end
 
 function neighbors(i, I=nothing)
@@ -86,8 +88,23 @@ function load_burn_map(filename)
     end
 end
 
+function load_parameters(risk_pertime_file)
+    risk_pertime, _ = load_burn_map(risk_pertime_file)
+    T, N, _ = size(risk_pertime)
+    M = N
+    I = [(x, y) for x in 1:N for y in 1:M]
+    if I_prime === nothing
+        I_prime = I
+    end
 
-function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging, I_prime = nothing, I_second = nothing,)
+    if I_second === nothing
+        I_second = I
+    end
+
+    return (risk_pertime=risk_pertime, T=T, N=N, M=M, I=I, I_prime=I_prime, I_second=I_second)
+end
+
+function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_charging_stations)
     """
     Returns the locations of all ground sensors and charging stations.
 
@@ -111,27 +128,18 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     # end
     time_start = time_ns() / 1e9 
 
-    risk_pertime, _ = load_burn_map(risk_pertime_file)
-    T, N, _ = size(risk_pertime)
+    params = load_parameters(risk_pertime_file)
 
-    nu = 1
-    omega = 1
-    b = 1.6
-    B = 700 # total budget
-    M = N
+    risk_pertime = params.risk_pertime
+    I = params.I 
+    I_prime = params.I_prime
+    I_second = params.I_second
 
-    I = [(x, y) for x in 1:N for y in 1:M]
-
-
-    if I_prime === nothing
-        I_prime = I
-    end
-
-    if I_second === nothing
-        I_second = I
-    end
+    charging_mindistance = 4
+        
+    phi = Dict((i, k) => (L_inf_distance(i, k) <= charging_mindistance ? 1 : 0) for i in I, k in I)
     
-    phi = Dict((i, k) => (L_inf_distance(i, k) <= 1 ? 1 : 0) for i in I, k in I)
+    # phi = Dict((i, k) => (L_inf_distance(i, k) <= 1 ? 1 : 0) for i in I, k in I)
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
@@ -151,14 +159,19 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     #     @constraint(model, x[i] + sum(phi[i,k]*y[k] for k in I_second) <= b) # 2c
     # end
 
+
     for i in I_second
         @constraint(model, sum(phi[i,k]*y[k] for k in I_second) <= 1) # 2d
     end
 
     #@constraint(model, nu*sum(y[i] for i in I_second) + omega*sum(x[i] for i in I_prime) <= B) # 2e, budget constraint
     # modified: contraint on the total number of ground/charging stations instead of a budget.
-    @constraint(model, sum(x) <= N_grounds)
-    @constraint(model, sum(y) <= N_charging) # modified: contraint on the total number of ground/charging stations instead of a budget.
+    @constraint(model, sum(x) <= n_ground_stations)
+    @constraint(model, sum(y) <= n_charging_stations) # modified: contraint on the total number of ground/charging stations instead of a budget.
+
+    # additional constraint: minimum distance between two different charging stations.
+    # @constraint(model, [i in I_second, j in I_second; i != j && L_inf_distance(i, j) < charging_mindistance], y[i] + y[j] <= 1)
+
 
     optimize!(model)
 
@@ -173,3 +186,8 @@ end
 #COMMENTS DANIQUE 
 # - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
 # - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.
+# - In our case, if we don't assume charging stations have detection range outside of it's own grid, we should add constraint stating minimum distance between charging stations or similar.
+# - Charging stations now do not take into account proximity to ground stations. Ways to fix this
+#   --> Multiply charging station part in objective with weight factor that prioritizes locations where drones are most needed (i.e., where ground sensors cannot cover). How?
+#   --> Ensure each charging station provides coverage for at least C_min unique grid points not covered by ground sensors
+#       @constraint(model, [k in I_second])
