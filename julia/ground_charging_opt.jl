@@ -16,6 +16,11 @@ Pkg.add("Gurobi")
 Pkg.add("Clustering")
 Pkg.add("NPZ")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
+<<<<<<< Updated upstream
+=======
+
+
+>>>>>>> Stashed changes
 
 function L_inf_distance(a,b)
     """
@@ -146,7 +151,12 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     return selected_x_indices, selected_y_indices
 end
 
+<<<<<<< Updated upstream
 #COMMENTS DANIQUE 
 # - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
 # - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.
 =======
+function NEW_STRAT(N, M,N_grounds, N_charging, I_prime = nothing, I_second = nothing,)
+    return [1,2]
+end
+>>>>>>> Stashed changes
