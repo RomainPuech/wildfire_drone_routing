@@ -162,6 +162,12 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     return selected_x_indices, selected_y_indices
 end
 
+
+function NEW_STRATEGY(risk_pertime_file, N_grounds, N_charging)
+    println("NEW STRATEGY")
+    return ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging)
+end
+
 #COMMENTS DANIQUE 
 # - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
 # - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.

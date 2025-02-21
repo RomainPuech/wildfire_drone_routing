@@ -6,6 +6,11 @@ from juliacall import Main as jl
 # global_logger(SimpleLogger(stderr, Logging.Error))  # Silence info logs
 # """)
 print("Initializing the Julia session. This can take up to 1 minute.")
+
+
 jl.include("julia/ground_charging_opt.jl")
+
+
+
 print("Julia session initialized.")
 # Now `jl` can be imported and reused in other parts of the program: this creates A UNIQUE SHARED JULIA SESSION
