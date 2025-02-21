@@ -104,6 +104,10 @@ function load_parameters(risk_pertime_file)
     return (risk_pertime=risk_pertime, T=T, N=N, M=M, I=I, I_prime=I_prime, I_second=I_second)
 end
 
+function neighbors_chargingcoverage(k, I, coveragearea_maxdistance)
+    return [j for j in I if L_inf_distance(k,j) <= coveragearea_maxdistance]
+end
+
 function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_charging_stations)
     """
     Returns the locations of all ground sensors and charging stations.
@@ -135,9 +139,12 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
     I_prime = params.I_prime
     I_second = params.I_second
 
-    charging_mindistance = 4
+    charging_mindistance = 4 #min distance between two charging stations
+    T_max = 5 #max time a drone can be in the air
+    C_min = 10
         
     phi = Dict((i, k) => (L_inf_distance(i, k) <= charging_mindistance ? 1 : 0) for i in I, k in I)
+    coverage_area_chargingstation = Dict((i, k) => (L_inf_distance(i, k) <= coverage_area_maxdistance ? 1 : 0) for i in I, k in I)
     
     # phi = Dict((i, k) => (L_inf_distance(i, k) <= 1 ? 1 : 0) for i in I, k in I)
 
@@ -169,9 +176,8 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
     @constraint(model, sum(x) <= n_ground_stations)
     @constraint(model, sum(y) <= n_charging_stations) # modified: contraint on the total number of ground/charging stations instead of a budget.
 
-    # additional constraint: minimum distance between two different charging stations.
-    # @constraint(model, [i in I_second, j in I_second; i != j && L_inf_distance(i, j) < charging_mindistance], y[i] + y[j] <= 1)
-
+    # additional constraint: each charging station provides coverage for at least C_min unique gridpoints not covered by ground sensors
+    @constraint(model, [k in I_second], sum(coverage_area[k, j] * (1 - x[j]) for j in neighbors_chargingcoverage(k, I, floor(T_max/2))) >= C_min * y[k])
 
     optimize!(model)
 
@@ -189,5 +195,4 @@ end
 # - In our case, if we don't assume charging stations have detection range outside of it's own grid, we should add constraint stating minimum distance between charging stations or similar.
 # - Charging stations now do not take into account proximity to ground stations. Ways to fix this
 #   --> Multiply charging station part in objective with weight factor that prioritizes locations where drones are most needed (i.e., where ground sensors cannot cover). How?
-#   --> Ensure each charging station provides coverage for at least C_min unique grid points not covered by ground sensors
-#       @constraint(model, [k in I_second])
+#   --> Ensure each charging station provides coverage for at least C_min unique grid points in neighborhood not covered by ground sensors
