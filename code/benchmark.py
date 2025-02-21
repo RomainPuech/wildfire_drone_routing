@@ -15,9 +15,9 @@ def get_automatic_layout_parameters(scenario:np.ndarray):
         "M": scenario.shape[2],
         "max_battery_distance": 100,
         "max_battery_time": 100,
-        "n_drones": 50,
-        "n_ground_stations": 10,
-        "n_charging_stations": 10,
+        "n_drones": 1,
+        "n_ground_stations": 1,
+        "n_charging_stations": 1,
     }
 
 
@@ -40,6 +40,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
+    print("running benchmark scenario")
     # 1. Get initialization parameters
     automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
     if custom_initialization_parameters_function is not None:

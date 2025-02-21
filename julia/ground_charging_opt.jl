@@ -2,7 +2,7 @@
 
 # TODO strict typing
 
-
+println("installing packages")
 import Pkg
 Pkg.add("IJulia")
 Pkg.add("CSV")
@@ -46,7 +46,7 @@ function neighbors(i, I=nothing)
 end
 
 function phi(x,y)
-    return L_inf_distance(i, k) <= 1 ? 1 : 0
+    return L_inf_distance(x, y) <= 1 ? 1 : 0
 end
 
 function load_burn_map(filename)
@@ -56,15 +56,19 @@ function load_burn_map(filename)
         println("Loading burn map from $filename")
         burn_map = npzread(filename)
         println("Burn map loaded")
-        println("Burn map: $burn_map")
         return burn_map
     catch e
         error("Error loading burn map: $e")
     end
 end
 
+function test()
+    println("test")
+end
 
-function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging, I_prime = nothing, I_second = nothing,)
+
+
+function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging)
     """
     Returns the locations of all ground sensors and charging stations.
 
@@ -74,6 +78,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     I_second: Set of all feasible positions for charging stations. Defaults to I
     risk_pertime_dir: Folder containing burn maps
     """
+    println("In julia fuinction")
     # Print current working directory contents
     # println("Current working directory: ", pwd())
     # println("Directory contents:")
@@ -86,10 +91,14 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     #         println("  File: ", file)
     #     end
     # end
+    I_prime = nothing
+    I_second = nothing
+
     time_start = time_ns() / 1e9 
 
     risk_pertime = load_burn_map(risk_pertime_file)
     T, N, M = size(risk_pertime)
+    println(T, N, M)
 
     nu = 1
     omega = 1
@@ -97,6 +106,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     B = 700 # total budget
 
     I = [(x, y) for x in 1:N for y in 1:M]
+    println("1")
 
 
     if I_prime === nothing
@@ -107,13 +117,14 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
         I_second = I
     end
     
-    phi = Dict((i, k) => (L_inf_distance(i, k) <= 1 ? 1 : 0) for i in I, k in I)
+    println("2")
 
     model = Model(Gurobi.Optimizer)
-    set_silent(model)
+    # set_silent(model)
     
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
     y = @variable(model, [i in I_second], Bin) # charging station variables
+    println("3")
 
     # risk_pertime is not indexed by I but rather is 2 dimensional with coordinates given by i, so we have to splat i with '...'
     # @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(phi[i,k]*risk_pertime[1,i...]*y[k] for k in I_second for i in neighbors(k,I))) # 2a
@@ -127,9 +138,10 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     #     @constraint(model, x[i] + sum(phi[i,k]*y[k] for k in I_second) <= b) # 2c
     # end
 
-    for i in I_second
-        @constraint(model, sum(phi[i,k]*y[k] for k in I_second) <= 1) # 2d
-    end
+    #for i in I_second
+    @constraint(model, sum(y[k] for k in I_second) <= 1) # 2d
+    #@constraint(model, sum(phi(i,k)*y[k] for k in I_second) <= 1) # 2d
+    #end
 
     #@constraint(model, nu*sum(y[i] for i in I_second) + omega*sum(x[i] for i in I_prime) <= B) # 2e, budget constraint
     # modified: contraint on the total number of ground/charging stations instead of a budget.
@@ -138,10 +150,14 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
 
     optimize!(model)
 
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds")
+
     selected_x_indices = [i for i in I_prime if value(x[i]) ≈ 1]
     selected_y_indices = [i for i in I_second if value(y[i]) ≈ 1]
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
+
+    
 
     return selected_x_indices, selected_y_indices
 end
@@ -149,3 +165,6 @@ end
 #COMMENTS DANIQUE 
 # - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
 # - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.
+
+#println("Starting test")
+#ground_charging_opt_model_grid("./WideDataset/0001/burn_map.npy", 10,10)
