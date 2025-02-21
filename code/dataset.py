@@ -182,8 +182,11 @@ def load_scenario_npy(filename):
         filename += '.npy'
     
     try:
-        data = np.load(filename, allow_pickle=True).item()
-        return data['scenario']
+        loaded_data = np.load(filename, allow_pickle=True)
+        if loaded_data.ndim > 0:  # If it's a regular array (new format)
+            return loaded_data
+        else:  # If it's a 0-dim array containing a dictionary (old format)
+            return loaded_data.item()['scenario']
     
     except FileNotFoundError:
         raise FileNotFoundError(f"Could not find file: {filename}")
@@ -224,10 +227,8 @@ def save_scenario_npy(scenario, out_filename="scenario"):
     if not out_filename.endswith('.npy'):
         out_filename += '.npy'
     
-    # Save scenario data
-    np.save(out_filename, {
-        'scenario': scenario.astype(np.float32)
-    })
+    # Save scenario data directly as array
+    np.save(out_filename, scenario.astype(np.float32))
 
 def save_scenario_jpg(scenario, out_folder_name):
     """

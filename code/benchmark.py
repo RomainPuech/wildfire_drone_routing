@@ -16,8 +16,8 @@ def get_automatic_layout_parameters(scenario:np.ndarray):
         "max_battery_distance": 100,
         "max_battery_time": 100,
         "n_drones": 50,
-        "n_ground_stations": 50,
-        "n_charging_stations": 50
+        "n_ground_stations": 10,
+        "n_charging_stations": 10,
     }
 
 
@@ -49,6 +49,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # print(f"automatic_initialization_parameters: {automatic_initialization_parameters}")
 
     # 2. Get ground sensor locations
+    print("getting sensor locations")
     ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)

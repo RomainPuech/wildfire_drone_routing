@@ -1,13 +1,9 @@
 import random
 import os
-# from my_julia_caller import jl # DEACTIVATED TO RUN THINGS IN PARALLEL 
+from my_julia_caller import jl # DEACTIVATED TO RUN THINGS IN PARALLEL 
 import json
 import numpy as np
 
-def get_burnmap_dir(scenario:np.ndarray, filename:str):
-    return {
-        "risk_pertime_dir": filename
-    }
 
 def return_no_custom_parameters():
     return {}
@@ -112,27 +108,28 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
                 "N": Grid height
                 "M": Grid width
             custom_initialization_parameters: dict with keys:
-                "risk_pertime_dir": Directory containing burn map files
+                "burnmap_filename": burn map file name
         """
         # Initialize empty lists (skip parent's random initialization)
+        print("initializing sensor placement optimization")
         self.ground_sensor_locations = []
         self.charging_station_locations = []
 
-        if "risk_pertime_dir" not in custom_initialization_parameters:
-            raise ValueError("risk_pertime_dir is not defined")
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
 
-        if not custom_initialization_parameters["risk_pertime_dir"].endswith("/"):
-            custom_initialization_parameters["risk_pertime_dir"] += "/"
         # Load the Julia module and function
      #    jl.include("julia/ground_charging_opt.jl") # Done in julia_caller
         
         # Call the Julia optimization function
-        x_vars, y_vars = jl.ground_charging_opt_model_grid(custom_initialization_parameters["risk_pertime_dir"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        print("calling julia optimization model")
+        x_vars, y_vars = jl.ground_charging_opt_model_grid(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        print("optimization finished")
         # save the result in a json file
-        with open(custom_initialization_parameters["risk_pertime_dir"][:-1] + "_ground_sensor_locations.json", "w") as f:
-            json.dump(x_vars, f)
-        with open(custom_initialization_parameters["risk_pertime_dir"][:-1] + "_charging_station_locations.json", "w") as f:
-            json.dump(y_vars, f)
+        # with open(automatic_initialization_parameters["burnmap_filename"][:-4] + "_ground_sensor_locations.json", "w") as f:
+        #     json.dump(x_vars, f)
+        # with open(custom_initialization_parameters["risk_pertime_dir"][:-1] + "_charging_station_locations.json", "w") as f:
+        #     json.dump(y_vars, f)
         
         self.ground_sensor_locations = list(x_vars)
         self.charging_station_locations = list(y_vars)
@@ -153,3 +150,39 @@ class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
             with open(custom_initialization_parameters["logfile"]) as log:
                  self.ground_sensor_locations, self.charging_station_locations = json.load(log)
            
+
+
+### DEFINE A NEW STRATEGY HERE
+
+
+class NEWSTRAT(SensorPlacementStrategy):
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        Initialize the ground placement strategy using Julia's optimization model.
+        
+        Args:
+            automatic_initialization_parameters: dict with keys:
+                "n_ground_stations": Target number of ground stations
+                "n_charging_stations": Target number of charging stations
+                "N": Grid height
+                "M": Grid width
+            custom_initialization_parameters: dict with keys:
+                "risk_pertime_dir": Directory containing burn map files
+        """
+        # Initialize empty lists (skip parent's random initialization)
+        self.ground_sensor_locations = []
+        self.charging_station_locations = []
+
+        if "risk_pertime_dir" not in custom_initialization_parameters:
+            raise ValueError("risk_pertime_dir is not defined")
+
+        if not custom_initialization_parameters["risk_pertime_dir"].endswith("/"):
+            custom_initialization_parameters["risk_pertime_dir"] += "/"
+        # Load the Julia module and function
+     #    jl.include("julia/ground_charging_opt.jl") # Done in julia_caller
+        
+        # Call the Julia optimization function
+        x_vars, y_vars = jl.NEW_STRAT(automatic_initialization_parameters["N"], automatic_initialization_parameters["M"],automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        
+        self.ground_sensor_locations = list(x_vars)
+        self.charging_station_locations = list(y_vars)
