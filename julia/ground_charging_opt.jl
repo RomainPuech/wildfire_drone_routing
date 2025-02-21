@@ -149,3 +149,4 @@ end
 #COMMENTS DANIQUE 
 # - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
 # - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.
+=======
