@@ -18,8 +18,6 @@ Pkg.add("NPZ")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
 
->>>>>>> Stashed changes
-
 function L_inf_distance(a,b)
     """
     Returns the L-infinity distance between a and b in R^n
