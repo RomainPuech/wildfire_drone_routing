@@ -14,7 +14,8 @@ Pkg.add("FFMPEG")
 Pkg.add("JuMP")
 Pkg.add("Gurobi")
 Pkg.add("Clustering")
-using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP
+Pkg.add("NPZ")
+using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
 function L_inf_distance(a,b)
     """
@@ -49,38 +50,14 @@ function phi(x,y)
 end
 
 function load_burn_map(filename)
-    # Add .txt extension if not present
-    if !endswith(filename, ".txt")
-        filename = filename * ".txt"
-    end
     
     try
         # Read the file
-        lines = readlines(filename)
-        
-        # Read starting time from first line
-        starting_time = parse(Int, lines[1])
-        
-        # Read dimensions from second line
-        T, N = parse.(Int, split(lines[2], ","))
-        
-        # Initialize burn_map array
-        burn_map = zeros(Float64, (T, N, N))
-        
-        # Current line index (skip first two header lines)
-        line_idx = 3
-        
-        # Read burn_map data
-        for t in 1:T
-            for i in 1:N
-                # Parse row values
-                row = parse.(Float64, split(lines[line_idx], ","))
-                burn_map[t, i, :] = row
-                line_idx += 1
-            end
-        end
-        
-        return burn_map, starting_time
+        println("Loading burn map from $filename")
+        burn_map = npzread(filename)
+        println("Burn map loaded")
+        println("Burn map: $burn_map")
+        return burn_map
     catch e
         error("Error loading burn map: $e")
     end
@@ -111,14 +88,13 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     # end
     time_start = time_ns() / 1e9 
 
-    risk_pertime, _ = load_burn_map(risk_pertime_file)
-    T, N, _ = size(risk_pertime)
+    risk_pertime = load_burn_map(risk_pertime_file)
+    T, N, M = size(risk_pertime)
 
     nu = 1
     omega = 1
     b = 1.6
     B = 700 # total budget
-    M = N
 
     I = [(x, y) for x in 1:N for y in 1:M]
 
