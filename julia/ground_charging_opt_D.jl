@@ -2,7 +2,6 @@
 
 # TODO strict typing
 
-
 import Pkg
 Pkg.add("IJulia")
 Pkg.add("CSV")
@@ -48,6 +47,11 @@ end
 
 function phi(x,y)
     return L_inf_distance(i, k) <= 1 ? 1 : 0
+end
+
+# Detection in gridpoint i of charging station placed at k, when a drone can fly at maximum T_max time steps.
+function gamma(i,k,T_max)
+    return max(0,1-L_inf_distance(i,k)/ceil(T_max/2)) 
 end
 
 function load_burn_map(filename)
@@ -118,18 +122,6 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
     I_second: Set of all feasible positions for charging stations. Defaults to I
     risk_pertime_dir: Folder containing burn maps
     """
-    # Print current working directory contents
-    # println("Current working directory: ", pwd())
-    # println("Directory contents:")
-    # for (root, dirs, files) in walkdir(pwd())
-    #     println("Directory: ", root)
-    #     for dir in dirs
-    #         println("  Dir: ", dir)
-    #     end
-    #     for file in files
-    #         println("  File: ", file)
-    #     end
-    # end
     time_start = time_ns() / 1e9 
 
     params = load_parameters(risk_pertime_file)
@@ -144,10 +136,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
     C_min = 10
         
     phi = Dict((i, k) => (L_inf_distance(i, k) <= charging_mindistance ? 1 : 0) for i in I, k in I)
-    coverage_area_chargingstation = Dict((i, k) => (L_inf_distance(i, k) <= coverage_area_maxdistance ? 1 : 0) for i in I, k in I)
     
-    # phi = Dict((i, k) => (L_inf_distance(i, k) <= 1 ? 1 : 0) for i in I, k in I)
-
     model = Model(Gurobi.Optimizer)
     set_silent(model)
     
@@ -156,8 +145,8 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
 
     # risk_pertime is not indexed by I but rather is 2 dimensional with coordinates given by i, so we have to splat i with '...'
     # @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(phi[i,k]*risk_pertime[1,i...]*y[k] for k in I_second for i in neighbors(k,I))) # 2a
-    # modifyed 2a: we say that charging stations / ground sensors can only detect ON their cell
-    @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(risk_pertime[1,k...]*y[k] for k in I_second))
+    # modifyed 2a: we say that ground sensors can only detect ON their cell, while charging stations can detect L inf distance of ceil(T_max/2) away with probability gamma(i,k,T_max) 
+    @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(sum(gamma(i,k,T_max)*risk_pertime[1,k...]*y[k] for k in I_second) for i in neighbors_chargingcoverage(k,I,ceil(T_max/2))))
 
     @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
 
@@ -166,7 +155,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
     #     @constraint(model, x[i] + sum(phi[i,k]*y[k] for k in I_second) <= b) # 2c
     # end
 
-
+    
     for i in I_second
         @constraint(model, sum(phi[i,k]*y[k] for k in I_second) <= 1) # 2d
     end
