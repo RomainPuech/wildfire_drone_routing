@@ -17,6 +17,8 @@ Pkg.add("Clustering")
 Pkg.add("NPZ")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
+include("helper_functions.jl")
+
 function L_inf_distance(a,b)
     """
     Returns the L-infinity distance between a and b in R^n
@@ -47,19 +49,6 @@ end
 
 function phi(x,y)
     return L_inf_distance(x, y) <= 1 ? 1 : 0
-end
-
-function load_burn_map(filename)
-    
-    try
-        # Read the file
-        println("Loading burn map from $filename")
-        burn_map = npzread(filename)
-        println("Burn map loaded")
-        return burn_map
-    catch e
-        error("Error loading burn map: $e")
-    end
 end
 
 function test()
@@ -98,7 +87,6 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
 
     risk_pertime = load_burn_map(risk_pertime_file)
     T, N, M = size(risk_pertime)
-    println(T, N, M)
 
     nu = 1
     omega = 1
@@ -106,7 +94,6 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     B = 700 # total budget
 
     I = [(x, y) for x in 1:N for y in 1:M]
-    println("1")
 
 
     if I_prime === nothing
@@ -117,14 +104,13 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
         I_second = I
     end
     
-    println("2")
 
     model = Model(Gurobi.Optimizer)
-    # set_silent(model)
+    set_silent(model)
     
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
     y = @variable(model, [i in I_second], Bin) # charging station variables
-    println("3")
+
 
     # risk_pertime is not indexed by I but rather is 2 dimensional with coordinates given by i, so we have to splat i with '...'
     # @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(phi[i,k]*risk_pertime[1,i...]*y[k] for k in I_second for i in neighbors(k,I))) # 2a
@@ -150,10 +136,8 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
 
     optimize!(model)
 
-    println("Took ", (time_ns() / 1e9) - time_start, " seconds")
-
-    selected_x_indices = [i for i in I_prime if value(x[i]) ≈ 1]
-    selected_y_indices = [i for i in I_second if value(y[i]) ≈ 1]
+    selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(x[i]) ≈ 1]
+    selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) ≈ 1]
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
 
@@ -162,6 +146,14 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     return selected_x_indices, selected_y_indices
 end
 
+function drone_routing_example(drones, batteries, risk_pertime_file, time_horizon)
+    risk_pertime = load_burn_map(risk_pertime_file)
+    T, N, M = size(risk_pertime)
+    
+    # Generate random moves for each drone
+    # output should have this format: [("move", (dx, dy)), ("move", (dx, dy)), ...]
+    return [[("move", (rand(-5:5), rand(-5:5))) for _ in 1:length(drones)] for _ in 1:time_horizon]
+end
 
 function NEW_STRATEGY(risk_pertime_file, N_grounds, N_charging)
     println("NEW STRATEGY")
@@ -172,5 +164,5 @@ end
 # - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
 # - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.
 
-#println("Starting test")
-#ground_charging_opt_model_grid("./WideDataset/0001/burn_map.npy", 10,10)
+# println("Starting test")
+# ground_charging_opt_model_grid("./WideDataset/0001/burn_map.npy", 10,10)

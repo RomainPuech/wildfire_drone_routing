@@ -20,8 +20,13 @@ def get_automatic_layout_parameters(scenario:np.ndarray):
         "n_charging_stations": 1,
     }
 
+def get_burnmap_parameters(input_dir:str):
+    return {
+        "burnmap_filename": f"{"/".join(input_dir.strip("/").split('/')[:-1])}/burn_map.npy"
+    }
 
-def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None):
+
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
@@ -40,9 +45,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
-    print("running benchmark scenario")
-    # 1. Get initialization parameters
-    automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
+    # 1. Get layout parameters
+    if automatic_initialization_parameters_function  is None:
+        automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
+    else:
+        automatic_initialization_parameters = automatic_initialization_parameters_function(scenario)
+    
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(automatic_initialization_parameters)
 
@@ -50,7 +58,6 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # print(f"automatic_initialization_parameters: {automatic_initialization_parameters}")
 
     # 2. Get ground sensor locations
-    print("getting sensor locations")
     ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)
@@ -251,14 +258,14 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     delta_ts = 0
     fails = 0
     devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
+
+    custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
     
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
         scenario = load_scenario_npy(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
-            automatic_initialization_parameters = get_automatic_layout_parameters(scenario) # not used yet! #TODO compute them once ony
-            if custom_initialization_parameters_function is not None:
-                custom_initialization_parameters = custom_initialization_parameters_function(file)
+            automatic_initialization_parameters = get_automatic_layout_parameters(scenario) #TODO compute them once only per layout rather than per scenario..
         delta_t, device, _ = run_benchmark_scenario(scenario, 
                                                     sensor_placement_strategy, 
                                                     drone_routing_strategy, 
