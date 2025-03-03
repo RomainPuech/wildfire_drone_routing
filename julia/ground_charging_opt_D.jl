@@ -134,6 +134,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
     charging_mindistance = 4 #min distance between two charging stations
     T_max = 5 #max time a drone can be in the air
     C_min = 10
+    grid_maxcoverage = 1.25
         
     phi = Dict((i, k) => (L_inf_distance(i, k) <= charging_mindistance ? 1 : 0) for i in I, k in I)
     
@@ -150,12 +151,12 @@ function ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_
 
     @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
 
-    # We don't need the following since stations can only see their own cell
-    # for i in I_prime
-    #     @constraint(model, x[i] + sum(phi[i,k]*y[k] for k in I_second) <= b) # 2c
-    # end
+    #2c, makes sure that it does not 
+    for i in I_prime
+        @constraint(model, x[i] + sum(phi[i,k]*y[k] for k in I_second) <= grid_maxcoverage) # 2c
+    end
 
-    
+
     for i in I_second
         @constraint(model, sum(phi[i,k]*y[k] for k in I_second) <= 1) # 2d
     end
