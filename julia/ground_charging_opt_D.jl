@@ -1,6 +1,8 @@
 # 2025, Formulations and code by Danique De Moor, adapted by Romain Puech
 
 # TODO strict typing
+# ENV["GUROBI_HOME"] = "/Library/gurobi1103/gurobi.lic"
+# ENV["GRB_LICENSE_FILE"] = "/Library/gurobi1103/gurobi.lic"
 
 import Pkg
 Pkg.add("IJulia")
@@ -13,9 +15,10 @@ Pkg.add("FFMPEG")
 Pkg.add("JuMP")
 Pkg.add("Gurobi")
 Pkg.add("Clustering")
-using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP
+Pkg.add("NPZ")
+using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
-
+include("helper_functions.jl")
 
 function L_inf_distance(a,b)
     """

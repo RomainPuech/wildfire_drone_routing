@@ -418,7 +418,7 @@ class MY_SENSOR_STRATEGY(SensorPlacementStrategy):
         # Call the Julia optimization function
         print("calling julia optimization model")
         #jl.test()
-        x_vars, y_vars = jl.NEW_STRATEGY(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        x_vars, y_vars = jl.NEW_SENSOR_STRATEGY(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         print("optimization finished")
         # save the result in a json file
         # with open(automatic_initialization_parameters["burnmap_filename"][:-4] + "_ground_sensor_locations.json", "w") as f:
@@ -428,3 +428,41 @@ class MY_SENSOR_STRATEGY(SensorPlacementStrategy):
         
         self.ground_sensor_locations = list(x_vars)
         self.charging_station_locations = list(y_vars)
+
+class MY_SENSOR_STRATEGY_2(SensorPlacementStrategy):
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        Initialize the ground placement strategy using Julia's optimization model.
+        
+        Args:
+            automatic_initialization_parameters: dict with keys:
+                "n_ground_stations": Target number of ground stations
+                "n_charging_stations": Target number of charging stations
+                "N": Grid height
+                "M": Grid width
+            custom_initialization_parameters: dict with keys:
+                "burnmap_filename": burn map file name
+        """
+        # Initialize empty lists (skip parent's random initialization)
+        self.ground_sensor_locations = []
+        self.charging_station_locations = []
+
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+
+        # Load the Julia module and function
+     #    jl.include("julia/ground_charging_opt.jl") # Done in julia_caller
+        
+        # Call the Julia optimization function
+        print("calling julia optimization model")
+        #jl.test()
+        x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_2(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        print("optimization finished")
+        # save the result in a json file
+        # with open(automatic_initialization_parameters["burnmap_filename"][:-4] + "_ground_sensor_locations.json", "w") as f:
+        #     json.dump(x_vars, f)
+        # with open(custom_initialization_parameters["risk_pertime_dir"][:-1] + "_charging_station_locations.json", "w") as f:
+        #     json.dump(y_vars, f)
+        
+        self.ground_sensor_locations = list(x_vars)
+        self.charging_station_locations = list(y_vars)        
