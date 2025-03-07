@@ -288,13 +288,19 @@ class DroneRoutingOptimizationExample(DroneRoutingStrategy):
         """
         # Uniform allocation of drones across charging stations (you can change this)
         
-        n = len(self.automatic_initialization_parameters["charging_stations_locations"])
-        q = self.automatic_initialization_parameters["n_drones"] // n
-        r = self.automatic_initialization_parameters["n_drones"] % n
+        # n = len(self.automatic_initialization_parameters["charging_stations_locations"])
+        # q = self.automatic_initialization_parameters["n_drones"] // n
+        # r = self.automatic_initialization_parameters["n_drones"] % n
         
-        # By default drones are spread uniformly aross charging stations
-        return self.automatic_initialization_parameters["charging_stations_locations"]*q + self.automatic_initialization_parameters["charging_stations_locations"][:r]
-    
+        # # By default drones are spread uniformly aross charging stations
+        # return self.automatic_initialization_parameters["charging_stations_locations"]*q + self.automatic_initialization_parameters["charging_stations_locations"][:r]
+        print("calling julia optimization model")
+            # REPLACE HERE BY YOUR JULIA FUNCTION
+        self.current_solution = jl.drone_init(self.custom_initialization_parameters["burnmap_filename"], self.custom_initialization_parameters["optimization_horizon"])
+        # TODO IF YOU WANT THE OPTIIZATION PROBLEM TO BE RAN AGAIN THE FIRST TIME next_actions IS CALLED, REMOVE/COMMENT THE LINE BELOW
+        self.call_counter = 1 # REMOVE THIS LINE IF YOU WANT THE OPTIIZATION PROBLEM TO BE RAN AGAIN THE FIRST TIME next_actions IS CALLED
+        print("optimization finished")
+        
     def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
         """
         automatic_step_parameters: dict with keys:
