@@ -23,7 +23,7 @@ function L_inf_distance(a,b)
     """
     Returns the L-infinity distance between a and b in R^n
     """
-    return return maximum(abs.(a .- b))
+    return maximum(abs.(a .- b))
 end
 
 function neighbors(i, I=nothing)
@@ -74,6 +74,22 @@ function gamma_matrix(I, K, max_battery_time)
 
     # Return the full matrix and lookup maps
     return gamma_values, I_map, K_map
+end
+
+function load_parameters(risk_pertime_file)
+    risk_pertime, _ = load_burn_map(risk_pertime_file)
+    T, N, _ = size(risk_pertime)
+    M = N
+    I = [(x, y) for x in 1:N for y in 1:M]
+    if I_prime === nothing
+        I_prime = I
+    end
+
+    if I_second === nothing
+        I_second = I
+    end
+
+    return (risk_pertime=risk_pertime, T=T, N=N, M=M, I=I, I_prime=I_prime, I_second=I_second)
 end
 
 
@@ -253,7 +269,7 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
     selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) ≈ 1]
 
     return selected_x_indices, selected_y_indices
-    
+
 end
 
 #no charging stations allowed within L infinity distance of 4 of each other
@@ -305,65 +321,120 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     return selected_x_indices, selected_y_indices
 end
 
-function NEW_ROUTING_STRATEGY(risk_pertime_file,N_drones,N_ground,N_charging)
 
-        time_start = time_ns() / 1e9 
 
-        selected_x_indices, selected_y_indices = ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_charging_stations)
+function get_drone_gridpoints(charging_stations, n, I)
+    """
+    Returns the set of points covered by charging stations within L-infinity distance n.
 
-        ChargingStations = selected_y_indices #coming from ground_charging_opt
-        GroundStations = selected_x_indices #coming from ground_charging_opt
-        GridpointsDrones # = allowed_gridpoints_drones
-        GridpointsDronesDetecting # = NonChargingstations_allowed
+    Arguments:
+    - charging_stations: List of tuples representing the (x, y) locations of charging stations.
+    - n: Maximum L-infinity distance for coverage.
+    - grid_points: Set of all possible points in the region (e.g., a list of (x, y) tuples).
 
-        params = load_parameters(risk_pertime_file)
+    Returns:
+    - Set of (x, y) points that are within L-infinity distance n from any charging station.
+    """
+    covered_points = Set()
+    for i in I
+        for c in charging_stations
+            if L_inf_distance(i, c) <= n
+                push!(covered_points, i)
+                break  # No need to check other stations once it's covered
+            end
+        end
+    end
+    return covered_points
+end
 
-        risk_pertime = params.risk_pertime
-        T = params.T
+#Can we make rollinghorizon_step initialization parameter?
+function NEW_ROUTING_STRATEGY(risk_pertime_file,n_drones,ChargingStations,reevaluation_step, T, max_battery_time, battery_level,fly_indices,charge_indices, movement_plan_prev) #T here is optimization_horizon: should be > max_battery_time, reevaluation_step < floor(optimization_horizon/2)
 
-        model = Model(Gurobi.Optimizer)
-        set_silent(model)
-        #Defining the variables
-        a = @variable(model, [i in GridpointsDrones, t in 1:T, s in n_drones], Bin)
-        c = @variable(model, [i in ChargingStations, t in 1:T, s in n_drones], Bin)
-        b = @variable(model, [t in 1:T, s in n_drones])
+    time_start = time_ns() / 1e9 
+
+    params = load_parameters(risk_pertime_file)
+
+    risk_pertime = params.risk_pertime
+    I = params.I
+    I_prime = params.I_prime
+    I_second = params.I_second
+    B_max = 1
+    B_min = 0.2
+
+    GridpointsDrones = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I) # = allowed_gridpoints_drones
+    GridpointsDronesDetecting = setdiff(covered_points,ChargingStations) # = NonChargingstations_allowed
+
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    #Defining the variables
+    a = @variable(model, [i in GridpointsDrones, t in 1:T, s in n_drones], Bin)
+    c = @variable(model, [i in ChargingStations, t in 1:T, s in n_drones], Bin)
+    b = @variable(model, [t in 1:T, s in n_drones])
     
-        @objective(model, Max, sum(sum(risk_pertime[t,k...]*x1[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
+    @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
 
-        #Defining the constraints
-        @constraint(model, [i in GridpointsDrones, t in 1:T], sum(a[i,t,s] for s in 1:n_drones) <= 1)
-        @constraint(model, [t in 1:T, s in 1:n_drones], sum(a[i,t,s] for i in GridpointsDrones) + sum(c[i,t,s] for i in ChargingStations) == 1)
-        @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:S], c[j,t+1,s] + a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if neighbors[i,j]) + c[j,t,s])
-        @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if neighbors[i,j]))
-        @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if neighbors[i,j]) + c[j,t+1,s])
-        @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in S], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if neighbors[i,j]))
-        @constraint(model, [t in 1:T, s in 1:n_drones], B_min <= b[t,s] <= B_max)
-        @constraint(model, [t in 1:T-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 0.1*sum(a[i,t,s] for i in GridpointsDrones) + B_max*sum(c[i,t,s] for i in ChargingStations))
-        @constraint(model, [t in 1:T, s in 1:n_drones], sum(c[i,t,s] for i in ChargingStations) >= 1 - b[t,s]/B_min)
-        @constraint(model, [s in 1:n_drones], sum(c[i,1,s] for i in ChargingStations) == 1)
-        @constraint(model, [s in 1:n_drones], b[1,s] == B_max)
-        @constraint(model, [s in 1:n_drones], b[T,s] >= B_min)
-        @constraint(model, [s in 1:n_drones], sum(c[i,T,s] for i in ChargingStations) == 1)
+    #Defining the constraints
+    @constraint(model, [i in GridpointsDrones, t in 1:T], sum(a[i,t,s] for s in 1:n_drones) <= 1)
+    @constraint(model, [t in 1:T, s in 1:n_drones], sum(a[i,t,s] for i in GridpointsDrones) + sum(c[i,t,s] for i in ChargingStations) == 1)
+    @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:S], c[j,t+1,s] + a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if neighbors[i,j]) + c[j,t,s])
+    @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if neighbors[i,j]))
+    @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if neighbors[i,j]) + c[j,t+1,s])
+    @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in S], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if neighbors[i,j]))
+    @constraint(model, [t in 1:T, s in 1:n_drones], B_min <= b[t,s] <= B_max)
+    @constraint(model, [t in 1:T-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 0.1*sum(a[i,t,s] for i in GridpointsDrones) + B_max*sum(c[i,t,s] for i in ChargingStations))
+    @constraint(model, [t in 1:T, s in 1:n_drones], sum(c[i,t,s] for i in ChargingStations) >= 1 - b[t,s]/B_min)
+    # @constraint(model, [s in 1:n_drones], sum(c[i,1,s] for i in ChargingStations) == 1) #First run
+    @constraint(model, [s in 1:n_drones, i in Chargingstations], c[i,1,s] == charge_indices[i,1,s])
+    @constraint(model, [s in 1:n_drones, i in GridpointsDrones], a[i,1,s] == fly_indices[i,1,s])
+    # @constraint(model, [s in 1:n_drones], b[1,s] == B_max) #First run
+    @constraint(model, [s in 1:n_drones], b[1,s] == battery_level[reevaluation_step,s]) #makes sure that the battery_level is 
+    @constraint(model, [s in 1:n_drones], b[T,s] >= B_min)
+    @constraint(model, [s in 1:n_drones], sum(c[i,T,s] for i in ChargingStations) == 1)
 
-        @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
-        optimize!(model)
+    @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
+    optimize!(model)
 
-        selected_fly_indices = [(i,t,s) for i in GridpointsDronesDetecting, t in 1:T, s in 1:n_drones if value(a[i,t,s]) ≈ 1]
-        selected_charge_indices = [(i,t,s) for i in ChargingStations, t in 1:T, s in 1:n_drones if value(c1[i,t,s]) ≈ 1]
-        battery_level = value(b);
+    fly_indices = value(c);
+    charge_indices = value(a);
+    selected_fly_indices = [(i,t,s) for i in GridpointsDronesDetecting, t in 1:reevaluation_step, s in 1:n_drones if value(a[i,t,s]) ≈ 1]
+    selected_charge_indices = [(i,t,s) for i in ChargingStations, t in 1:reevaluation_step, s in 1:n_drones if value(c[i,t,s]) ≈ 1]
+    battery_level = value(b);
 
-        println("Took ", (time_ns() / 1e9) - time_start, " seconds")
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds")
 
-        return selected_fly_indices, selected_charge_indices, battery_level
-
+    movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
+    # Replace random movements with optimized drone movements
+    for (i, t, s) in selected_fly_indices
+        movement_plan[t][s] = ("move", i)  # Move to gridpoint i
+    end
+    for (i, t, s) in selected_charge_indices
+        movement_plan[t][s] = ("charge", i)  # Charge at station i
     end
 
+    updated_movement_plan = vcat(movement_plan_prev, movement_plan[1:reevaluation_step])
+
+    return fly_indices, charge_indices, battery_level, updated_movement_plan
+
+end
+
+function NEW_ROUTING_STRATEGY_FULL_HORIZON(risk_pertime_file,n_drones,ChargingStations,reevaluation_step,T,max_battery_time)
+    battery_level = ones(optimization_horizon,n_drones)
+    movement_plan_full = []
+    fly_indices = nothing
+    charge_indices = nothing
+    movement_plan_prev = []
+    full_horizon, N, M = size(risk_pertime)
+    for t in 1:reevaluation_step:full_horizon
+        println("Running optimization for time step $t")
+
+        # Run optimization strategy for next reevaluation_step steps
+        fly_indices, charge_indices, battery_level, movement_plan_updated = NEW_ROUTING_STRATEGY(risk_pertime_file, n_drones, ChargingStations, reevaluation_step, T, max_battery_time, battery_level, fly_indices, charge_indices, movement_plan_prev)
+        append!(movement_plan_full,movement_plan_updated)
+        movement_plan_prev = movement_plan_full
+    end
+
+    return movement_plan_full
+end
 
 
 
-#COMMENTS DANIQUE 
-# - in constraint 2d, we can remove phi[i,k] as we assume charging stations only detect in own gridpoint.
-# - Ground stations & charging stations placement based on population, accessibility, safety. In simulation not possible (is this true?) but on real dataset it is.
-
-# println("Starting test")
-# ground_charging_opt_model_grid("./WideDataset/0001/burn_map.npy", 10,10)
