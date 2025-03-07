@@ -55,17 +55,6 @@ function test()
     println("test")
 end
 
-# function gamma(i,k,max_battery_time)
-
-#     max_distance = floor(max_battery_time/2)+1
-#     r = L_inf_distance(i,k)
-#     if r <= max_distance - 1
-#         return (1 / max_distance) * (max_distance - r - 1)
-#     else
-#         return 0
-#     end
-# end
-
 function gamma_matrix(I, K, max_battery_time)
     max_distance = floor(max_battery_time / 2) + 1
     gamma_values = zeros(length(I), length(K))  # Preallocate matrix
@@ -126,7 +115,6 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
 
     I = [(x, y) for x in 1:N for y in 1:M]
 
-
     if I_prime === nothing
         I_prime = I
     end
@@ -134,14 +122,12 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     if I_second === nothing
         I_second = I
     end
-    
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
     
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
     y = @variable(model, [i in I_second], Bin) # charging station variables
-
 
     # risk_pertime is not indexed by I but rather is 2 dimensional with coordinates given by i, so we have to splat i with '...'
     # @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(phi[i,k]*risk_pertime[1,i...]*y[k] for k in I_second for i in neighbors(k,I))) # 2a
@@ -174,8 +160,6 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
 
-    
-
     return selected_x_indices, selected_y_indices
 end
 
@@ -202,10 +186,6 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
     T, N, M = size(risk_pertime)
     println("N=", N)
     println("M=", M)
-    nu = 1
-    omega = 1
-    b = 1.6
-    B = 700 # total budget
     detection_rate = 0.7
 
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -225,22 +205,17 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
 
     I_possible = union(I_prime,I_second,I_third)
 
-    # println("before defining gamma")
-    # gamma_values, I_map, K_map = gamma_matrix(I_possible, I_second, max_battery_time)  # Compute once
-    # println("after defining gamma")
-
     model = Model(Gurobi.Optimizer)
-    # set_silent(model)
+    set_silent(model)
     
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
     y = @variable(model, [i in I_second], Bin) # charging station variables
     theta = @variable(model, [i in I_possible])
 
     t1 = time_ns() / 1e9  # Convert nanoseconds to seconds
-    # Code block 1
+
     close_pairs = [(i, j) for i in I_possible for j in I_second if i != j && maximum(abs.(i .- j)) <= 4]
     println("Step 1 took ", (time_ns() / 1e9) - t1, " seconds")
-    # Create a dictionary mapping each i to its corresponding k's
     t4 = time_ns() / 1e9
     # close_dict = Dict(i => [k for (j, k) in close_pairs if j == i] for i in I_prime)
     close_dict = Dict{Tuple{Int,Int}, Vector{Tuple{Int,Int}}}()
@@ -261,35 +236,24 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
     #constraints defining the epigraph variable theta[i] = min(1,x[i] + sum_k y[i,k]*y[k])
     @constraint(model, [i in I_possible], theta[i] <= 1)
     t2 = time_ns() / 1e9  # Convert nanoseconds to seconds
-    # @constraint(model, [i in I_prime], theta[i] <= x[i] + sum(gamma_values[I_map[i], K_map[k]]*y[k] for k in I_second))
-    # @constraint(model, [i in I_prime], theta[i] <= x[i] + sum(detection_rate*phi(i,k)*y[k] for k in close_dict[i]))
     @constraint(model, [i in I_prime], theta[i] <= x[i] + sum(detection_rate*phi(i,k)*y[k] for k in get(close_dict,i,[])))
-
-    # @constraint(model, [i in I_prime], theta[i] <= x[i] + sum(detection_rate*phi(i,k)*y[k] for k in I_second if [i,k] in close_pairs))
     println("Step 2 took ", (time_ns() / 1e9) - t2, " seconds")
     t3 = time_ns() / 1e9  # Convert nanoseconds to seconds
-
-    # @constraint(model, [i in setdiff(union(I_second,I_third),I_prime)], theta[i] <= sum(gamma_values[I_map[i], K_map[k]]*y[k] for k in I_second))
     @constraint(model, [i in setdiff(union(I_second,I_third),I_prime)], theta[i] <= sum(y[k] for k in I_second))
     println("Step 3 took ", (time_ns() / 1e9) - t3, " seconds")
-
     @constraint(model, theta >= 0)
-
     @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
-    
     @constraint(model, sum(x) <= N_grounds)
     @constraint(model, sum(y) <= N_charging) # modified: contraint on the total number of ground/charging stations instead of a budget.
     
-    t5 = time_ns() / 1e9  # Convert nanoseconds to seconds
     optimize!(model)
     println("Optimizing model took ", (time_ns() / 1e9) - t5, " seconds")
 
     selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(x[i]) ≈ 1]
     selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) ≈ 1]
 
-    println("Took ", (time_ns() / 1e9) - time_start, " seconds")
-
     return selected_x_indices, selected_y_indices
+    
 end
 
 #no charging stations allowed within L infinity distance of 4 of each other
@@ -314,7 +278,6 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     if I_second === nothing
         I_second = I
     end
-    
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
@@ -329,7 +292,6 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     @constraint(model, sum(y) <= N_charging) 
     # Precompute valid (i, j) pairs where L∞ distance ≤ 4
     close_pairs = [(i, j) for i in I for j in I if i != j && maximum(abs.(i .- j)) <= 4]
-
     # Add constraints efficiently
     @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
 
@@ -340,10 +302,63 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
 
-    
-
     return selected_x_indices, selected_y_indices
 end
+
+function NEW_ROUTING_STRATEGY(risk_pertime_file,N_drones,N_ground,N_charging)
+
+        time_start = time_ns() / 1e9 
+
+        selected_x_indices, selected_y_indices = ground_charging_opt_model_grid(risk_pertime_file, n_ground_stations, n_charging_stations)
+
+        ChargingStations = selected_y_indices #coming from ground_charging_opt
+        GroundStations = selected_x_indices #coming from ground_charging_opt
+        GridpointsDrones # = allowed_gridpoints_drones
+        GridpointsDronesDetecting # = NonChargingstations_allowed
+
+        params = load_parameters(risk_pertime_file)
+
+        risk_pertime = params.risk_pertime
+        T = params.T
+
+        model = Model(Gurobi.Optimizer)
+        set_silent(model)
+        #Defining the variables
+        a = @variable(model, [i in GridpointsDrones, t in 1:T, s in n_drones], Bin)
+        c = @variable(model, [i in ChargingStations, t in 1:T, s in n_drones], Bin)
+        b = @variable(model, [t in 1:T, s in n_drones])
+    
+        @objective(model, Max, sum(sum(risk_pertime[t,k...]*x1[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
+
+        #Defining the constraints
+        @constraint(model, [i in GridpointsDrones, t in 1:T], sum(a[i,t,s] for s in 1:n_drones) <= 1)
+        @constraint(model, [t in 1:T, s in 1:n_drones], sum(a[i,t,s] for i in GridpointsDrones) + sum(c[i,t,s] for i in ChargingStations) == 1)
+        @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:S], c[j,t+1,s] + a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if neighbors[i,j]) + c[j,t,s])
+        @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if neighbors[i,j]))
+        @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if neighbors[i,j]) + c[j,t+1,s])
+        @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in S], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if neighbors[i,j]))
+        @constraint(model, [t in 1:T, s in 1:n_drones], B_min <= b[t,s] <= B_max)
+        @constraint(model, [t in 1:T-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 0.1*sum(a[i,t,s] for i in GridpointsDrones) + B_max*sum(c[i,t,s] for i in ChargingStations))
+        @constraint(model, [t in 1:T, s in 1:n_drones], sum(c[i,t,s] for i in ChargingStations) >= 1 - b[t,s]/B_min)
+        @constraint(model, [s in 1:n_drones], sum(c[i,1,s] for i in ChargingStations) == 1)
+        @constraint(model, [s in 1:n_drones], b[1,s] == B_max)
+        @constraint(model, [s in 1:n_drones], b[T,s] >= B_min)
+        @constraint(model, [s in 1:n_drones], sum(c[i,T,s] for i in ChargingStations) == 1)
+
+        @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
+        optimize!(model)
+
+        selected_fly_indices = [(i,t,s) for i in GridpointsDronesDetecting, t in 1:T, s in 1:n_drones if value(a[i,t,s]) ≈ 1]
+        selected_charge_indices = [(i,t,s) for i in ChargingStations, t in 1:T, s in 1:n_drones if value(c1[i,t,s]) ≈ 1]
+        battery_level = value(b);
+
+        println("Took ", (time_ns() / 1e9) - time_start, " seconds")
+
+        return selected_fly_indices, selected_charge_indices, battery_level
+
+    end
+
+
 
 
 #COMMENTS DANIQUE 
