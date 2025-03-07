@@ -468,6 +468,5 @@ class LoggedOptimizationSensorPlacementStrategy(SensorPlacementStrategy):
             # save the result in a json file
             with open(custom_initialization_parameters["log_filename"], "w") as f:
                 json.dump([list(x_vars), list(y_vars)], f)
-            
             self.ground_sensor_locations = list(x_vars)
             self.charging_station_locations = list(y_vars)
