@@ -436,5 +436,12 @@ function NEW_ROUTING_STRATEGY_FULL_HORIZON(risk_pertime_file,n_drones,ChargingSt
     return movement_plan_full
 end
 
+function GREEDY_ROUTING_STRATEGY(risk_pertime_file,T,n_drones)
+    params = load_parameters(risk_pertime_file)
+
+    @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
+    
+end
+
 
 

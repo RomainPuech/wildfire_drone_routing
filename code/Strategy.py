@@ -476,3 +476,72 @@ class LoggedOptimizationSensorPlacementStrategy(SensorPlacementStrategy):
                 json.dump([list(x_vars), list(y_vars)], f)
             self.ground_sensor_locations = list(x_vars)
             self.charging_station_locations = list(y_vars)
+
+class GREEDY_DRONE_STRATEGY(DroneRoutingStrategy):
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        automatic_initialization_parameters: dict with keys:
+            "N": Grid height
+            "M": Grid width
+            "max_battery_distance": int
+            "max_battery_time": int
+            "n_drones": int
+            "n_ground_stations": Target number of ground stations
+            "n_charging_stations": Target number of charging stations
+            "ground_sensor_locations": list of tuples (x,y)
+            "charging_stations_locations": list of tuples (x,y)
+        custom_initialization_parameters: dict with keys:
+            "burnmap_filename": burn map file name
+            "call_every_n_steps": number of steps between calls to julia optimization model
+            "optimization_horizon": number of steps to optimize for
+        """
+        # assign parameters
+        self.automatic_initialization_parameters = automatic_initialization_parameters
+        self.custom_initialization_parameters = custom_initialization_parameters
+        self.call_counter = 0 # keeping track of how many time we call function to know when to call julia
+        self.current_solution = None
+
+
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+        
+        if "call_every_n_steps" not in custom_initialization_parameters:
+            raise ValueError("call_every_n_steps is not defined")
+        self.call_every_n_steps = custom_initialization_parameters["call_every_n_steps"]
+        
+        if "optimization_horizon" not in custom_initialization_parameters:
+            raise ValueError("optimization_horizon is not defined")
+        self.optimization_horizon = custom_initialization_parameters["optimization_horizon"]
+        
+    def get_initial_drone_locations(self):
+        """
+        Returns the initial locations of the drones
+        """
+        # Uniform allocation of drones across charging stations (you can change this)
+        
+        n = len(self.automatic_initialization_parameters["charging_stations_locations"])
+        q = self.automatic_initialization_parameters["n_drones"] // n
+        r = self.automatic_initialization_parameters["n_drones"] % n
+        
+        # By default drones are spread uniformly aross charging stations
+        return self.automatic_initialization_parameters["charging_stations_locations"]*q + self.automatic_initialization_parameters["charging_stations_locations"][:r]
+    
+    def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
+        """
+        automatic_step_parameters: dict with keys:
+            "drone_locations": list of tuples (x,y)
+            "drone_batteries": list of tuples (distance,time)
+            "t": int
+        custom_step_parameters: dict 
+        Returns:
+            actions: list of tuples (action_type, action_parameters)
+        """
+        # suggest actions
+        if self.call_counter % self.call_every_n_steps == 0: # every `call_every_n_steps` calls, we call julia optimization model again
+            # calling julia optimization model
+            print("calling julia optimization model")
+            # REPLACE HERE BY YOUR JULIA FUNCTION
+            self.current_solution = jl.NEW_drone_routing_example(automatic_step_parameters["drone_locations"], automatic_step_parameters["drone_batteries"], self.custom_initialization_parameters["burnmap_filename"], self.custom_initialization_parameters["optimization_horizon"])
+            print("optimization finished")
+
+        return self.current_solution[self.call_counter % self.call_every_n_steps]
