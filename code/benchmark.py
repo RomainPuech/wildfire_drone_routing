@@ -285,6 +285,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     for device in devices.keys():
         print(f"Fire found {round(devices[device]/N_SCENARII*100,2)}% of the time by {device}")
 
+# deprecated?
 def run_ground_log(input_dir, output_file, ground_placement_strategy, ground_parameters, max_n_scenarii=None):
     """
     Log ground sensor and charging station placements for multiple scenarios to a JSON file.

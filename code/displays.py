@@ -53,7 +53,7 @@ def display_grid(grid, smoke_grid, drones, display):
         print("".join(row))
     print()
 
-
+# deprecated? uses smoke_grid, which is not used anymore
 def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="images", ground_sensors_locations = [], charging_stations_locations = []):
     """
     Save a PNG image of the grid with overlays for fire, smoke, and drones, including a smoke scale.
