@@ -75,6 +75,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     drones = [Drone(x,y,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"]) for (x,y) in Routing_Strat.get_initial_drone_locations()]
     drone_locations = [drone.get_position() for drone in drones]
     drone_batteries = [drone.get_battery() for drone in drones]
+    drone_states = [drone.get_state() for drone in drones]
     drone_locations_history = None
     if return_history:
         drone_locations_history = [list(drone_locations)]
@@ -117,6 +118,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         automatic_step_parameters = {
             "drone_locations": drone_locations,
             "drone_batteries": drone_batteries,
+            "drone_states": drone_states,
             "t": t_found }
         
         # 2. Get the actions
@@ -124,9 +126,10 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
         # 3. Move the drones
         for drone_index, (drone,action) in enumerate(zip(drones,actions)):
-            new_x, new_y, new_distance_battery, new_time_battery = drone.route(action)
+            new_x, new_y, new_distance_battery, new_time_battery, new_state = drone.route(action)
             drone_locations[drone_index] = (new_x,new_y)
             drone_batteries[drone_index] = (new_distance_battery,new_time_battery)
+            drone_states[drone_index] = new_state
         if return_history:
             drone_locations_history.append(tuple(drone_locations))
         # print(f"drone_locations: {drone_locations}")
