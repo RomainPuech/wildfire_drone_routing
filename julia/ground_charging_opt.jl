@@ -19,42 +19,6 @@ using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, 
 
 include("helper_functions.jl")
 
-function L_inf_distance(a,b)
-    """
-    Returns the L-infinity distance between a and b in R^n
-    """
-    return maximum(abs.(a .- b))
-end
-
-function neighbors(i, I=nothing)
-    """
-    Returns the L-infinity norm-neighbors of i in Z^n, intersected with feasible set I if provided
-    (returns the feasible cells directly around i)
-    """
-    n = length(i)
-    neighbors_list = []
-    
-    # Generate all possible combinations of -1, 0, 1 in n dimensions
-    for moves in Iterators.product(fill((-1,0,1), n)...)
-        if any(m != 0 for m in moves)  # Skip the point itself
-            point = [i[j] + moves[j] for j in 1:n]
-            if I === nothing || point in I # if the point belongs to the original set I
-                push!(neighbors_list, Tuple(i[j] + moves[j] for j in 1:n))
-            end
-        end
-    end
-    
-    return neighbors_list
-end
-
-function phi(x,y)
-    return L_inf_distance(x, y) <= 4 ? 1 : 0
-end
-
-function test()
-    println("test")
-end
-
 function gamma_matrix(I, K, max_battery_time)
     max_distance = floor(max_battery_time / 2) + 1
     gamma_values = zeros(length(I), length(K))  # Preallocate matrix
@@ -177,15 +141,6 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
 
     return selected_x_indices, selected_y_indices
-end
-
-function drone_routing_example(drones, batteries, risk_pertime_file, time_horizon)
-    risk_pertime = load_burn_map(risk_pertime_file)
-    T, N, M = size(risk_pertime)
-    
-    # Generate random moves for each drone
-    # output should have this format: [("move", (dx, dy)), ("move", (dx, dy)), ...]
-    return [[("move", (rand(-5:5), rand(-5:5))) for _ in 1:length(drones)] for _ in 1:time_horizon]
 end
 
 #charging stations detect by rate detection_rate in neighboring grids until L infinity norm 4
