@@ -25,10 +25,6 @@ function NEW_ROUTING_STRATEGY_INIT(risk_pertime_file,n_drones,ChargingStations,G
     I_third = nothing
     I = [(x, y) for x in 1:N for y in 1:M]
 
-    # Convert Python lists of tuples to Julia Vector of tuples
-    ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
-    GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
-
     if I_prime === nothing
         I_prime = I
     end
