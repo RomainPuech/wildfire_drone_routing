@@ -118,7 +118,6 @@ def run_benchmark_for_strategy(input_dir: str,
     print("[run_benchmark_for_strategy] Running sensor placement strategy...")
     sensor_placement_strategy_instance = SensorPlacementStrategyClass(automatic_init_params, custom_init_params)
     ground_sensor_locations, charging_station_locations = sensor_placement_strategy_instance.get_locations()
-
     # Add placements to the automatic init params so drone strategy can use them
     automatic_init_params["ground_sensor_locations"] = ground_sensor_locations
     automatic_init_params["charging_stations_locations"] = charging_station_locations
@@ -139,7 +138,6 @@ def run_benchmark_for_strategy(input_dir: str,
             custom_step_parameters_function=lambda: {},  # Modify if you have step params
             starting_time=starting_time
         )
-
         # Aggregate results
         if delta_t == -1:
             fails += 1
@@ -156,11 +154,10 @@ def run_benchmark_for_strategy(input_dir: str,
 
 
 
-
 if __name__ == "__main__":
     run_benchmark_for_strategy(
         input_dir="MinimalDataset/0001/scenarii",
-        strategy_folder="strategy",
+        strategy_folder="code/strategy",
         sensor_strategy_file="logged_sensor_placement.py",
         sensor_class_name="LoggedSensorPlacementStrategy",
         drone_strategy_file="logged_drone_routing.py",

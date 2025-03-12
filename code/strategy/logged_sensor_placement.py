@@ -34,7 +34,27 @@ class LoggedSensorPlacementStrategy:
             if "burnmap_filename" not in custom_initialization_parameters:
                 raise ValueError("custom_initialization_parameters must include 'burnmap_filename'")
 
-            logfile = custom_initialization_parameters["logfile"]
+            
+            # Extract the layout name from custom params (if available)
+            layout_name = custom_initialization_parameters.get("layout_name", "layout")
+
+            # Get n_ground_stations
+            n_ground_stations = automatic_initialization_parameters.get("n_ground_stations", 0)
+
+            # Get strategy name
+            strategy_name = self.__class__.__name__
+
+            # Build the log directory
+            log_dir = os.path.dirname(custom_initialization_parameters["logfile"])
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+
+            # Build the descriptive logfile name
+            logfile = os.path.join(
+                log_dir,
+                f"{layout_name}_{strategy_name}_{n_ground_stations}_sensors.json"
+            )
+
             burnmap_filename = custom_initialization_parameters["burnmap_filename"]
 
             self.ground_sensor_locations = []
@@ -70,6 +90,38 @@ class LoggedSensorPlacementStrategy:
                     }, log, indent=2)
 
                 print(f"[LoggedSensorPlacementStrategy] Optimization done. Results saved to {logfile}")
+
+                # print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running dummy optimization...")
+
+                #     # MOCK: replace Julia optimization with dummy values
+                #     # for example, just generate some random positions
+    
+                # n_ground_stations = automatic_initialization_parameters["n_ground_stations"]
+                # n_charging_stations = automatic_initialization_parameters["n_charging_stations"]
+                # N = automatic_initialization_parameters["N"]
+                # M = automatic_initialization_parameters["M"]
+
+                # # dummy lists of random locations
+                # import random
+                # x_vars = [(random.randint(0, N-1), random.randint(0, M-1)) for _ in range(n_ground_stations)]
+                # y_vars = [(random.randint(0, N-1), random.randint(0, M-1)) for _ in range(n_charging_stations)]
+
+                # # Save the locations
+                # self.ground_sensor_locations = list(x_vars)
+                # self.charging_station_locations = list(y_vars)
+                
+                # log_dir = os.path.dirname(logfile)
+                # if not os.path.exists(log_dir):
+                #     os.makedirs(log_dir, exist_ok=True)
+                # # Write the results to the log file
+                # with open(logfile, "w") as log:
+                #     json.dump({
+                #         "ground_sensor_locations": self.ground_sensor_locations,
+                #         "charging_station_locations": self.charging_station_locations
+                #     }, log, indent=2)
+
+                # print(f"[LoggedSensorPlacementStrategy] Dummy optimization done. Results saved to {logfile}")
+
 
         def get_locations(self):
             return self.ground_sensor_locations, self.charging_station_locations
