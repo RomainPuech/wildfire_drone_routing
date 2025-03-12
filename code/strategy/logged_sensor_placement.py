@@ -1,6 +1,6 @@
 import random
 import os
-from my_julia_caller import jl # DEACTIVATED TO RUN THINGS IN PARALLEL 
+# from my_julia_caller import jl # DEACTIVATED TO RUN THINGS IN PARALLEL 
 import json
 import numpy as np
 
