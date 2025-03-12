@@ -79,6 +79,25 @@ function get_drone_gridpoints_using_neighbors(charging_stations, n, I)
     
     return covered_points
 end
+function neighbors_and_point(i, I=nothing)
+    """
+    Returns the L-infinity norm-neighbors of i in Z^n, intersected with feasible set I if provided
+    (returns the feasible cells directly around i)
+    """
+    n = length(i)
+    neighbors_list = []
+    
+    # Generate all possible combinations of -1, 0, 1 in n dimensions
+    for moves in Iterators.product(fill((-1,0,1), n)...)
+        point = [i[j] + moves[j] for j in 1:n]
+        if I === nothing || point in I # if the point belongs to the original set I
+            push!(neighbors_list, Tuple(i[j] + moves[j] for j in 1:n))
+        end
+    end
+    
+    return neighbors_list
+end
+
 
 function get_drone_gridpoints(charging_stations, n, I)
     """
