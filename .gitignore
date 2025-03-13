@@ -12,7 +12,9 @@ WFDataset
 Dataset
 DeepDataset
 WideDataset
+MinimalDataset
+MinimalDataset/*
 Z/*
 Danique/*
 display_test_simulation/*
-MinimalDataset/*
+
