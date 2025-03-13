@@ -4,10 +4,32 @@ import numpy as np
 import tqdm
 import os
 import json
+import importlib.util
 from concurrent.futures import ThreadPoolExecutor
+from scipy.stats import entropy as scipy_entropy
 
-from dataset import load_scenario_npy
+from dataset import load_scenario_npy, load_scenario_jpg, listdir_limited
 from Strategy import SensorPlacementStrategy, DroneRoutingStrategy
+
+def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
+    """
+    Dynamically loads a strategy class from a file.
+    """
+    strategy_path = os.path.join(strategy_folder, strategy_file)
+    print(f"Looking for strategy file at: {strategy_path}")  # Add this line to debug
+    if not os.path.exists(strategy_path):
+        raise FileNotFoundError(f"Strategy file {strategy_path} not found!")
+
+    module_name = strategy_file.replace(".py", "")
+    spec = importlib.util.spec_from_file_location(module_name, strategy_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, class_name):
+        raise ImportError(f"Class {class_name} not found in {strategy_file}!")
+
+    return getattr(module, class_name)
+
 
 def get_automatic_layout_parameters(scenario:np.ndarray):
     return {
@@ -20,11 +42,33 @@ def get_automatic_layout_parameters(scenario:np.ndarray):
         "n_charging_stations": 1,
     }
 
-def get_burnmap_parameters(input_dir:str):
+def build_custom_init_params(input_dir, layout_name):
+    base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
+
     return {
-        "burnmap_filename": f"{"/".join(input_dir.strip("/").split('/')[:-1])}/burn_map.npy"
+        "burnmap_filename": f"{base_path}/burn_map.npy",
+        "logfile": f"{base_path}/logs/{layout_name}.json"
     }
 
+def get_burnmap_parameters(input_dir: str):
+    return {
+        "burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy"
+    }
+
+def compute_entropy(locations, grid_size):
+    N, M = grid_size
+    count_grid = np.zeros((N, M))
+    for x, y in locations:
+        count_grid[x, y] += 1
+
+    prob_grid = count_grid.flatten()
+    prob_grid = prob_grid / np.sum(prob_grid)
+    prob_grid = prob_grid[prob_grid > 0]
+
+    if len(prob_grid) == 0:
+        return 0.0
+
+    return scipy_entropy(prob_grid)
 
 def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None):
     """
@@ -46,7 +90,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
     # 1. Get layout parameters
-    if automatic_initialization_parameters_function  is None:
+    if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
     else:
         automatic_initialization_parameters = automatic_initialization_parameters_function(scenario)
@@ -83,9 +127,22 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # print(f"drone_locations: {drone_locations}")
     # print(f"drone_batteries: {drone_batteries}")
 
+    # ========================
+
+    # Initialize metrics
+    execution_times = []
+    drone_visited_cells = set(drone_locations)
+    total_distance_traveled = 0
+    drone_entropy_per_timestep = []
+    sensor_entropy = compute_entropy(ground_sensor_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"]))
+
+    fire_size_cells = 0
+    fire_size_percentage = 0
+    # ========================
+
     t_found = 0
     device = 'undetected'
-    grid = None
+    
 
     for time_step in range(-starting_time,len(scenario)):
         if time_step >= 0: # The fire has started.
@@ -95,17 +152,23 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             if ground_sensor_locations:
                 if (grid[rows_ground,cols_ground]==1).any():
                     device = 'ground sensor'
+                    fire_size_cells = np.sum(grid == 1)
+                    fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
 
             if charging_stations_locations:
                 if (grid[rows_charging,cols_charging]==1).any():
                     device = 'charging station'
+                    fire_size_cells = np.sum(grid == 1)
+                    fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
 
             if drone_locations:
                 rows, cols = zip(*drone_locations)
                 if (grid[rows,cols]==1).any():
                     device = 'drone'
+                    fire_size_cells = np.sum(grid == 1)
+                    fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
 
         # no fire detected, onto next time step
@@ -122,20 +185,47 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             "t": t_found }
         
         # 2. Get the actions
+        start_time = time.time()
         actions = Routing_Strat.next_actions(automatic_step_parameters, custom_step_parameters)
+        execution_times.append(time.time() - start_time)
 
         # 3. Move the drones
-        for drone_index, (drone,action) in enumerate(zip(drones,actions)):
+        for drone_index, (drone, action) in enumerate(zip(drones, actions)):
+            old_x, old_y = drone_locations[drone_index]
             new_x, new_y, new_distance_battery, new_time_battery, new_state = drone.route(action)
-            drone_locations[drone_index] = (new_x,new_y)
-            drone_batteries[drone_index] = (new_distance_battery,new_time_battery)
+
+            drone_locations[drone_index] = (new_x, new_y)
+            drone_batteries[drone_index] = (new_distance_battery, new_time_battery)
             drone_states[drone_index] = new_state
+
+            total_distance_traveled += abs(new_x - old_x) + abs(new_y - old_y)
+            drone_visited_cells.add((new_x, new_y))
+
+        drone_entropy = compute_entropy(drone_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"]))
+        drone_entropy_per_timestep.append(drone_entropy)
+
         if return_history:
             drone_locations_history.append(tuple(drone_locations))
         # print(f"drone_locations: {drone_locations}")
 
-    delta_t = t_found-starting_time if t_found != len(scenario) else -1
-    return delta_t, device, (drone_locations_history, ground_sensor_locations, charging_stations_locations) if return_history else ()
+    delta_t = t_found - starting_time if t_found != len(scenario) else -1
+    avg_execution_time = np.mean(execution_times)
+    avg_drone_entropy = np.mean(drone_entropy_per_timestep)
+    percentage_map_explored = len(drone_visited_cells) / (automatic_initialization_parameters["N"] * automatic_initialization_parameters["M"]) * 100
+
+    results = {
+        "delta_t": delta_t,
+        "device": device,
+        "avg_execution_time": avg_execution_time,
+        "fire_size_cells": fire_size_cells if device != 'undetected' else 0,
+        "fire_size_percentage": fire_size_percentage if device != 'undetected' else 0,
+        "percentage_map_explored": percentage_map_explored,
+        "total_distance_traveled": total_distance_traveled,
+        "avg_drone_entropy": avg_drone_entropy,
+        "sensor_entropy": sensor_entropy
+    }
+
+    return results, (drone_locations_history, ground_sensor_locations, charging_stations_locations) if return_history else ()
 
 
 def listdir_txt_limited(input_dir, max_n_scenarii=None):
@@ -170,10 +260,13 @@ def listdir_npy_limited(input_dir, max_n_scenarii=None):
         str: Full path to each .npy file found.
     """
     count = 0
+    if not input_dir.endswith('/'):
+        input_dir += '/'
+
     with os.scandir(input_dir) as it:
         for entry in it:
             if entry.is_file() and entry.name.endswith('.npy'):
-                yield input_dir + entry.name
+                yield os.path.join(input_dir, entry.name)
                 count += 1
                 if max_n_scenarii is not None and count >= max_n_scenarii:
                     break
@@ -234,7 +327,7 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
     for device in devices.keys():
         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
-def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None):
+def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy"):
     """
     Run sequential benchmarks on multiple scenarios.
 
@@ -250,10 +343,20 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     Prints:
         Average time steps to fire detection and detection statistics by device type.
     """
+    if file_format not in ["npy", "jpg"]:
+        raise ValueError("file_format must be 'npy' or 'jpg'")
+
     if not input_dir.endswith('/'):
         input_dir += '/'
 
-    iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+    # choose the iterator and loader
+    if file_format == "npy":
+        iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+        load_scenario_fn = load_scenario_npy
+    else:
+        iterable = listdir_limited(input_dir, max_n_scenarii)
+        load_scenario_fn = load_scenario_jpg
+
     N_SCENARII = max_n_scenarii if max_n_scenarii else len(os.listdir(input_dir))
     automatic_initialization_parameters = None
 
@@ -262,30 +365,62 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     fails = 0
     devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
 
+    total_execution_times = []
+    total_fire_sizes = []
+    total_fire_percentages = []
+    map_explored = []
+    total_distances = []
+    drone_entropies = []
+    sensor_entropies = []
+
+
     custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
     
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
-        scenario = load_scenario_npy(file)
+        scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
             automatic_initialization_parameters = get_automatic_layout_parameters(scenario) #TODO compute them once only per layout rather than per scenario..
-        delta_t, device, _ = run_benchmark_scenario(scenario, 
-                                                    sensor_placement_strategy, 
-                                                    drone_routing_strategy, 
-                                                    custom_initialization_parameters,
-                                                    custom_step_parameters_function, starting_time=starting_time)
-  
+        results, _ = run_benchmark_scenario(
+            scenario,
+            sensor_placement_strategy,
+            drone_routing_strategy,
+            custom_initialization_parameters,
+            custom_step_parameters_function,
+            starting_time=starting_time
+        )
+
+        delta_t = results["delta_t"]
+        device = results["device"]
+
         if delta_t == -1:
             fails += 1
             delta_t = 0
+
         delta_ts += delta_t
         devices[device] += 1
-    
-    print(f"This strategy took on average {delta_ts/max(1,(N_SCENARII-fails))} time steps to find the fire.")
-    for device in devices.keys():
-        print(f"Fire found {round(devices[device]/N_SCENARII*100,2)}% of the time by {device}")
 
-# deprecated?
+        total_execution_times.append(results["avg_execution_time"])
+        total_fire_sizes.append(results["fire_size_cells"])
+        total_fire_percentages.append(results["fire_size_percentage"])
+        map_explored.append(results["percentage_map_explored"])
+        total_distances.append(results["total_distance_traveled"])
+        drone_entropies.append(results["avg_drone_entropy"])
+        sensor_entropies.append(results["sensor_entropy"])
+    
+    print(f"Avg time steps to fire detection: {delta_ts / max(1, (N_SCENARII - fails))}")
+    for device in devices.keys():
+        print(f"Fire found {round(devices[device] / N_SCENARII * 100, 2)}% of the time by {device}")
+
+    print(f"Avg routing execution time: {np.mean(total_execution_times):.4f} sec")
+    print(f"Avg fire size at detection (cells): {np.mean(total_fire_sizes):.2f}")
+    print(f"Avg fire size at detection (% of map): {np.mean(total_fire_percentages):.2f}%")
+    print(f"Avg percentage of map explored by drones: {np.mean(map_explored):.2f}%")
+    print(f"Avg total distance traveled by drones: {np.mean(total_distances):.2f} units")
+    print(f"Avg drone entropy per timestep: {np.mean(drone_entropies):.4f}")
+    print(f"Avg sensor placement entropy: {np.mean(sensor_entropies):.4f}")
+
+
 def run_ground_log(input_dir, output_file, ground_placement_strategy, ground_parameters, max_n_scenarii=None):
     """
     Log ground sensor and charging station placements for multiple scenarios to a JSON file.
@@ -333,3 +468,162 @@ def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy
                                           custom_step_parameters_function, 
                                           starting_time=starting_time, 
                                           max_n_scenarii=max_n_scenarii)
+        
+def run_benchmark_for_strategy(input_dir: str,
+                               strategy_folder: str,
+                               sensor_strategy_file: str,
+                               sensor_class_name: str,
+                               drone_strategy_file: str,
+                               drone_class_name: str,
+                               max_n_scenarii: int = None,
+                               starting_time: int = 0,
+                               file_format: str = "npy"):
+    """
+    Runs benchmarks for the given sensor and drone strategies on all scenarios in input_dir.
+
+    Args:
+        input_dir (str): Path to the folder containing scenario .npy files
+        strategy_folder (str): Folder where the strategy files are located
+        sensor_strategy_file (str): Sensor placement strategy Python file name
+        sensor_class_name (str): Name of the sensor placement strategy class
+        drone_strategy_file (str): Drone routing strategy Python file name
+        drone_class_name (str): Name of the drone routing strategy class
+        max_n_scenarii (int, optional): Max number of scenarios to process (None = all)
+        starting_time (int, optional): Time step at which wildfire starts
+    """
+    # === Load user strategies ===  
+    # Dynamically load the strategies
+    SensorPlacementStrategyClass = load_strategy(strategy_folder, sensor_strategy_file, sensor_class_name)
+    DroneRoutingStrategyClass = load_strategy(strategy_folder, drone_strategy_file, drone_class_name)
+
+    # List the scenario files from the input_dir
+    if not input_dir.endswith('/'):
+        input_dir += '/'
+    iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+    N_SCENARII = max_n_scenarii if max_n_scenarii else len(os.listdir(input_dir))
+
+    # Initialize benchmark counters
+    delta_ts = 0
+    fails = 0
+    devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
+
+    # Process the first scenario to get automatic layout parameters
+    first_file = next(iter(iterable), None)
+    if first_file is None:
+        print(f"No scenarios found in {input_dir}")
+        return
+
+    scenario = load_scenario_npy(first_file)
+    automatic_init_params = get_automatic_layout_parameters(scenario)
+    custom_init_params = build_custom_init_params(input_dir, layout_name="layout_A")
+
+
+    # Reset the iterable (since we consumed one element already)
+    iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+
+    # Create the sensor placement strategy (run it once per layout!)
+    print("[run_benchmark_for_strategy] Running sensor placement strategy...")
+    sensor_placement_strategy_instance = SensorPlacementStrategyClass(automatic_init_params, custom_init_params)
+    ground_sensor_locations, charging_station_locations = sensor_placement_strategy_instance.get_locations()
+    # Add placements to the automatic init params so drone strategy can use them
+    automatic_init_params["ground_sensor_locations"] = ground_sensor_locations
+    automatic_init_params["charging_stations_locations"] = charging_station_locations
+
+    # Loop over scenarios
+    for file in tqdm.tqdm(iterable, total=N_SCENARII):
+        scenario = load_scenario_npy(file)
+
+        # Drone routing strategy is likely scenario-dependent, so we instantiate per scenario
+        drone_routing_strategy_instance = DroneRoutingStrategyClass(automatic_init_params, custom_init_params)
+
+        # Run the benchmark
+        delta_t, device, _ = run_benchmark_scenario(
+            scenario=scenario,
+            sensor_placement_strategy=lambda *_: sensor_placement_strategy_instance,
+            drone_routing_strategy=lambda *_: drone_routing_strategy_instance,
+            custom_initialization_parameters=custom_init_params,
+            custom_step_parameters_function=lambda: {},  # Modify if you have step params
+            starting_time=starting_time
+        )
+        # Aggregate results
+        if delta_t == -1:
+            fails += 1
+            delta_t = 0
+        delta_ts += delta_t
+        devices[device] += 1
+
+    # Print out summary stats
+    avg_detection_time = delta_ts / max(1, (N_SCENARII - fails))
+    print(f"\nThis strategy took on average {avg_detection_time:.2f} time steps to find the fire.")
+    for device_type, count in devices.items():
+        percentage = round((count / N_SCENARII) * 100, 2)
+        print(f"Fire found {percentage}% of the time by {device_type}")
+
+
+
+def run_benchmark_for_strategy2(input_dir: str,
+                               strategy_folder: str,
+                               sensor_strategy_file: str,
+                               sensor_class_name: str,
+                               drone_strategy_file: str,
+                               drone_class_name: str,
+                               max_n_scenarii: int = None,
+                               starting_time: int = 0,
+                               file_format: str = "npy",
+                               custom_init_params_fn=None,  # user-defined initialization params function
+                               custom_step_params_fn=None):  # user-defined step params function)
+    """
+    Runs benchmarks for the given sensor and drone strategies on all scenarios in input_dir.
+    """
+    # === Load user strategies ===
+    SensorPlacementStrategyClass = load_strategy(strategy_folder, sensor_strategy_file, sensor_class_name)
+    DroneRoutingStrategyClass = load_strategy(strategy_folder, drone_strategy_file, drone_class_name)
+
+    # === Load the first scenario to get parameters ===
+    iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+    first_file = next(iter(iterable), None)
+    if first_file is None:
+        print(f"No scenarios found in {input_dir}")
+        return
+
+    # load the first scenario to get automatic parameters
+    scenario = load_scenario_npy(first_file)
+    automatic_init_params = get_automatic_layout_parameters(scenario)
+
+    # === Create sensor placement strategy ===
+    print("[run_benchmark_for_strategy] Running sensor placement strategy...")
+    custom_init_params = build_custom_init_params(input_dir, layout_name="layout_A")
+
+    sensor_placement_strategy_instance = SensorPlacementStrategyClass(automatic_init_params, custom_init_params)
+    drone_routing_strategy_instance = DroneRoutingStrategyClass(automatic_init_params, custom_init_params)
+    # === update automatic_init_params with sensor placements ===
+    ground_sensor_locations, charging_station_locations = sensor_placement_strategy_instance.get_locations()
+    automatic_init_params["ground_sensor_locations"] = ground_sensor_locations
+    automatic_init_params["charging_stations_locations"] = charging_station_locations
+
+    # === call the existing function ===
+    run_benchmark_scenarii_sequential(
+        input_dir=input_dir,
+        sensor_placement_strategy=lambda *_: sensor_placement_strategy_instance,
+        drone_routing_strategy=lambda *_: drone_routing_strategy_instance,
+        custom_initialization_parameters_function=custom_init_params_fn,
+        custom_step_parameters_function=custom_step_params_fn,
+        starting_time=starting_time,
+        max_n_scenarii=max_n_scenarii,
+        file_format=file_format
+    )
+
+
+# run_benchmark_for_strategy2(
+#     input_dir="MinimalDataset/0001/scenarii", 
+#     strategy_folder="code/strategy", 
+#     sensor_strategy_file="logged_sensor_placement.py",
+#     sensor_class_name="LoggedSensorPlacementStrategy",
+#     drone_strategy_file="logged_drone_routing.py",
+#     drone_class_name="LoggedDroneRoutingStrategy",
+#     max_n_scenarii=2,  # or None for all
+#     starting_time=0,
+#     file_format="npy",
+#     custom_init_params_fn=lambda input_dir: build_custom_init_params(input_dir, layout_name="layout_A"),
+#     custom_step_params_fn=lambda: {}  # optional per timestep params
+# )

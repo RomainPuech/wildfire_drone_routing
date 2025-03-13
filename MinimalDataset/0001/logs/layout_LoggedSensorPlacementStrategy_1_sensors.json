@@ -1,0 +1,14 @@
+{
+  "ground_sensor_locations": [
+    [
+      52,
+      79
+    ]
+  ],
+  "charging_station_locations": [
+    [
+      100,
+      57
+    ]
+  ]
+}

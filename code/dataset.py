@@ -318,7 +318,7 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
             try:
                 jpg_scenario_to_npy(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder, npy_folder_name + layout_folder + "/scenarii/", scenario_folder.strip("/"))
             except Exception as e:
-                print(f"Error converting {dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder} to NPY: {e}")
+                print(f"Error converting {dataset_folder_name + layout_folder + '/Satellite_Images_Mask/' + scenario_folder} to NPY: {e}")
 
 def load_scenario(file_or_folder_name, extension = ".npy"):
     """
