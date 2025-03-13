@@ -205,132 +205,154 @@ class RandomDroneRoutingStrategy(DroneRoutingStrategy):
 
 
 class LoggedDroneRoutingStrategy(DroneRoutingStrategy):
-    def __init__(self, automatic_initialization_parameters, custom_initialization_parameters):
-        # check for logfile
-        # if it exists:
-        #   load initial locations and actions
-        # else:
-        #   run optimization, save to logfile
+        """
+        LoggedDroneRoutingStrategy logs drone routing actions and locations at every timestep.
         
-        # Initialize parameters from parent class (if applicable)
-        self.automatic_initialization_parameters = automatic_initialization_parameters
-        self.custom_initialization_parameters = custom_initialization_parameters
+        Args:
+            automatic_initialization_parameters: dict
+                Expected keys:
+                    - n_drones: Number of drones
+                    - N, M: Grid size
+                    - charging_stations_locations: list of tuples (x, y)
+            custom_initialization_parameters: dict
+                Expected keys:
+                    - burnmap_filename: Path to the burn map (not used in dummy version)
+                    - logfile: Path to save the drone routing log JSON file
+                    - call_every_n_steps: Frequency to call the optimization (or dummy routing function)
+                    - optimization_horizon: Number of future steps to plan
 
-        # Ensure required custom params exist
-        if "logfile" not in custom_initialization_parameters:
-            raise ValueError("custom_initialization_parameters must include 'logfile'")
-        if "burnmap_filename" not in custom_initialization_parameters:
-            raise ValueError("custom_initialization_parameters must include 'burnmap_filename'")
+        Returns:
+            Initializes:
+                - self.initial_drone_locations: list of tuples (x, y)
+                - self.log_data: log structure with initial locations and step logs
+        """
+        def __init__(self, automatic_initialization_parameters, custom_initialization_parameters):
+            # assign parameters from parent
+            self.automatic_initialization_parameters = automatic_initialization_parameters
+            self.custom_initialization_parameters = custom_initialization_parameters
 
-        # === Extract dynamic params ===
-        layout_name = custom_initialization_parameters.get("layout_name", "layout")
-        n_drones = automatic_initialization_parameters.get("n_drones", 0)
-        strategy_name = self.__class__.__name__
+            # validate parameters
+            if "burnmap_filename" not in custom_initialization_parameters:
+                raise ValueError("Missing 'burnmap_filename' in custom_initialization_parameters")
+            if "logfile" not in custom_initialization_parameters:
+                raise ValueError("Missing 'logfile' in custom_initialization_parameters")
+            if "call_every_n_steps" not in custom_initialization_parameters:
+                raise ValueError("Missing 'call_every_n_steps' in custom_initialization_parameters")
+            if "optimization_horizon" not in custom_initialization_parameters:
+                raise ValueError("Missing 'optimization_horizon' in custom_initialization_parameters")
 
-        # make them filename safe
-        safe_layout_name = re.sub(r'\W+', '_', layout_name)
-        safe_strategy_name = re.sub(r'\W+', '_', strategy_name)
+            # config values
+            self.call_every_n_steps = custom_initialization_parameters["call_every_n_steps"]
+            self.optimization_horizon = custom_initialization_parameters["optimization_horizon"]
 
-        # build log directory
-        log_dir = os.path.dirname(custom_initialization_parameters["logfile"])
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
+            # initialize counters and memory
+            self.call_counter = 0
+            self.current_solution = []  # holds lists of actions between Julia calls
 
-        
-        # build logfile name
-        logfile = os.path.join(
-            log_dir,
-            f"{safe_layout_name}_{safe_strategy_name}_{n_drones}_drones.json"
-        )
+            # logging
+            self.logfile = custom_initialization_parameters["logfile"]
+            self.log_data = {
+                "initial_drone_locations": None,  # set in get_initial_drone_locations()
+                "steps": []  # append timestep logs here
+            }
 
-        print(f"[LoggedDroneRoutingStrategy] Using log file: {logfile}")
+            print(f"[LoggedDroneRoutingStrategy] Initialized with log file: {self.logfile}")
 
-        burnmap_filename = custom_initialization_parameters["burnmap_filename"]
+        def get_initial_drone_locations(self):
+            charging_stations = self.automatic_initialization_parameters["charging_stations_locations"]
+            n_drones = self.automatic_initialization_parameters["n_drones"]
 
-        self.initial_drone_locations = []
-        self.actions_per_timestep = []
+            n_stations = len(charging_stations)
+            q = n_drones // n_stations
+            r = n_drones % n_stations
 
-        # Check if the log file already exists
-        if os.path.exists(logfile):
-            print(f"[LoggedDroneRoutingStrategy] Loading drone routing from log file: {logfile}")
+            initial_positions = charging_stations * q + charging_stations[:r]
 
-            with open(logfile, "r") as log:
-                data = json.load(log)
+            self.log_data["initial_drone_locations"] = initial_positions
+            self._write_log_to_file()
 
-                # Expect JSON structure with initial locations + actions
-                self.initial_drone_locations = data["initial_drone_locations"]
-                self.actions_per_timestep = data["actions_per_timestep"]
+            return initial_positions
 
-        else:
-            print(f"[LoggedDroneRoutingStrategy] Log file not found at {logfile}. Running optimization...")
+        def next_actions(self, automatic_step_parameters: dict, custom_step_parameters: dict):
+            """
+            automatic_step_parameters: dict with keys:
+                - "drone_locations": list of tuples (x,y)
+                - "drone_batteries": list of tuples (distance,time)
+                - "t": int
+            Returns:
+                actions: list of tuples (action_type, action_parameters)
+            """
+            if self.call_counter % self.call_every_n_steps == 0:
+                print(f"[LoggedDroneRoutingStrategy] Calling dummy optimizer at timestep {self.call_counter}")
+                _, self.current_solution = self.dummy_drone_routing_robust(
+                    automatic_step_parameters, custom_step_parameters
+                )
+                print("[LoggedDroneRoutingStrategy] Dummy optimization finished")
 
-            # Call Julia optimizer or your drone routing model
-            # You can replace `drone_routing_opt_model` with your specific function
-            initial_locations, actions = jl.drone_routing_opt_model(
-                burnmap_filename,
-                automatic_initialization_parameters["ground_sensor_locations"],
-                automatic_initialization_parameters["charging_stations_locations"],
-                automatic_initialization_parameters["n_drones"],
-                automatic_initialization_parameters["N"],
-                automatic_initialization_parameters["M"]
-                # add more if needed
+            timestep_index = self.call_counter % self.call_every_n_steps
+            actions = self.current_solution[timestep_index]
+
+            # log actions and states
+            self._log_timestep(
+                timestep=automatic_step_parameters["t"],
+                drone_locations=automatic_step_parameters["drone_locations"],
+                drone_batteries=automatic_step_parameters["drone_batteries"],
+                actions=actions
             )
 
-            # Store the results
-            self.initial_drone_locations = list(initial_locations)
-            self.actions_per_timestep = list(actions)
+            self.call_counter += 1
+            return actions
+        
+        def dummy_drone_routing_robust(self, automatic_step_parameters, custom_step_parameters):
+            print("[Dummy Function] Generating dummy routing solution...")
 
-            # Save the routing plan to the logfile
-            with open(logfile, "w") as log:
-                json.dump({
-                    "initial_drone_locations": self.initial_drone_locations,
-                    "actions_per_timestep": self.actions_per_timestep
-                }, log, indent=2)
+            n_drones = self.automatic_initialization_parameters.get("n_drones", 3)
+            n_timesteps = self.optimization_horizon
 
-            print(f"[LoggedDroneRoutingStrategy] Optimization complete. Routing saved to {logfile}")
+            initial_locations = [(i * 5, i * 5) for i in range(n_drones)]
 
-            # print(f"[LoggedDroneRoutingStrategy] Log file not found at {logfile}. Running dummy optimization...")
+            actions_per_timestep = []
+            for t in range(n_timesteps):
+                actions = []
+                for d in range(n_drones):
+                    if t % 2 == 0:
+                        actions.append(('move', (1, 0)))
+                    else:
+                        actions.append(('charge', None))
+                actions_per_timestep.append(actions)
 
-            # # MOCK: replace Julia optimization with dummy initial locations and actions
-            # n_drones = automatic_initialization_parameters["n_drones"]
-            # charging_stations = automatic_initialization_parameters["charging_stations_locations"]
+            return initial_locations, actions_per_timestep
+        
+        def _log_timestep(self, timestep, drone_locations, drone_batteries, actions):
+            """
+            Logs the state and actions at each timestep.
+            """
+            log_entry = {
+                "timestep": timestep,
+                "drone_locations": drone_locations,
+                "drone_batteries": drone_batteries,
+                "actions": actions
+            }
 
-            # # dummy: place all drones on the first charging station (or spread them if you want)
-            # if len(charging_stations) > 0:
-            #     initial_locations = [charging_stations[0] for _ in range(n_drones)]
-            # else:
-            #     initial_locations = [(0, 0) for _ in range(n_drones)]
+            self.log_data["steps"].append(log_entry)
 
-            # # dummy: create simple actions per timestep (just hover in place)
-            # # structure: actions_per_timestep[timestep][drone_index] = action
-            # # actions should be lists of lists of tuples ('move'/'recharge', (dx, dy)/None)
-            # n_timesteps = 10  # arbitrary number of timesteps for testing
-            # actions_per_timestep = [
-            #     [('move', (0, 0)) for _ in range(n_drones)]  # each drone does nothing at each timestep
-            #     for _ in range(n_timesteps)
-            # ]
+            # === Write the log to file immediately after each timestep ===
+            print(f"[LoggedDroneRoutingStrategy] Writing log to {self.logfile} at timestep {timestep}")
+            self._write_log_to_file()
 
-            # # store results
-            # self.initial_drone_locations = list(initial_locations)
-            # self.actions_per_timestep = list(actions_per_timestep)
+        def _write_log_to_file(self):
+            """
+            Writes the current log to the logfile.
+            """
+            log_dir = os.path.dirname(self.logfile)
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
 
-            # # write dummy data to logfile so it loads next time
-            # with open(logfile, "w") as log:
-            #     json.dump({
-            #         "initial_drone_locations": self.initial_drone_locations,
-            #         "actions_per_timestep": self.actions_per_timestep
-            #     }, log, indent=2)
+            with open(self.logfile, "w") as f:
+                json.dump(self.log_data, f, indent=2)
 
-            # print(f"[LoggedDroneRoutingStrategy] Dummy optimization complete. Routing saved to {logfile}")
+            print(f"[LoggedDroneRoutingStrategy] Log successfully written to {self.logfile}")
 
-    def get_initial_drone_locations(self):
-        # return loaded or computed initial locations
-        pass
-    def next_actions(self, automatic_step_parameters, custom_step_parameters):
-        # return the next precomputed actions for this timestep
-
-        # going to call the last timestep drone orientation and then run next actions
-        pass
 
 
 class SensorPlacementStrategy():
@@ -667,7 +689,7 @@ class LoggedOptimizationSensorPlacementStrategy(SensorPlacementStrategy):
 
         if "log_filename" not in custom_initialization_parameters:
             custom_initialization_parameters["log_filename"] = "/".join(custom_initialization_parameters["burnmap_filename"].split("/")[:-1]) + "/logged_sensor_placement.json"
-
+        
         if "load_from_logfile" not in custom_initialization_parameters:
             custom_initialization_parameters["load_from_logfile"] = True
 

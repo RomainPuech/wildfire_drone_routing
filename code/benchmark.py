@@ -42,12 +42,27 @@ def get_automatic_layout_parameters(scenario:np.ndarray):
         "n_charging_stations": 1,
     }
 
+def return_no_custom_parameters():
+    return {}
+
 def build_custom_init_params(input_dir, layout_name):
     base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
 
     return {
         "burnmap_filename": f"{base_path}/burn_map.npy",
-        "logfile": f"{base_path}/logs/{layout_name}.json"
+        "logfile": f"{base_path}/logs/{layout_name}.json",
+        "call_every_n_steps": 5,               
+        "optimization_horizon": 20             
+    }
+
+def my_custom_init_params(input_dir):
+    base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
+
+    return {
+        "burnmap_filename": f"{base_path}/burn_map.npy",
+        "logfile": f"{base_path}/logs/layout_A.json",
+        "call_every_n_steps": 5,
+        "optimization_horizon": 20
     }
 
 def get_burnmap_parameters(input_dir: str):
@@ -192,7 +207,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         # 3. Move the drones
         for drone_index, (drone, action) in enumerate(zip(drones, actions)):
             old_x, old_y = drone_locations[drone_index]
-            new_x, new_y, new_distance_battery, new_time_battery = drone.route(action)
+            new_x, new_y, new_distance_battery, new_time_battery, new_state = drone.route(action)
 
             drone_locations[drone_index] = (new_x, new_y)
             drone_batteries[drone_index] = (new_distance_battery, new_time_battery)
@@ -569,8 +584,8 @@ def run_benchmark_for_strategy2(input_dir: str,
                                max_n_scenarii: int = None,
                                starting_time: int = 0,
                                file_format: str = "npy",
-                               custom_init_params_fn=None,  # user-defined initialization params function
-                               custom_step_params_fn=None):  # user-defined step params function)
+                               custom_init_params_fn= build_custom_init_params,
+                               custom_step_params_fn= return_no_custom_parameters):
     """
     Runs benchmarks for the given sensor and drone strategies on all scenarios in input_dir.
     """
@@ -610,19 +625,6 @@ def run_benchmark_for_strategy2(input_dir: str,
         starting_time=starting_time,
         max_n_scenarii=max_n_scenarii,
         file_format=file_format
+
     )
 
-
-# run_benchmark_for_strategy2(
-#     input_dir="MinimalDataset/0001/scenarii", 
-#     strategy_folder="code/strategy", 
-#     sensor_strategy_file="logged_sensor_placement.py",
-#     sensor_class_name="LoggedSensorPlacementStrategy",
-#     drone_strategy_file="logged_drone_routing.py",
-#     drone_class_name="LoggedDroneRoutingStrategy",
-#     max_n_scenarii=2,  # or None for all
-#     starting_time=0,
-#     file_format="npy",
-#     custom_init_params_fn=lambda input_dir: build_custom_init_params(input_dir, layout_name="layout_A"),
-#     custom_step_params_fn=lambda: {}  # optional per timestep params
-# )
