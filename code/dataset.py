@@ -132,6 +132,9 @@ def load_scenario_jpg(folder_path, binary=False):
         return [int(text) if text.isdigit() else text.lower()
                 for text in re.split('([0-9]+)', s)]
 
+    if not folder_path.endswith("/"):
+        folder_path += "/"
+
     # Get list of jpg files in the folder and sort naturally
     jpg_files = sorted([f for f in os.listdir(folder_path) if f.lower().endswith('.jpg')],
                       key=natural_sort_key)

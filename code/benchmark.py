@@ -271,6 +271,29 @@ def listdir_npy_limited(input_dir, max_n_scenarii=None):
                 if max_n_scenarii is not None and count >= max_n_scenarii:
                     break
 
+def listdir_folder_limited(input_dir, max_n_scenarii=None):
+    """
+    Generate paths to folders in the input directory, with optional limit.
+
+    Args:
+        input_dir (str): Directory path to scan for folders.
+        max_n_scenarii (int, optional): Maximum number of folders to yield. If None, yields all folders.
+
+    Yields:
+        str: Full path to each folder found.
+    """
+    count = 0
+    if not input_dir.endswith('/'):
+        input_dir += '/'
+
+    with os.scandir(input_dir) as it:
+        for entry in it:
+            if entry.is_dir():
+                yield os.path.join(input_dir, entry.name)
+                count += 1
+                if max_n_scenarii is not None and count >= max_n_scenarii:
+                    break
+
 
 def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
     """
@@ -354,7 +377,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         iterable = listdir_npy_limited(input_dir, max_n_scenarii)
         load_scenario_fn = load_scenario_npy
     else:
-        iterable = listdir_limited(input_dir, max_n_scenarii)
+        iterable = listdir_folder_limited(input_dir, max_n_scenarii)
         load_scenario_fn = load_scenario_jpg
 
     N_SCENARII = max_n_scenarii if max_n_scenarii else len(os.listdir(input_dir))
@@ -377,6 +400,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
     
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
+        print(f"Processing scenario {file}")
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
