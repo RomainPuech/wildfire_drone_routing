@@ -192,10 +192,11 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         # 3. Move the drones
         for drone_index, (drone, action) in enumerate(zip(drones, actions)):
             old_x, old_y = drone_locations[drone_index]
-            new_x, new_y, new_distance_battery, new_time_battery = drone.route(action)
+            new_x, new_y, new_distance_battery, new_time_battery, new_state = drone.route(action)
 
             drone_locations[drone_index] = (new_x, new_y)
             drone_batteries[drone_index] = (new_distance_battery, new_time_battery)
+            drone_states[drone_index] = new_state
 
             total_distance_traveled += abs(new_x - old_x) + abs(new_y - old_y)
             drone_visited_cells.add((new_x, new_y))
