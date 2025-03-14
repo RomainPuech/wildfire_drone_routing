@@ -3,18 +3,18 @@
 # TODO strict typing
 
 println("installing packages")
-import Pkg
-Pkg.add("IJulia")
-Pkg.add("CSV")
-Pkg.add("DataFrames")
-Pkg.add("Distances")
-Pkg.add("MAT")
-Pkg.add("Plots")
-Pkg.add("FFMPEG")
-Pkg.add("JuMP")
-Pkg.add("Gurobi")
-Pkg.add("Clustering")
-Pkg.add("NPZ")
+# import Pkg
+# Pkg.add("IJulia")
+# Pkg.add("CSV")
+# Pkg.add("DataFrames")
+# Pkg.add("Distances")
+# Pkg.add("MAT")
+# Pkg.add("Plots")
+# Pkg.add("FFMPEG")
+# Pkg.add("JuMP")
+# Pkg.add("Gurobi")
+# Pkg.add("Clustering")
+# Pkg.add("NPZ")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
 include("helper_functions.jl")
@@ -67,7 +67,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
     I_second: Set of all feasible positions for charging stations. Defaults to I
     risk_pertime_dir: Folder containing burn maps
     """
-    println("In julia fuinction")
+    println("In julia function")
     # Print current working directory contents
     # println("Current working directory: ", pwd())
     # println("Directory contents:")
@@ -123,7 +123,7 @@ function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging
 
     #CHANGE!! ---------
     #for i in I_second
-    @constraint(model, sum(y[k] for k in I_second) <= 1) # 2d
+    #@constraint(model, sum(y[k] for k in I_second) <= 1) # 2d
     #@constraint(model, sum(phi(i,k)*y[k] for k in I_second) <= 1) # 2d
     #end
     #-------------------

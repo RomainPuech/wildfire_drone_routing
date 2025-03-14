@@ -1,3 +1,5 @@
+using NPZ
+
 function load_burn_map(filename)
     
     try

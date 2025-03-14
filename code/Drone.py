@@ -4,7 +4,7 @@
 import numpy as np
 #TODO out of battery not implemented yet
 class Drone():
-    def __init__(self, x, y, charging_stations_locations, N, M, time_battery=100, distance_battery=100):
+    def __init__(self, x, y, charging_stations_locations, N, M, distance_battery=100, time_battery=100):
         if (x,y) not in charging_stations_locations and [x,y] not in charging_stations_locations:
             raise ValueError("Drone should start on a charging station")
         self.x = x
