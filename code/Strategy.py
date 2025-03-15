@@ -136,6 +136,7 @@ class RandomSensorPlacementStrategy(SensorPlacementStrategy):
         """
         # Generate random positions using list comprehensions
         # YOUR CODE HERE
+        print("RandomSensorPlacementStrategy")
         self.ground_sensor_locations = [(random.randint(0, automatic_initialization_parameters["N"]-1), 
                                        random.randint(0, automatic_initialization_parameters["M"]-1)) 
                                       for _ in range(automatic_initialization_parameters["n_ground_stations"])]
@@ -294,23 +295,26 @@ class DroneRoutingOptimizationSlow(DroneRoutingStrategy):
         
         # # By default drones are spread uniformly aross charging stations
         # return self.automatic_initialization_parameters["charging_stations_locations"]*q + self.automatic_initialization_parameters["charging_stations_locations"][:r]
-        print("calling julia optimization model")
-        print("--- parameters for julia ---")
-        print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
-        print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
-        print(f"charging_stations_locations: {self.automatic_initialization_parameters['charging_stations_locations']}")
-        print(f"ground_sensor_locations: {self.automatic_initialization_parameters['ground_sensor_locations']}")
-        print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
+        
         
         # use julia indexing 
         self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
         self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
             
+        print("calling julia optimization model")
+        print("--- parameters for julia (Julia indexing) ---")
+        print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
+        print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
+        print(f"charging_stations_locations: {self.automatic_initialization_parameters['charging_stations_locations']}")
+        print(f"ground_sensor_locations: {self.automatic_initialization_parameters['ground_sensor_locations']}")
+        print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
+
+
             # REPLACE HERE BY YOUR JULIA FUNCTION
         self.current_solution = jl.NEW_ROUTING_STRATEGY_INIT_INTEGER_BATTERY(self.custom_initialization_parameters["burnmap_filename"], self.automatic_initialization_parameters["n_drones"], self.julia_charging_stations_locations, self.julia_ground_sensor_locations, self.custom_initialization_parameters["optimization_horizon"], self.automatic_initialization_parameters["max_battery_time"], self.custom_initialization_parameters["reevaluation_step"])
         initial_positions_only = type(self.current_solution) == tuple # otherwise it is a list
-        print(f"initial_positions_only: {initial_positions_only}")
-        print(f"current_solution: {self.current_solution}")
+        print(f"initial_positions_only (Julia indexing): {initial_positions_only}")
+        print(f"current_solution (Julia indexing): {self.current_solution}")
         # convert to python indexing
         if initial_positions_only:
             initial_positions = [(x-1, y-1) for x, y in self.current_solution]
@@ -341,7 +345,7 @@ class DroneRoutingOptimizationSlow(DroneRoutingStrategy):
             # REPLACE HERE BY YOUR JULIA FUNCTION
             # go from 0 index to 1 index in automatic_step_parameters["drone_locations"]
             julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
-            print("--- parameters for julia ---")
+            print("--- parameters for julia (Julia indexing) ---")
             print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
             print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
             print(f"drone_locations: {julia_drone_locations}")
@@ -351,10 +355,10 @@ class DroneRoutingOptimizationSlow(DroneRoutingStrategy):
 
             self.current_solution = jl.NEW_ROUTING_STRATEGY_NEXTMOVE_INTEGER_BATTERY(self.custom_initialization_parameters["burnmap_filename"], self.automatic_initialization_parameters["n_drones"], self.julia_charging_stations_locations, self.julia_ground_sensor_locations, self.custom_initialization_parameters["optimization_horizon"], self.automatic_initialization_parameters["max_battery_time"], self.custom_initialization_parameters["reevaluation_step"], julia_drone_locations, automatic_step_parameters["drone_states"], automatic_step_parameters["drone_batteries"])
             # convert to python indexing
-            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) for code, (x, y) in plan] for plan in self.current_solution]
             print("optimization finished")
-            print("current solution")
+            print("current solution (Julia indexing)")
             print(self.current_solution)
+            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) for code, (x, y) in plan] for plan in self.current_solution]
 
         self.call_counter += 1
         return self.current_solution[(self.call_counter - 1) % self.reevaluation_step]
@@ -412,7 +416,7 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
         and solving the initial routing problem.
         """
         print("Creating initial routing model (reusable)")
-        print("--- parameters for julia ---")
+        print("--- parameters for julia (Julia indexing) ---")
         print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
         print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
         print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
@@ -435,7 +439,7 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
             self.custom_initialization_parameters["reevaluation_step"]
         )
         
-        print(f"current_solution: {self.current_solution}")
+        print(f"current_solution (Julia indexing): {self.current_solution}")
         
         # Convert to Python indexing (Julia 1-based → Python 0-based)
         self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
@@ -466,7 +470,7 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
             # Convert drone locations to Julia indexing
             julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
             
-            print("--- parameters for julia ---")
+            print("--- parameters for julia (Julia indexing) ---")
             print(f"drone_locations: {julia_drone_locations}")
             print(f"drone_states: {automatic_step_parameters['drone_states']}")
             print(f"drone_batteries: {automatic_step_parameters['drone_batteries']}")
@@ -480,13 +484,16 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
                 automatic_step_parameters["drone_states"],
                 automatic_step_parameters["drone_batteries"]
             )
-            
+
+            print("Next move optimization finished")
+            print("current solution (Julia indexing)")
+            print(self.current_solution)
+
             # Convert to Python indexing
             self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
                                      for code, (x, y) in plan] for plan in self.current_solution]
             
-            print("Next move optimization finished")
-            print("Current solution:", self.current_solution)
+
 
         # Return the appropriate step from the pre-computed plan
         self.call_counter += 1
@@ -543,7 +550,7 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         and solving the initial routing problem using integer indexing.
         """
         print("Creating initial routing model with integer indexing (reusable)")
-        print("--- parameters for julia ---")
+        print("--- parameters for julia (Julia indexing) ---")
         print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
         print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
         print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
@@ -566,7 +573,7 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
             self.custom_initialization_parameters["reevaluation_step"]
         )
         
-        print(f"current_solution: {self.current_solution}")
+        print(f"current_solution (Julia indexing): {self.current_solution}")
         
         # Convert to Python indexing (Julia 1-based → Python 0-based)
         self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
@@ -597,7 +604,7 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
             # Convert drone locations to Julia indexing
             julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
             
-            print("--- parameters for julia ---")
+            print("--- parameters for julia (Julia indexing) ---")
             print(f"drone_locations: {julia_drone_locations}")
             print(f"drone_states: {automatic_step_parameters['drone_states']}")
             print(f"drone_batteries: {automatic_step_parameters['drone_batteries']}")
@@ -611,13 +618,16 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
                 automatic_step_parameters["drone_states"],
                 automatic_step_parameters["drone_batteries"]
             )
-            
+
+            print("Next move optimization finished")
+            print("current solution (Julia indexing)")
+            print(self.current_solution)
+
             # Convert to Python indexing
             self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
                                      for code, (x, y) in plan] for plan in self.current_solution]
             
-            print("Next move optimization finished")
-            print("Current solution:", self.current_solution)
+            
 
         # Return the appropriate step from the pre-computed plan
         self.call_counter += 1

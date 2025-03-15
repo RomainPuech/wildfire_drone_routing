@@ -12,11 +12,11 @@ class Drone():
         self.N = N
         self.M = M
         self.charging_stations_locations = charging_stations_locations
-        self.time_battery = time_battery
         self.distance_battery = distance_battery
-        self.max_time_battery = self.time_battery
-        self.max_distance_battery = self.distance_battery
-        self.state = "fly"
+        self.max_distance_battery = distance_battery
+        self.time_battery = time_battery
+        self.max_time_battery = time_battery
+        self.state = "fly" # maybe should start with "charge"?
     
     def get_position(self):
         return self.x, self.y
@@ -33,24 +33,23 @@ class Drone():
         self.y += dy
         self.x = max(0,min(self.x,self.N-1))
         self.y = max(0,min(self.y,self.M-1))
-        self.distance_battery -= (abs(dx)+abs(dy)) # manhathan distance for the moment
-        self.time_battery-=1
+        self.distance_battery -= (abs(dx) + abs(dy)) # manhathan distance for the moment
+        self.time_battery -= 1
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
     def fly(self, x,y):
         self.state = "fly"
-        self.distance_battery = abs(self.x-x) + abs(self.y-y)
-        self.time_battery -= 1
         self.x = x
         self.y = y
+        self.distance_battery -= (abs(self.x-x) + abs(self.y-y))
+        self.time_battery -= 1
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
     def recharge(self):
         if (self.x, self.y) in self.charging_stations_locations:
             self.state = "charge"
-            self.time_battery = self.max_time_battery
             self.distance_battery = self.max_distance_battery
-
+            self.time_battery = self.max_time_battery
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
 
     

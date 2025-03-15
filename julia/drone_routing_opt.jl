@@ -168,9 +168,13 @@ function NEW_ROUTING_STRATEGY_INIT_INTEGER_BATTERY(risk_pertime_file,n_drones,Ch
     @constraint(model, [t in 1:T, s in 1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
     # Battery dynamics: decreases by 1 when flying, resets to max when charging
+    # @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+
     @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-        b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
-        (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+        b[t+1,s] <= b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+        max_battery_time * sum(c[i,t,s] for i in ChargingStations))
     
     ########## Constraints specific to the init problem
     #All drones start to fly from a charging station at t=1
@@ -384,9 +388,14 @@ function NEW_ROUTING_STRATEGY_NEXTMOVE_INTEGER_BATTERY(risk_pertime_file,n_drone
     @constraint(model, [t in 1:T, s in 1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
     # Battery dynamics: decreases by 1 when flying, resets to max when charging
+    # @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations)) # bilinear!
+    
     @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-        b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
-        (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+        b[t+1,s] <= b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+        max_battery_time * sum(c[i,t,s] for i in ChargingStations))
+
 
 
 
@@ -523,9 +532,19 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
     @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
     # Battery dynamics - using tuple indexing
-    @constraint(model, [t=1:T-1, s=1:n_drones], 
-        b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
-        (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+    # @constraint(model, [t=1:T-1, s=1:n_drones], 
+    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+
+    @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in ChargingStations))
+    
+    @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+        b[t+1,s] <= b[t,s] - 1 + 
+        (max_battery_time+1) * sum(c[i,t,s] for i in ChargingStations))
+
+    # no suicide constraint
+    @constraint(model, [s=1:n_drones, i in GridpointsDrones, j in ChargingStations], b[T,s] >= L_inf_distance(i,j)*a[i,T,s])
+    
     
     # Objective function with theta variables
     theta = @variable(model, [t=1:T, k in GridpointsDrones])
@@ -817,10 +836,19 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
     # Battery dynamics - updating to use integer indices
-    @constraint(model, [t=1:T-1, s=1:n_drones], 
-        b[t+1,s] == b[t,s] - sum(a[i,t,s] for i=1:length(GridpointsDrones)) + 
-        (max_battery_time - b[t,s]) * sum(c[i,t,s] for i=1:length(ChargingStations)))
+    # @constraint(model, [t=1:T-1, s=1:n_drones], 
+    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i=1:length(GridpointsDrones)) + 
+    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i=1:length(ChargingStations)))
+    @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
     
+    @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+        b[t+1,s] <= b[t,s] - 1 + 
+        (max_battery_time+1) * sum(c[i,t,s] for i in 1:length(ChargingStations)))
+
+    # No suicide constraint
+    @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones), j_idx=1:length(ChargingStations)], 
+                b[T,s] >= L_inf_distance(GridpointsDrones[i_idx], ChargingStations[j_idx])*a[i_idx,T,s])
+
     # Create objective variables with integer indices
     theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
