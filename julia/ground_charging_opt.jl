@@ -15,6 +15,7 @@ println("installing packages")
 # Pkg.add("Gurobi")
 # Pkg.add("Clustering")
 # Pkg.add("NPZ")
+# Pkg.add("NearestNeighbors")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
 include("helper_functions.jl")

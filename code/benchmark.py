@@ -116,7 +116,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # 3. Initialize drones
 
     Routing_Strat = drone_routing_strategy(automatic_initialization_parameters, custom_initialization_parameters)
-    drones = [Drone(x,y,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"]) for (x,y) in Routing_Strat.get_initial_drone_locations()]
+    drones = [Drone(x,y,state,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in Routing_Strat.get_initial_drone_locations()]
     drone_locations = [drone.get_position() for drone in drones]
     drone_batteries = [drone.get_battery() for drone in drones]
     drone_states = [drone.get_state() for drone in drones]
@@ -200,6 +200,9 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
             total_distance_traveled += abs(new_x - old_x) + abs(new_y - old_y)
             drone_visited_cells.add((new_x, new_y))
+        # print("Drone actions: ", actions)
+        # print("Drone batteries: ", drone_batteries)
+        
 
         drone_entropy = compute_entropy(drone_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"]))
         drone_entropy_per_timestep.append(drone_entropy)

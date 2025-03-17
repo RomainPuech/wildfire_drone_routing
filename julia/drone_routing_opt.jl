@@ -481,6 +481,7 @@ struct RoutingModel
 end
 
 function create_routing_model(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time)
+    t1 = time_ns() / 1e9
     risk_pertime = load_burn_map(risk_pertime_file)
     _, N, M = size(risk_pertime)
     T = optimization_horizon
@@ -489,7 +490,7 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
     
-    println("ChargingStations: ", ChargingStations)
+    # println("ChargingStations: ", ChargingStations)
     
     I = [(x, y) for x in 1:N for y in 1:M]
     
@@ -497,7 +498,11 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
     GridpointsDrones = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
     GridpointsDronesDetecting = setdiff(GridpointsDrones, ChargingStations)
     
-    println("GridpointsDrones examples: ", collect(GridpointsDrones)[1:min(5, length(GridpointsDrones))])
+    # println("GridpointsDrones examples: ", collect(GridpointsDrones)[1:min(5, length(GridpointsDrones))])
+
+    # precomputing the closest distance to a charging station for each gridpoint
+    precomputed_closest_distance_to_charging_station = closest_distances_tuple_index(ChargingStations, GridpointsDrones)
+    # println("precomputed_closest_distance_to_charging_station: \n", precomputed_closest_distance_to_charging_station)
     
     model = Model(Gurobi.Optimizer)
     set_silent(model)
@@ -519,31 +524,38 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
                 c[j,t+1,s] + a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + c[j,t,s])
     
     @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], 
-                a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if i in neighbors_and_point(j)))
+                a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + sum(c[i,t,s] for i in ChargingStations if i in neighbors_and_point(j)))
     
     # Drone can only fly at j at t if it is flying at a neighboring grid point at t+1 or charging at j at t+1
-    @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], 
-                a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + c[j,t+1,s])
+    # @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], 
+    #             a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + c[j,t+1,s])
     
-    @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], 
-                a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)))
+    # @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], 
+    #             a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)))
     
     # Min/max battery level constraints
     @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
-    # Battery dynamics - using tuple indexing
-    # @constraint(model, [t=1:T-1, s=1:n_drones], 
-    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
-    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+    # Battery dynamics
+    # bilinear version
+    @constraint(model, [t=1:T-1, s=1:n_drones], 
+        b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i in GridpointsDrones) + 
+        (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i in ChargingStations))
 
-    @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in ChargingStations))
-    
-    @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-        b[t+1,s] <= b[t,s] - 1 + 
-        (max_battery_time+1) * sum(c[i,t,s] for i in ChargingStations))
+    # linear version
+    # @constraint(model, [s in 1:n_drones, t in 1:T],
+    #     b[t,s] >= max_battery_time*sum(c[i,t,s] for i in ChargingStations))
+
+    # @constraint(model, [t in 1:T-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t,s] for i in ChargingStations))
 
     # no suicide constraint
-    @constraint(model, [s=1:n_drones, i in GridpointsDrones, j in ChargingStations], b[T,s] >= L_inf_distance(i,j)*a[i,T,s])
+    # wrong version: distance from all charging stations rather than minimum distance
+    # @constraint(model, [s=1:n_drones, i in GridpointsDrones, j in ChargingStations], 
+    # b[T,s] >= L_inf_distance(i,j)*a[i,T,s])
+    # correct version: distance from closest charging station
+    @constraint(model, [s=1:n_drones], 
+    b[T,s] >= sum(a[i,T,s]*(precomputed_closest_distance_to_charging_station[i]) for i in GridpointsDrones))
+    
     
     
     # Objective function with theta variables
@@ -557,6 +569,8 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
     next_move_constraints = ConstraintRef[]
+
+    println("Model created in ", time_ns() / 1e9 - t1, " seconds")
     
     return RoutingModel(model, a, c, b, theta, init_constraints, next_move_constraints, 
                         GridpointsDrones, ChargingStations, risk_pertime, T, n_drones, max_battery_time)
@@ -588,7 +602,7 @@ function solve_init_routing(routing_model::RoutingModel, reevaluation_step)
     t1 = time_ns() / 1e9
     
     # All drones start from a charging station at t=1
-    for s in 1:n_drones
+    for s in 1:n_drones #TODO add neighbors
         constraint = @constraint(model, 
                              sum(c[i,1,s] for i in ChargingStations) + 
                              sum(a[i,1,s] for i in ChargingStations) == 1)
@@ -598,7 +612,7 @@ function solve_init_routing(routing_model::RoutingModel, reevaluation_step)
     # All drones start with full battery
     max_battery_time = routing_model.max_battery_time
     for s in 1:n_drones
-        push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time))
+        push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time - sum(a[i,1,s] for i in GridpointsDrones))) # TODO replace with state input
     end
     
     # Optimize
@@ -611,6 +625,7 @@ function solve_init_routing(routing_model::RoutingModel, reevaluation_step)
     # Extract results
     println("Solver Status: ", termination_status(model))
     println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
+    println("Battery levels: ", value.(b))
     
     # Generate movement plan using tuple indices directly
     movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
@@ -661,19 +676,8 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
         
         # First make sure the location is in our grid points
         if !(loc in GridpointsDrones)
-            println("Warning: Location $loc for drone $s is not in GridpointsDrones")
-            # Find the closest valid grid point
-            min_dist = Inf
-            closest_point = nothing
-            for point in GridpointsDrones
-                dist = sqrt((point[1] - loc[1])^2 + (point[2] - loc[2])^2)
-                if dist < min_dist
-                    min_dist = dist
-                    closest_point = point
-                end
-            end
-            println("Using closest point $closest_point instead")
-            loc = closest_point
+            println("Error: Drone $s is starting at location $loc which is not in the grid points")
+            error("Drone $s is starting at location $loc which is not in the grid points")
         end
         
         if state == "charge"
@@ -682,18 +686,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
                 push!(routing_model.next_move_constraints, @constraint(model, c[loc,1,s] == 1))
             else
                 println("Error: Drone $s is charging but location $loc is not a charging station")
-                # Find closest charging station
-                min_dist = Inf
-                closest_station = nothing
-                for station in ChargingStations
-                    dist = sqrt((station[1] - loc[1])^2 + (station[2] - loc[2])^2)
-                    if dist < min_dist
-                        min_dist = dist
-                        closest_station = station
-                    end
-                end
-                println("Using closest charging station $closest_station instead")
-                push!(routing_model.next_move_constraints, @constraint(model, c[closest_station,1,s] == 1))
+                error("Drone $s is charging but location $loc is not a charging station")
             end
         elseif state == "fly"
             push!(routing_model.next_move_constraints, @constraint(model, a[loc,1,s] == 1))
@@ -715,6 +708,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
     # Extract results
     println("Solver Status: ", termination_status(model))
     println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
+    println("Battery levels: ", value.(b))
     
     # Generate movement plan using tuple indices directly
     movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
@@ -760,6 +754,7 @@ struct IndexRoutingModel
 end
 
 function create_index_routing_model(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time)
+    t1 = time_ns() / 1e9
     risk_pertime = load_burn_map(risk_pertime_file)
     _, N, M = size(risk_pertime)
     T = optimization_horizon
@@ -768,7 +763,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
     
-    println("ChargingStations: ", ChargingStations)
+    # println("ChargingStations: ", ChargingStations)
     
     I = [(x, y) for x in 1:N for y in 1:M]
     
@@ -778,7 +773,11 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
     GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set))
     
-    println("GridpointsDrones[1:5]: ", GridpointsDrones[1:min(5, length(GridpointsDrones))])
+    # println("GridpointsDrones[1:5]: ", GridpointsDrones[1:min(5, length(GridpointsDrones))])
+
+    # precomputing the closest distance to a charging station for each gridpoint
+    precomputed_closest_distance_to_charging_station = closest_distances(ChargingStations, GridpointsDrones)
+    # println("precomputed_closest_distance_to_charging_station: \n", precomputed_closest_distance_to_charging_station)
     
     model = Model(Gurobi.Optimizer)
     set_silent(model)
@@ -788,7 +787,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
     charging_idx = [grid_to_idx[point] for point in ChargingStations]
     
-    println("grid_to_idx for ChargingStations: ", [grid_to_idx[point] for point in ChargingStations])
+    # println("grid_to_idx for ChargingStations: ", [grid_to_idx[point] for point in ChargingStations])
     
     # Create variables with integer indices
     a = @variable(model, [i=1:length(GridpointsDrones), t=1:T, s=1:n_drones], Bin)
@@ -835,19 +834,23 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Battery level constraints
     @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
-    # Battery dynamics - updating to use integer indices
-    # @constraint(model, [t=1:T-1, s=1:n_drones], 
-    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i=1:length(GridpointsDrones)) + 
-    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i=1:length(ChargingStations)))
-    @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
-    
-    @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-        b[t+1,s] <= b[t,s] - 1 + 
-        (max_battery_time+1) * sum(c[i,t,s] for i in 1:length(ChargingStations)))
+    # Battery dynamics
+    @constraint(model, [t=1:T-1, s=1:n_drones], 
+        b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i=1:length(GridpointsDrones)) + 
+        (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i=1:length(ChargingStations)))
+        
+    # @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
+    # @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+    #     b[t+1,s] <= b[t,s] - 1 + 
+    #     (max_battery_time+1) * sum(c[i,t,s] for i in 1:length(ChargingStations)))
 
     # No suicide constraint
-    @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones), j_idx=1:length(ChargingStations)], 
-                b[T,s] >= L_inf_distance(GridpointsDrones[i_idx], ChargingStations[j_idx])*a[i_idx,T,s])
+    # wrong version: distance from all charging stations rather than minimum distance
+    # @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones), j_idx=1:length(ChargingStations)], 
+    #             b[T,s] >= L_inf_distance(GridpointsDrones[i_idx], ChargingStations[j_idx])*a[i_idx,T,s])
+    # correct version: distance from closest charging station
+    @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones)], 
+                b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
 
     # Create objective variables with integer indices
     theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
@@ -867,7 +870,8 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
     next_move_constraints = ConstraintRef[]
-    
+    t2 = time_ns() / 1e9
+    println("Model created in ", t2 - t1, " seconds")
     return IndexRoutingModel(model, a, c, b, theta, init_constraints, next_move_constraints, 
                         GridpointsDrones, ChargingStations, risk_pertime, T, n_drones, grid_to_idx, charging_map, max_battery_time)
 end
@@ -913,7 +917,7 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     # All drones start with full battery
     max_battery_time = routing_model.max_battery_time
     for s in 1:n_drones
-        push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time))
+        push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time - sum(a[i,1,s] for i in 1:length(GridpointsDrones))))
     end
     
     # Optimize
@@ -983,19 +987,8 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
         
         # First make sure the location is in our grid points
         if !haskey(grid_to_idx, loc)
-            println("Warning: Location $loc for drone $s is not in GridpointsDrones")
-            # Find the closest valid grid point
-            min_dist = Inf
-            closest_point = nothing
-            for point in GridpointsDrones
-                dist = sqrt((point[1] - loc[1])^2 + (point[2] - loc[2])^2)
-                if dist < min_dist
-                    min_dist = dist
-                    closest_point = point
-                end
-            end
-            println("Using closest point $closest_point instead")
-            loc = closest_point
+            println("Error: Drone $s is at location $loc which is not in the grid points")
+            error("Drone $s is at location $loc which is not in the grid points")
         end
         
         loc_idx = grid_to_idx[loc]

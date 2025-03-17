@@ -4,19 +4,22 @@
 import numpy as np
 #TODO out of battery not implemented yet
 class Drone():
-    def __init__(self, x, y, charging_stations_locations, N, M, distance_battery=100, time_battery=100):
+    def __init__(self, x, y, state,charging_stations_locations, N, M, max_distance_battery=100, max_time_battery=100, current_distance_battery=None, current_time_battery=None):
         if (x,y) not in charging_stations_locations and [x,y] not in charging_stations_locations:
             raise ValueError("Drone should start on a charging station")
         self.x = x
         self.y = y
         self.N = N
-        self.M = M
+        self.M = M #TODO add if none ...
         self.charging_stations_locations = charging_stations_locations
-        self.distance_battery = distance_battery
-        self.max_distance_battery = distance_battery
-        self.time_battery = time_battery
-        self.max_time_battery = time_battery
-        self.state = "fly" # maybe should start with "charge"?
+        self.max_distance_battery = max_distance_battery
+        self.max_time_battery = max_time_battery
+        self.distance_battery = max_distance_battery if current_distance_battery is None else current_distance_battery
+        self.time_battery = max_time_battery if current_time_battery is None else current_time_battery    
+        self.state = state
+        if state == "charge":
+            self.distance_battery = self.max_distance_battery
+            self.time_battery = self.max_time_battery
     
     def get_position(self):
         return self.x, self.y
@@ -45,11 +48,13 @@ class Drone():
         self.time_battery -= 1
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
-    def recharge(self):
-        if (self.x, self.y) in self.charging_stations_locations:
-            self.state = "charge"
-            self.distance_battery = self.max_distance_battery
-            self.time_battery = self.max_time_battery
+    def recharge(self,x,y):
+        #if (self.x, self.y) in self.charging_stations_locations:#TODO CHECK IF IT IS FROM NEIGHBORING CELL!
+        self.x = x
+        self.y = y
+        self.state = "charge"
+        self.distance_battery = self.max_distance_battery
+        self.time_battery = self.max_time_battery
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
 
     
@@ -59,5 +64,5 @@ class Drone():
         elif action[0] == 'fly':
             return self.fly(*action[1])
         elif action[0] == 'charge':
-            return self.recharge()
+            return self.recharge(*action[1])
 
