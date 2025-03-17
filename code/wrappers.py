@@ -35,10 +35,7 @@ def wrap_log_strategy(input_strat_cls):
                         - burnmap_filename: Path to the burn map used by the Julia optimizer
             """
 
-            # generate the log filename dynamically
-            log_dir = os.path.join(os.path.dirname(custom_initialization_parameters.get("logfile", ".")), "logs")
-            os.makedirs(log_dir, exist_ok=True)
-
+            
             layout_name = custom_initialization_parameters.get("log_file", "layout")
             n_ground = automatic_initialization_parameters.get("n_ground_stations", 0)
             n_charging = automatic_initialization_parameters.get("n_charging_stations", 0)
@@ -46,8 +43,8 @@ def wrap_log_strategy(input_strat_cls):
             M = automatic_initialization_parameters.get("M", 0)
             strategy_name = input_strat_cls.__name__
 
-            log_filename = f"{layout_name}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge.json"
-            log_path = os.path.join(log_dir, log_filename)
+            log_path = f"{layout_name}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge.json"
+            
 
             self.ground_sensor_locations = []
             self.charging_station_locations = []
