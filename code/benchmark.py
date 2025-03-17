@@ -50,19 +50,9 @@ def build_custom_init_params(input_dir, layout_name):
 
     return {
         "burnmap_filename": f"{base_path}/burn_map.npy",
-        "logfile": f"{base_path}/logs/{layout_name}.json",
+        "log_file": f"{base_path}/custom_params/{layout_name}.json",
         "call_every_n_steps": 5,               
-        "optimization_horizon": 20             
-    }
-
-def my_custom_init_params(input_dir):
-    base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
-
-    return {
-        "burnmap_filename": f"{base_path}/burn_map.npy",
-        "logfile": f"{base_path}/logs/layout_A.json",
-        "call_every_n_steps": 5,
-        "optimization_horizon": 20
+        "optimization_horizon": 20   
     }
 
 def get_burnmap_parameters(input_dir: str):
@@ -412,7 +402,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     sensor_entropies = []
 
 
-    custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
+    custom_initialization_parameters = custom_initialization_parameters_function(input_dir, "layoutA") #NEED TO CHANGE LATER TO NOT say LayoutA everytime
     
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
         print(f"Processing scenario {file}")
@@ -523,24 +513,39 @@ def run_benchmark_for_strategy(input_dir: str,
     """
     Runs benchmarks for the given sensor and drone strategies on all scenarios in input_dir.
     """
+
+    if file_format not in ["npy", "jpg"]:
+        raise ValueError("file_format must be 'npy' or 'jpg'")
+
+    if not input_dir.endswith('/'):
+        input_dir += '/'
+
+    # choose the iterator and loader
+    if file_format == "npy":
+        iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+        load_scenario_fn = load_scenario_npy
+    else:
+        iterable = listdir_folder_limited(input_dir, max_n_scenarii)
+        load_scenario_fn = load_scenario_jpg
+
     # === Load user strategies ===
     SensorPlacementStrategyClass = load_strategy(strategy_folder, sensor_strategy_file, sensor_class_name)
     DroneRoutingStrategyClass = load_strategy(strategy_folder, drone_strategy_file, drone_class_name)
 
     # === Load the first scenario to get parameters ===
-    iterable = listdir_npy_limited(input_dir, max_n_scenarii)
     first_file = next(iter(iterable), None)
     if first_file is None:
         print(f"No scenarios found in {input_dir}")
         return
 
     # load the first scenario to get automatic parameters
-    scenario = load_scenario_npy(first_file)
+    scenario = load_scenario_fn(first_file)
     automatic_init_params = get_automatic_layout_parameters(scenario)
 
     # === Create sensor placement strategy ===
     print("[run_benchmark_for_strategy] Running sensor placement strategy...")
-    custom_init_params = build_custom_init_params(input_dir, layout_name="layout_A")
+
+    custom_init_params = custom_init_params_fn(input_dir, layout_name="layout_A")
 
     sensor_placement_strategy_instance = SensorPlacementStrategyClass(automatic_init_params, custom_init_params)
     drone_routing_strategy_instance = DroneRoutingStrategyClass(automatic_init_params, custom_init_params)
@@ -559,6 +564,5 @@ def run_benchmark_for_strategy(input_dir: str,
         starting_time=starting_time,
         max_n_scenarii=max_n_scenarii,
         file_format=file_format
-
     )
 

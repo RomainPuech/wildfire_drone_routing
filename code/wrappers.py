@@ -4,10 +4,10 @@ import os
 import tqdm
 import json
 from dataset import load_scenario_npy
-from benchmark import run_benchmark_for_strategy, return_no_custom_parameters, my_custom_init_params, load_strategy
+from benchmark import run_benchmark_for_strategy, return_no_custom_parameters
 from Strategy import RandomSensorPlacementStrategy, SensorPlacementOptimization
 
-
+### For SensorPlacement Strategies
 def wrap_log_strategy(input_strat_cls):
     """
     Wraps a SensorPlacementStrategy to log and reuse previous placements.
@@ -78,64 +78,3 @@ def wrap_log_strategy(input_strat_cls):
     return WrappedStrategy
 
 
-
-
-
-# if __name__ == "__main__":
-    # Wrapped = wrap_log_strategy(RandomSensorPlacementStrategy)
-
-    # # === parameters ===
-    # automatic_params = {"N": 10, "M": 10, "n_ground_stations": 4, "n_charging_stations": 4}
-    # custom_params = {"logfile": "./MinimalDataset/0001/scenarii", "layout_name": "layout_B"}
-
-    # # === run wrapped strategy ===
-    # strategy = Wrapped(automatic_params, custom_params)
-    # ground, charge = strategy.get_locations()
-
-    # print("Ground sensors:", ground)
-    # print("Charging stations:", charge)
-
-    # # === run again (no computation) ===
-    # strategy2 = Wrapped(automatic_params, custom_params)
-    # ground2, charge2 = strategy2.get_locations()
-
-    # print("Ground sensors (second run):", ground2)
-    # print("Charging stations (second run):", charge2)
-    # ===================================================#
-   
-    # Wrapped = wrap_log_strategy(SensorPlacementOptimization)
-
-    # # === parameters ===
-    # automatic_params = {"N": 10, "M": 10, "n_ground_stations": 4, "n_charging_stations": 4}
-    # custom_params = {"logfile": "./MinimalDataset/0001/scenarii", "layout_name": "layout_B", "burnmap_filename": "./MinimalDataset/0001/burn_map.npy"}
-
-    # # === run wrapped strategy ===
-    # strategy = Wrapped(automatic_params, custom_params)
-    # ground, charge = strategy.get_locations()
-
-    # print("Ground sensors:", ground)
-    # print("Charging stations:", charge)
-
-    # # === run again (no computation) ===
-    # strategy2 = Wrapped(automatic_params, custom_params)
-    # ground2, charge2 = strategy2.get_locations()
-
-    # print("Ground sensors (second run):", ground2)
-    # print("Charging stations (second run):", charge2)
-
-
-    # === wrap it ===
-
-    # run_benchmark_for_strategy(
-    #     input_dir="MinimalDataset/0001/scenarii",
-    #     strategy_folder="code/strategy",
-    #     sensor_strategy_file="logged_sensor_placement.py",
-    #     sensor_class_name="LoggedSensorPlacementStrategy",
-    #     drone_strategy_file="logged_drone_routing.py",
-    #     drone_class_name="LoggedDroneRoutingStrategy",
-    #     max_n_scenarii=4,
-    #     starting_time=0,
-    #     file_format= "npy",
-    #     custom_init_params_fn= my_custom_init_params,  # user-defined initialization params function
-    #     custom_step_params_fn= return_no_custom_parameters
-    # )
