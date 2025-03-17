@@ -31,15 +31,16 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
     return getattr(module, class_name)
 
 
-def get_automatic_layout_parameters(scenario:np.ndarray):
+def get_automatic_layout_parameters(scenario:np.ndarray, input_dir:str=''):
     return {
         "N": scenario.shape[1],
         "M": scenario.shape[2],
-        "max_battery_distance": 100,
-        "max_battery_time": 100,
-        "n_drones": 1,
-        "n_ground_stations": 1,
-        "n_charging_stations": 1,
+        "max_battery_distance": -10,
+        "max_battery_time": 20,
+        "n_drones": 5,
+        "n_ground_stations": 10,
+        "n_charging_stations": 5,
+        "input_dir": input_dir
     }
 
 def build_custom_init_params(input_dir, layout_name):
@@ -70,6 +71,64 @@ def compute_entropy(locations, grid_size):
 
     return scipy_entropy(prob_grid)
 
+def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str=''):
+    """
+    Run a drone routing strategy to create a logfile.
+    """
+    # 1. Get layout parameters
+    if automatic_initialization_parameters_function is None:
+        automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir)
+    else:
+        automatic_initialization_parameters = automatic_initialization_parameters_function(canonical_scenario, input_dir)
+    
+    if custom_initialization_parameters_function is not None:
+        custom_initialization_parameters = custom_initialization_parameters_function(automatic_initialization_parameters['input_dir'])
+    
+    # 2. Get ground sensor locations
+    ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
+    rows_ground, cols_ground = zip(*ground_sensor_locations)
+    rows_charging, cols_charging = zip(*charging_stations_locations)
+
+    # add computed positions to initialization parameters
+    automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations
+    automatic_initialization_parameters["charging_stations_locations"] = charging_stations_locations
+
+    # 3. Initialize drones
+    Routing_Strat = drone_routing_strategy(automatic_initialization_parameters, custom_initialization_parameters)
+    drones = [Drone(x,y,state,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in Routing_Strat.get_initial_drone_locations()]
+    drone_locations = [drone.get_position() for drone in drones]
+    drone_batteries = [drone.get_battery() for drone in drones]
+    drone_states = [drone.get_state() for drone in drones]
+
+    # 4. Run the strategy
+    for t in range(T):
+        ### Move the drones
+
+        # 1. Get the parameters
+        custom_step_parameters = custom_step_parameters_function() # TODO: add weather parameters
+        automatic_step_parameters = {
+            "drone_locations": drone_locations,
+            "drone_batteries": drone_batteries,
+            "drone_states": drone_states,
+            "t": t }
+        
+        # 2. Get the actions
+        start_time = time.time()
+        actions = Routing_Strat.next_actions(automatic_step_parameters, custom_step_parameters)
+
+        # 3. Move the drones
+        for drone_index, (drone, action) in enumerate(zip(drones, actions)):
+            old_x, old_y = drone_locations[drone_index]
+            new_x, new_y, new_distance_battery, new_time_battery, new_state = drone.route(action)
+
+            drone_locations[drone_index] = (new_x, new_y)
+            drone_batteries[drone_index] = (new_distance_battery, new_time_battery)
+            drone_states[drone_index] = new_state
+    print("Drone routing strategy finished")
+    
+    
+    
+    
 def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
@@ -403,7 +462,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
     
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
-        print(f"Processing scenario {file}")
+        #print(f"Processing scenario {file}")
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
@@ -447,6 +506,52 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     print(f"Avg drone entropy per timestep: {np.mean(drone_entropies):.4f}")
     print(f"Avg sensor placement entropy: {np.mean(sensor_entropies):.4f}")
 
+def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy"):
+    """
+    Run benchmarks on multiple scenarios sequentially, precomputing the sensor placement and drone routing strategy.
+
+    Args:
+        input_dir (str): Directory containing scenario files.
+        sensor_placement_strategy (function): Strategy for placing ground sensors and charging stations.
+        drone_routing_strategy (function): Strategy for controlling drone movements.
+        custom_initialization_parameters (dict): Custom initialization parameters.
+        custom_step_parameters_function (function): Function for custom step parameters.
+        starting_time (int, optional): Time step at which the wildfire starts.
+        max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
+        file_format (str, optional): Format of the scenario files.
+    """
+    if file_format not in ["npy", "jpg"]:
+        raise ValueError("file_format must be 'npy' or 'jpg'")
+
+    if not input_dir.endswith('/'):
+        input_dir += '/'
+
+    # choose the iterator and loader
+    if file_format == "npy":
+        iterable = listdir_npy_limited(input_dir, max_n_scenarii)
+        load_scenario_fn = load_scenario_npy
+    else:
+        iterable = listdir_folder_limited(input_dir, max_n_scenarii)
+        load_scenario_fn = load_scenario_jpg
+
+    N_SCENARII = max_n_scenarii if max_n_scenarii else len(os.listdir(input_dir))
+    # find the longest scenario to be used as canonical scenario
+    max_scenario_length = 0
+    for file in iterable:
+        scenario = load_scenario_fn(file)
+        if scenario.shape[0] > max_scenario_length:
+            max_scenario_length = scenario.shape[0]
+            canonical_scenario = scenario
+    
+    # precompute the sensor placement and drone routing strategy on canonical scenario
+    #print("Precomputing sensor placement and drone routing strategy on canonical scenario...")
+    run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir) 
+    #print("running on all scenarios...")
+    run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format)
+
+    
+
+
 
 def run_ground_log(input_dir, output_file, ground_placement_strategy, ground_parameters, max_n_scenarii=None):
     """
@@ -489,6 +594,33 @@ def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy
     for layout_folder in os.listdir(dataset_folder_name):
         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
         run_benchmark_scenarii_sequential(dataset_folder_name + layout_folder + "/scenarii/",
+                                          ground_placement_strategy, 
+                                          drone_routing_strategy, 
+                                          custom_initialization_parameters_function, 
+                                          custom_step_parameters_function, 
+                                          starting_time=starting_time, 
+                                          max_n_scenarii=max_n_scenarii)
+
+def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None):
+    """
+    Run benchmarks on a simulation-to-real-world dataset structure.
+
+    Args:
+        dataset_folder_name (str): Root folder containing layout folders with scenario data.
+        ground_placement_strategy (function): Strategy for placing ground sensors and charging stations.
+        drone_routing_strategy (function): Strategy for controlling drone movements.
+        ground_parameters (tuple): Parameters for ground placement strategy.
+        routing_parameters (tuple): Parameters for routing strategy.
+        max_n_scenarii (int, optional): Maximum number of scenarios to process per layout. If None, processes all scenarios.
+        starting_time (int, optional): Time step at which the wildfire starts.
+    """
+    if not dataset_folder_name.endswith('/'):
+        dataset_folder_name += '/'
+    
+    for layout_folder in listdir_folder_limited(dataset_folder_name, max_n_layouts):
+        print(f"\n --- \n Processing layout {layout_folder}")
+        if not os.path.exists(layout_folder + "/scenarii/"):continue
+        run_benchmark_scenarii_sequential_precompute(layout_folder + "/scenarii/",
                                           ground_placement_strategy, 
                                           drone_routing_strategy, 
                                           custom_initialization_parameters_function, 
