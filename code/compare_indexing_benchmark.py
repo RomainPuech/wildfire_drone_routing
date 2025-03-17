@@ -15,16 +15,16 @@ sys.path.append(current_dir)
 
 # Import our strategy classes
 from Strategy import (
-    DroneRoutingOptimizationSlow, 
+    #DroneRoutingOptimizationSlow, 
     DroneRoutingOptimizationModelReuse,
     DroneRoutingOptimizationModelReuseIndex
 )
 
-def setup_benchmark_environment(n_drones=2, horizon=15, reevaluation_step=5):
+def setup_benchmark_environment(n_drones=2, horizon=10, reevaluation_step=10):
     """Set up benchmark parameters with configurable values."""
     # Basic simulation parameters
     burnmap_filename = "./WideDataset/0001/burn_map.npy"
-    charging_stations_locations = [(100, 98)]  # Python 0-indexed
+    charging_stations_locations = [(100, 98),(20,55)]  # Python 0-indexed
     ground_sensor_locations = [(0, 0)]  # Python 0-indexed
     max_battery_time = 10
     
@@ -66,15 +66,15 @@ def benchmark_strategy(strategy_class, auto_params, custom_params, num_steps=5):
     
     # Set up parameters for next_actions
     auto_step_params = {
-        "drone_locations": initial_locations,
+        "drone_locations": [(x, y) for (state, (x, y))  in initial_locations],
         "drone_batteries": [(100, 10) for _ in range(len(initial_locations))],
-        "drone_states": ["fly" for _ in range(len(initial_locations))],
+        "drone_states": [state for (state, (x, y)) in initial_locations],
         "t": 0
     }
     custom_step_params = {}
     
     # Set reevaluation_step to 1 to force model creation/reuse on every call
-    strategy.reevaluation_step = 1
+    strategy.reevaluation_step = 2
     
     for step in range(num_steps):
         auto_step_params["t"] = step
@@ -107,9 +107,9 @@ def run_indexing_comparison_benchmark():
     print("\n=== Comparing Performance of Different Drone Routing Approaches ===\n")
     
     # Benchmark parameters
-    n_drones = 2
+    n_drones = 5
     horizon = 15
-    reevaluation_step = 1  # Force model creation/reuse on every call
+    reevaluation_step = 2  # Force model creation/reuse on every call
     num_steps = 5  # Number of next_actions calls to make
     
     # Set up environment
@@ -121,7 +121,7 @@ def run_indexing_comparison_benchmark():
     
     # Benchmark each strategy
     strategies = [
-        DroneRoutingOptimizationSlow,
+        # DroneRoutingOptimizationSlow,
         DroneRoutingOptimizationModelReuse,
         DroneRoutingOptimizationModelReuseIndex
     ]
@@ -140,10 +140,10 @@ def run_indexing_comparison_benchmark():
     # Compare solutions
     print("\n--- Solution Comparison ---")
     solutions_match = True
-    base_solution = results["DroneRoutingOptimizationSlow"]["solution"]
+    base_solution = results["DroneRoutingOptimizationModelReuseIndex"]["solution"]
     
     for strategy_name, strategy_results in results.items():
-        if strategy_name == "DroneRoutingOptimizationSlow":
+        if strategy_name == "DroneRoutingOptimizationModelReuseIndex":
             continue
             
         solution_match = strategy_results["solution"] == base_solution
@@ -156,10 +156,10 @@ def run_indexing_comparison_benchmark():
     
     # Calculate speedups
     print("\n--- Performance Comparison ---")
-    base_time = results["DroneRoutingOptimizationSlow"]["total_time"]
+    base_time = results["DroneRoutingOptimizationModelReuseIndex"]["total_time"]
     
     for strategy_name, strategy_results in results.items():
-        if strategy_name == "DroneRoutingOptimizationSlow":
+        if strategy_name == "DroneRoutingOptimizationModelReuseIndex":
             continue
             
         strategy_time = strategy_results["total_time"]
@@ -167,7 +167,7 @@ def run_indexing_comparison_benchmark():
         time_saved = base_time - strategy_time
         percent_faster = (time_saved / base_time) * 100
         
-        print(f"{strategy_name} vs. DroneRoutingOptimizationSlow:")
+        print(f"{strategy_name} vs. DroneRoutingOptimizationModelReuseIndex:")
         print(f"  Speedup: {speedup:.2f}x")
         print(f"  Time saved: {time_saved:.4f}s ({percent_faster:.1f}% faster)")
     
@@ -215,10 +215,8 @@ def run_indexing_comparison_benchmark():
     }
     
     detailed_results["comparisons"] = {
-        "model_reuse_vs_slow": base_time / results["DroneRoutingOptimizationModelReuse"]["total_time"],
-        "model_reuse_index_vs_slow": base_time / results["DroneRoutingOptimizationModelReuseIndex"]["total_time"],
         "model_reuse_index_vs_model_reuse": results["DroneRoutingOptimizationModelReuse"]["total_time"] / results["DroneRoutingOptimizationModelReuseIndex"]["total_time"],
-        "solutions_match": solutions_match
+        "solution_match": solutions_match
     }
     
     with open("indexing_comparison_results.json", "w") as f:

@@ -867,7 +867,7 @@ class LoggedOptimizationSensorPlacementStrategy(SensorPlacementStrategy):
             raise ValueError("burnmap_filename is not defined")
 
         if "log_filename" not in custom_initialization_parameters:
-            custom_initialization_parameters["log_filename"] = "/".join(custom_initialization_parameters["burnmap_filename"].split("/")[:-1]) + "/logged_sensor_placement.json"
+            custom_initialization_parameters["log_filename"] = "/".join(custom_initialization_parameters["burnmap_filename"].split("/")[:-1]) + f"/{automatic_initialization_parameters['n_ground_stations']}_{automatic_initialization_parameters['n_charging_stations']}_logged_sensor_placement.json"
 
         if "load_from_logfile" not in custom_initialization_parameters:
             custom_initialization_parameters["load_from_logfile"] = True
@@ -987,11 +987,15 @@ class LoggedDroneRoutingStrategy(DroneRoutingStrategy):
         self.automatic_initialization_parameters = automatic_initialization_parameters
         self.custom_initialization_parameters = custom_initialization_parameters
 
-        # Ensure required custom params exist
-        if "logfile" not in custom_initialization_parameters:
-            raise ValueError("custom_initialization_parameters must include 'logfile'")
+        # Ensure required custom params exist            
         if "burnmap_filename" not in custom_initialization_parameters:
             raise ValueError("custom_initialization_parameters must include 'burnmap_filename'")
+        if "logfile" not in custom_initialization_parameters:
+            # extract layout name from burnmap filename
+            layout_name = custom_initialization_parameters["burnmap_filename"].split("/")[-1].split(".")[0]
+            custom_initialization_parameters["layout_name"] = layout_name
+            print(f"[LoggedDroneRoutingStrategy] Layout name: {layout_name}")
+            raise ValueError("logfile is not defined")
 
         # === Extract dynamic params ===
         layout_name = custom_initialization_parameters.get("layout_name", "layout")

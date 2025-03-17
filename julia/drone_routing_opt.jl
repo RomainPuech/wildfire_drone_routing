@@ -160,21 +160,21 @@ function NEW_ROUTING_STRATEGY_INIT_INTEGER_BATTERY(risk_pertime_file,n_drones,Ch
     #Drone can only charge/fly at j at t+1 if it already charged at j or if it flew in a neighboring gridpoint at t
     @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], c[j,t+1,s] + a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + c[j,t,s])
     @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], a[j,t+1,s] <= sum(a[i,t,s] for i in GridpointsDrones if i in neighbors_and_point(j)))
-    #Drone can only fly at j at t if it is flying at a neighboring grid point at t+1 or charging at j at t+1
-    @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + c[j,t+1,s])
-    @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)))
+    #Drone can only fly at j at t if it is flying at a neighboring grid point at t+1 or charging at j at t+1 #TODO is it correct to remove these 2 constraints?
+    # @constraint(model, [j in ChargingStations, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)) + c[j,t+1,s])
+    # @constraint(model, [j in GridpointsDronesDetecting, t in 1:T-1, s in 1:n_drones], a[j,t,s] <= sum(a[i,t+1,s] for i in GridpointsDrones if i in neighbors_and_point(j)))
     
     # Battery level constraints: Integer between 0 and max_battery_time
     @constraint(model, [t in 1:T, s in 1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
     # Battery dynamics: decreases by 1 when flying, resets to max when charging
-    # @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-    #     b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
-    #     (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
-
     @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-        b[t+1,s] <= b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
-        max_battery_time * sum(c[i,t,s] for i in ChargingStations))
+        b[t+1,s] == b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+        (max_battery_time - b[t,s]) * sum(c[i,t,s] for i in ChargingStations))
+
+    # @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+    #     b[t+1,s] <= b[t,s] - sum(a[i,t,s] for i in GridpointsDrones) + 
+    #     max_battery_time * sum(c[i,t,s] for i in ChargingStations))
     
     ########## Constraints specific to the init problem
     #All drones start to fly from a charging station at t=1
@@ -538,15 +538,14 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
     
     # Battery dynamics
     # bilinear version
-    @constraint(model, [t=1:T-1, s=1:n_drones], 
-        b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i in GridpointsDrones) + 
-        (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i in ChargingStations))
+    # @constraint(model, [t=1:T-1, s=1:n_drones], 
+    #     b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i in GridpointsDrones) + 
+    #     (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i in ChargingStations))
 
     # linear version
-    # @constraint(model, [s in 1:n_drones, t in 1:T],
-    #     b[t,s] >= max_battery_time*sum(c[i,t,s] for i in ChargingStations))
-
-    # @constraint(model, [t in 1:T-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t,s] for i in ChargingStations))
+    @constraint(model, [s in 1:n_drones, t in 1:T],
+        b[t,s] >= max_battery_time*sum(c[i,t,s] for i in ChargingStations))
+    @constraint(model, [t in 1:T-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in ChargingStations))
 
     # no suicide constraint
     # wrong version: distance from all charging stations rather than minimum distance
@@ -625,7 +624,7 @@ function solve_init_routing(routing_model::RoutingModel, reevaluation_step)
     # Extract results
     println("Solver Status: ", termination_status(model))
     println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
-    println("Battery levels: ", value.(b))
+    # println("Battery levels: ", value.(b))
     
     # Generate movement plan using tuple indices directly
     movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
@@ -708,7 +707,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
     # Extract results
     println("Solver Status: ", termination_status(model))
     println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
-    println("Battery levels: ", value.(b))
+    # println("Battery levels: ", value.(b))
     
     # Generate movement plan using tuple indices directly
     movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
@@ -812,12 +811,11 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
         charging_map[i] = grid_to_idx[point]
     end
     
-    # Update movement constraints to use integer indices
     for (i, point) in enumerate(ChargingStations)
         j = grid_to_idx[point]
         for t in 1:T-1, s in 1:n_drones
             @constraint(model, c[i,t+1,s] + a[j,t+1,s] <= sum(a[k,t,s] for k in neighbors_map[j]) + c[i,t,s])
-            @constraint(model, a[j,t,s] <= sum(a[k,t+1,s] for k in neighbors_map[j]) + c[i,t+1,s])
+            #@constraint(model, a[j,t,s] <= sum(a[k,t+1,s] for k in neighbors_map[j]) + c[i,t+1,s]) #TODO is it correct to remove this constraint?
         end
     end
     
@@ -826,23 +824,23 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
         if !(point in ChargingStations)  # If not a charging station
             for t in 1:T-1, s in 1:n_drones
                 @constraint(model, a[j_idx,t+1,s] <= sum(a[k,t,s] for k in neighbors_map[j_idx]))
-                @constraint(model, a[j_idx,t,s] <= sum(a[k,t+1,s] for k in neighbors_map[j_idx]))
+                #@constraint(model, a[j_idx,t,s] <= sum(a[k,t+1,s] for k in neighbors_map[j_idx])) #TODO is it correct to remove this constraint?
             end
         end
     end
     
-    # Battery level constraints
+    # Min/max battery level constraints
     @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
     
     # Battery dynamics
-    @constraint(model, [t=1:T-1, s=1:n_drones], 
-        b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i=1:length(GridpointsDrones)) + 
-        (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i=1:length(ChargingStations)))
-        
-    # @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
-    # @constraint(model, [t in 1:T-1, s in 1:n_drones], 
-    #     b[t+1,s] <= b[t,s] - 1 + 
-    #     (max_battery_time+1) * sum(c[i,t,s] for i in 1:length(ChargingStations)))
+    # bilinear version
+    # @constraint(model, [t=1:T-1, s=1:n_drones], 
+    #     b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i=1:length(GridpointsDrones)) + 
+    #     (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i=1:length(ChargingStations)))
+    # linear version
+    @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
+    @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+        b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in 1:length(ChargingStations)))
 
     # No suicide constraint
     # wrong version: distance from all charging stations rather than minimum distance
