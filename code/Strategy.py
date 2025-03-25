@@ -254,7 +254,7 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
      
         # Call the Julia optimization function
         print("calling julia optimization model")
-        x_vars, y_vars = jl.ground_charging_opt_model_grid(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_2(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         print("optimization finished")
 
         
@@ -899,7 +899,7 @@ class LoggedOptimizationSensorPlacementStrategy(SensorPlacementStrategy):
             self.ground_sensor_locations, self.charging_station_locations = json.load(open(custom_initialization_parameters["log_filename"]))
         else:
             print("calling julia optimization model")
-            x_vars, y_vars = jl.ground_charging_opt_model_grid(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+            x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_2(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
             print("optimization finished")
             # save the result in a json file
             with open(custom_initialization_parameters["log_filename"], "w") as f:

@@ -785,6 +785,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Transform grid points to integer indices
     grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
     charging_idx = [grid_to_idx[point] for point in ChargingStations]
+    ground_idx = [grid_to_idx[point] for point in intersect(GridpointsDrones,GroundStations)]
     
     # println("grid_to_idx for ChargingStations: ", [grid_to_idx[point] for point in ChargingStations])
     
@@ -854,6 +855,11 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
+
+    #Take into account ground sensors in Julia Objective function
+    if !isempty(ground_idx)
+        @constraint(model, [t=1:T, k in ground_idx], theta[t,k] == 0)
+    end
     
     # Risk objective with integer indices
     risk_idx = zeros(T, length(GridpointsDrones))

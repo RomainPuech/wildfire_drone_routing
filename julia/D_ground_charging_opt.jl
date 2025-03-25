@@ -189,3 +189,78 @@ end
 # - Charging stations now do not take into account proximity to ground stations. Ways to fix this
 #   --> Multiply charging station part in objective with weight factor that prioritizes locations where drones are most needed (i.e., where ground sensors cannot cover). How?
 #   --> Ensure each charging station provides coverage for at least C_min unique grid points in neighborhood not covered by ground sensors
+
+#additional unused julia code
+function ground_charging_opt_model_grid(risk_pertime_file, N_grounds, N_charging)
+    """
+    Returns the locations of all ground sensors and charging stations.
+
+    Input:
+    I: Set of all positions
+    I_prime: Set of feasible positions for ground sensors. Default to I
+    I_second: Set of all feasible positions for charging stations. Defaults to I
+    risk_pertime_dir: Folder containing burn maps
+    """
+    println("In julia function")
+    # Print current working directory contents
+    # println("Current working directory: ", pwd())
+    # println("Directory contents:")
+    # for (root, dirs, files) in walkdir(pwd())
+    #     println("Directory: ", root)
+    #     for dir in dirs
+    #         println("  Dir: ", dir)
+    #     end
+    #     for file in files
+    #         println("  File: ", file)
+    #     end
+    # end
+    I_prime = nothing
+    I_second = nothing
+
+    time_start = time_ns() / 1e9 
+
+    risk_pertime = load_burn_map(risk_pertime_file)
+    T, N, M = size(risk_pertime)
+
+    nu = 1
+    omega = 1
+    b = 1.6
+    B = 700 # total budget
+
+    I = [(x, y) for x in 1:N for y in 1:M]
+
+    if I_prime === nothing
+        I_prime = I
+    end
+
+    if I_second === nothing
+        I_second = I
+    end
+
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    
+    x = @variable(model, [i in I_prime], Bin) # ground sensor variables
+    y = @variable(model, [i in I_second], Bin) # charging station variables
+
+    # risk_pertime is not indexed by I but rather is 2 dimensional with coordinates given by i, so we have to splat i with '...'
+    # @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(phi[i,k]*risk_pertime[1,i...]*y[k] for k in I_second for i in neighbors(k,I))) # 2a
+    # modifyed 2a: we say that charging stations / ground sensors can only detect ON their cell
+    @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(risk_pertime[1,k...]*y[k] for k in I_second))
+
+    @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
+
+    #@constraint(model, nu*sum(y[i] for i in I_second) + omega*sum(x[i] for i in I_prime) <= B) # 2e, budget constraint
+    # modified: contraint on the total number of ground/charging stations instead of a budget.
+    @constraint(model, sum(x) <= N_grounds)
+    @constraint(model, sum(y) <= N_charging) # modified: contraint on the total number of ground/charging stations instead of a budget.
+
+    optimize!(model)
+
+    selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(x[i]) ≈ 1]
+    selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) ≈ 1]
+
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds")
+
+    return selected_x_indices, selected_y_indices
+end
