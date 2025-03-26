@@ -218,12 +218,17 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     avg_drone_entropy = np.mean(drone_entropy_per_timestep)
     percentage_map_explored = len(drone_visited_cells) / (automatic_initialization_parameters["N"] * automatic_initialization_parameters["M"]) * 100
 
+    if device == 'undetected':
+        final_grid = scenario[-1]
+        fire_size_cells = np.sum(final_grid == 1)
+        fire_size_percentage = fire_size_cells / (final_grid.shape[0] * final_grid.shape[1]) * 100
+
     results = {
         "delta_t": delta_t,
         "device": device,
         "avg_execution_time": avg_execution_time,
-        "fire_size_cells": fire_size_cells if device != 'undetected' else 0,
-        "fire_size_percentage": fire_size_percentage if device != 'undetected' else 0,
+        "fire_size_cells": fire_size_cells,
+        "fire_size_percentage": fire_size_percentage,
         "percentage_map_explored": percentage_map_explored,
         "total_distance_traveled": total_distance_traveled,
         "avg_drone_entropy": avg_drone_entropy,
