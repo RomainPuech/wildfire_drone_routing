@@ -325,7 +325,7 @@ end
 
 
 
-a = println(NEW_ROUTING_STRATEGY_INIT("./WideDataset/0001/burn_map.npy", 2, [(101, 99)], [(1,1)], 10, 10, 10))
-b = println(NEW_ROUTING_STRATEGY_INIT_INTEGER_BATTERY("./WideDataset/0001/burn_map.npy", 2, [(101, 99)], [(1,1)], 10, 10, 10))
+a = println(NEW_ROUTING_STRATEGY_INIT("./MinimalDataset/0001/burn_map.npy", 2, [(101, 99)], [(1,1)], 10, 10, 10))
+b = println(NEW_ROUTING_STRATEGY_INIT_INTEGER_BATTERY("./MinimalDataset/0001/burn_map.npy", 2, [(101, 99)], [(1,1)], 10, 10, 10))
 
 a==b

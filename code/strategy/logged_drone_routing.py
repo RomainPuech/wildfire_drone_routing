@@ -19,7 +19,7 @@ class LoggedDroneRoutingStrategy:
         custom_initialization_parameters: dict
             Expected keys:
                 - burnmap_filename: Path to the burn map (not used in dummy version)
-                - logfile: Path to save the drone routing log JSON file
+                - log_file: Path to save the drone routing log JSON file
                 - call_every_n_steps: Frequency to call the optimization (or dummy routing function)
                 - optimization_horizon: Number of future steps to plan
 

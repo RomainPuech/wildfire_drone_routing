@@ -1,6 +1,6 @@
 import random
 import os
-# from my_julia_caller import jl # DEACTIVATE IT TO RUN THINGS IN PARALLEL 
+from my_julia_caller import jl # DEACTIVATE IT TO RUN THINGS IN PARALLEL 
 import json
 import numpy as np
 
@@ -549,50 +549,20 @@ class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
                     self.charging_station_locations = data["charging_station_locations"]
 
             else:
-                # print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running optimization...")
-                
-                # # Run Julia optimization function
-                # x_vars, y_vars = jl.ground_charging_opt_model_grid(
-                #     burnmap_filename,
-                #     automatic_initialization_parameters["n_ground_stations"],
-                #     automatic_initialization_parameters["n_charging_stations"]
-                # )
-
-                # # Save the locations
-                # self.ground_sensor_locations = list(x_vars)
-                # self.charging_station_locations = list(y_vars)
-
-                # # Write the results to the log file
-                # with open(logfile, "w") as log:
-                #     json.dump({
-                #         "ground_sensor_locations": self.ground_sensor_locations,
-                #         "charging_station_locations": self.charging_station_locations
-                #     }, log, indent=2)
-
-                # print(f"[LoggedSensorPlacementStrategy] Optimization done. Results saved to {logfile}")
-
-                print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running dummy optimization...")
-
-                    # MOCK: replace Julia optimization with dummy values
-                    # for example, just generate some random positions
-    
-                n_ground_stations = automatic_initialization_parameters["n_ground_stations"]
-                n_charging_stations = automatic_initialization_parameters["n_charging_stations"]
-                N = automatic_initialization_parameters["N"]
-                M = automatic_initialization_parameters["M"]
-
-                # dummy lists of random locations
-                import random
-                x_vars = [(random.randint(0, N-1), random.randint(0, M-1)) for _ in range(n_ground_stations)]
-                y_vars = [(random.randint(0, N-1), random.randint(0, M-1)) for _ in range(n_charging_stations)]
-
+                print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running optimization...")
+                print("calling julia optimization model")
+            
+                # Run Julia optimization function
+                x_vars, y_vars = jl.ground_charging_opt_model_grid(
+                    burnmap_filename,
+                    automatic_initialization_parameters["n_ground_stations"],
+                    automatic_initialization_parameters["n_charging_stations"]
+                )
+                print("optimization finished")
                 # Save the locations
                 self.ground_sensor_locations = list(x_vars)
                 self.charging_station_locations = list(y_vars)
-                
-                log_dir = os.path.dirname(logfile)
-                if not os.path.exists(log_dir):
-                    os.makedirs(log_dir, exist_ok=True)
+
                 # Write the results to the log file
                 with open(logfile, "w") as log:
                     json.dump({
@@ -600,7 +570,38 @@ class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
                         "charging_station_locations": self.charging_station_locations
                     }, log, indent=2)
 
-                print(f"[LoggedSensorPlacementStrategy] Dummy optimization done. Results saved to {logfile}")
+                print(f"[LoggedSensorPlacementStrategy] Optimization done. Results saved to {logfile}")
+
+                # print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running dummy optimization...")
+
+                #     # MOCK: replace Julia optimization with dummy values
+                #     # for example, just generate some random positions
+    
+                # n_ground_stations = automatic_initialization_parameters["n_ground_stations"]
+                # n_charging_stations = automatic_initialization_parameters["n_charging_stations"]
+                # N = automatic_initialization_parameters["N"]
+                # M = automatic_initialization_parameters["M"]
+
+                # # dummy lists of random locations
+                # import random
+                # x_vars = [(random.randint(0, N-1), random.randint(0, M-1)) for _ in range(n_ground_stations)]
+                # y_vars = [(random.randint(0, N-1), random.randint(0, M-1)) for _ in range(n_charging_stations)]
+
+                # # Save the locations
+                # self.ground_sensor_locations = list(x_vars)
+                # self.charging_station_locations = list(y_vars)
+                
+                # log_dir = os.path.dirname(logfile)
+                # if not os.path.exists(log_dir):
+                #     os.makedirs(log_dir, exist_ok=True)
+                # # Write the results to the log file
+                # with open(logfile, "w") as log:
+                #     json.dump({
+                #         "ground_sensor_locations": self.ground_sensor_locations,
+                #         "charging_station_locations": self.charging_station_locations
+                #     }, log, indent=2)
+
+                # print(f"[LoggedSensorPlacementStrategy] Dummy optimization done. Results saved to {logfile}")
 
 
         def get_locations(self):
