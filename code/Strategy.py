@@ -303,11 +303,11 @@ class LoggedDroneRoutingStrategy(DroneRoutingStrategy):
             actions: list of tuples (action_type, action_parameters)
         """
         if self.call_counter % self.call_every_n_steps == 0:
-            # print(f"[LoggedDroneRoutingStrategy] Calling dummy optimizer at timestep {self.call_counter}")
+            print(f"[LoggedDroneRoutingStrategy] Calling dummy optimizer at timestep {self.call_counter}")
             _, self.current_solution = self.dummy_drone_routing_robust(
                 automatic_step_parameters, custom_step_parameters
             )
-            # print("[LoggedDroneRoutingStrategy] Dummy optimization finished")
+            print("[LoggedDroneRoutingStrategy] Dummy optimization finished")
 
         timestep_index = self.call_counter % self.call_every_n_steps
         actions = self.current_solution[timestep_index]
@@ -357,7 +357,7 @@ class LoggedDroneRoutingStrategy(DroneRoutingStrategy):
         self.log_data["steps"].append(log_entry)
 
         # Write the log to file immediately after each timestep
-        # print(f"[LoggedDroneRoutingStrategy] Writing log to {self.log_file} at timestep {timestep}")
+        print(f"[LoggedDroneRoutingStrategy] Writing log to {self.log_file} at timestep {timestep}")
         self._write_log_to_file()
 
     def _write_log_to_file(self):
@@ -367,7 +367,7 @@ class LoggedDroneRoutingStrategy(DroneRoutingStrategy):
         with open(self.log_file, "w") as f:
             json.dump(self.log_data, f, indent=2)
 
-        # print(f"[LoggedDroneRoutingStrategy] Log successfully written to {self.log_file}")
+        print(f"[LoggedDroneRoutingStrategy] Log successfully written to {self.log_file}")
 
 
 class SensorPlacementStrategy():
@@ -542,7 +542,7 @@ class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
 
             # Check if the log file already exists
             if os.path.exists(logfile):
-                # print(f"[LoggedSensorPlacementStrategy] Loading placements from log file: {logfile}")
+                print(f"[LoggedSensorPlacementStrategy] Loading placements from log file: {logfile}")
                 with open(logfile, "r") as log:
                     data = json.load(log)
                     self.ground_sensor_locations = data["ground_sensor_locations"]
@@ -572,7 +572,7 @@ class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
 
                 # print(f"[LoggedSensorPlacementStrategy] Optimization done. Results saved to {logfile}")
 
-                # print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running dummy optimization...")
+                print(f"[LoggedSensorPlacementStrategy] Log file not found at {logfile}. Running dummy optimization...")
 
                     # MOCK: replace Julia optimization with dummy values
                     # for example, just generate some random positions
@@ -601,7 +601,7 @@ class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
                         "charging_station_locations": self.charging_station_locations
                     }, log, indent=2)
 
-                # print(f"[LoggedSensorPlacementStrategy] Dummy optimization done. Results saved to {logfile}")
+                print(f"[LoggedSensorPlacementStrategy] Dummy optimization done. Results saved to {logfile}")
 
 
         def get_locations(self):
