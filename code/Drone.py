@@ -11,11 +11,13 @@ class Drone():
             if (x, y) not in charging_stations_locations and [x, y] not in charging_stations_locations:
                 raise ValueError("Drone should start charging on a charging station")
         elif state == "fly":
-            if (x, y) not in charging_stations_locations: 
-            # and [x, y] not in charging_stations_locations:
-                print(f"Error: Drone trying to start flying from ({x}, {y}) which is not in charging stations.")
-                print(f"Charging Stations: {charging_stations_locations}")
+            if (x, y) not in charging_stations_locations:
+                print(f"\nDEBUG: Charging Stations Known to Drone: {charging_stations_locations}")
+                print(f"Type of charging_stations_locations: {type(charging_stations_locations)}")
+                print(f"Drone is trying to start from: ({x}, {y})")
+                print(f"List of all valid charging stations: {charging_stations_locations}")
                 raise ValueError("Drone should start flying from a charging station")
+
 
         self.x = x
         self.y = y

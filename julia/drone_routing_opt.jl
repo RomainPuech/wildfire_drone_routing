@@ -787,8 +787,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
     charging_idx = [grid_to_idx[point] for point in ChargingStations]
     ground_idx = [grid_to_idx[point] for point in intersect(GridpointsDrones,GroundStations)]
-    
-    # println("grid_to_idx for ChargingStations: ", [grid_to_idx[point] for point in ChargingStations])
+    c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
     
     # Create variables with integer indices
     a = @variable(model, [i=1:length(GridpointsDrones), t=1:T, s=1:n_drones], Bin)
@@ -845,10 +844,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
         b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in 1:length(ChargingStations)))
 
     # No suicide constraint
-    # wrong version: distance from all charging stations rather than minimum distance
-    # @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones), j_idx=1:length(ChargingStations)], 
-    #             b[T,s] >= L_inf_distance(GridpointsDrones[i_idx], ChargingStations[j_idx])*a[i_idx,T,s])
-    # correct version: distance from closest charging station
+    # distance from closest charging station
     @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones)], 
                 b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
 
@@ -856,6 +852,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
+    @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
 
     # #Take into account ground sensors in Julia Objective function
     # if !isempty(ground_idx)
@@ -884,15 +881,15 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     risk_idx = zeros(T, length(GridpointsDrones))
     for t in 1:T
         for (k, point) in enumerate(GridpointsDrones)
-            # if point in GroundStationSet #Ground stations don't add to objective, so no need for drones to go there. Risk is set to 0.
-            #     risk_idx[t,k] = 0.0
+            # if k in charging_idx
+            #     risk_idx[t, k] = 0.0  # no reward for drone coverage
             # else
             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
             # end
         end
     end
 
-    #capacity constraint on charging stations
+    # #capacity constraint on charging stations
     # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
     
 
@@ -903,6 +900,8 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     next_move_constraints = ConstraintRef[]
     t2 = time_ns() / 1e9
     println("Model created in ", t2 - t1, " seconds")
+    println("DEBUG: Charging Stations received in Julia:")
+    println(ChargingStations)
     return IndexRoutingModel(model, a, c, b, theta, init_constraints, next_move_constraints, 
                         GridpointsDrones, ChargingStations, risk_pertime, T, n_drones, grid_to_idx, charging_map, max_battery_time)
 end
@@ -942,7 +941,7 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         
         constraint = @constraint(model, 
                                sum(c[i,1,s] for i in charging_station_idxs) + 
-                               sum(a[c_index_to_grid_idx[i],1,s] for i in charging_station_idx) == 1)
+                               sum(a[grid_to_idx[ChargingStations[i]],1,s] for i in charging_station_idxs) == 1)
         push!(routing_model.init_constraints, constraint)
     end
     
@@ -950,6 +949,17 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     max_battery_time = routing_model.max_battery_time
     for s in 1:n_drones
         push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time - sum(a[i,1,s] for i in 1:length(GridpointsDrones))))
+    end
+
+    #Capacity of each charging station is at most capacity_charging
+    capacity_charging = 2
+    for i in 1:length(ChargingStations), t in 1:T
+        charging_station_idx = [grid_to_idx[station] for station in ChargingStations]
+        charging_station_idxs = 1:length(ChargingStations)  # Indices into c array
+        c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
+        
+        constraint = @constraint(model, sum(c[i,t,s] for s in 1:n_drones) + sum(a[grid_to_idx[ChargingStations[i]],1,s] for s in 1:n_drones) <= capacity_charging)
+        push!(routing_model.init_constraints, constraint)
     end
     
     # Optimize

@@ -154,7 +154,7 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
     y = @variable(model, [i in I_second], Bin) # charging station variables
 
-    @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(risk_pertime[1,k...]*y[k] for k in I_second))
+    @objective(model, Max, sum((1/T)*sum(risk_pertime[t,i...] for t in 1:T)*x[i] for i in I_prime) + sum((1/T)*sum(risk_pertime[t,k...] for t in 1:T)*y[k] for k in I_second))
 
     @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
     @constraint(model, sum(x) <= N_grounds)
@@ -173,6 +173,7 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) ≈ 1]
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
+    println("Average risk equals")
 
     return selected_x_indices, selected_y_indices
 end
