@@ -5,8 +5,18 @@ import numpy as np
 #TODO out of battery not implemented yet
 class Drone():
     def __init__(self, x, y, state,charging_stations_locations, N, M, max_distance_battery=100, max_time_battery=100, current_distance_battery=None, current_time_battery=None):
-        if (x,y) not in charging_stations_locations and [x,y] not in charging_stations_locations:
-            raise ValueError("Drone should start on a charging station")
+        # if (x,y) not in charging_stations_locations and [x,y] not in charging_stations_locations:
+        #     raise ValueError("Drone should start on a charging station")
+        if state == "charge":
+            if (x, y) not in charging_stations_locations and [x, y] not in charging_stations_locations:
+                raise ValueError("Drone should start charging on a charging station")
+        elif state == "fly":
+            if (x, y) not in charging_stations_locations: 
+            # and [x, y] not in charging_stations_locations:
+                print(f"Error: Drone trying to start flying from ({x}, {y}) which is not in charging stations.")
+                print(f"Charging Stations: {charging_stations_locations}")
+                raise ValueError("Drone should start flying from a charging station")
+
         self.x = x
         self.y = y
         self.N = N

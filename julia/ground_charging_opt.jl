@@ -20,27 +20,6 @@ using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, 
 
 include("helper_functions.jl")
 
-function gamma_matrix(I, K, max_battery_time)
-    max_distance = floor(max_battery_time / 2) + 1
-    gamma_values = zeros(length(I), length(K))  # Preallocate matrix
-
-    # Precompute index lookup tables
-    I_map = Dict(i => idx for (idx, i) in enumerate(I))
-    K_map = Dict(k => idx for (idx, k) in enumerate(K))
-
-    for (ii, i) in enumerate(I)
-        for (kk, k) in enumerate(K)
-            r = L_inf_distance(i, k)
-            if r <= max_distance - 1
-                gamma_values[ii, kk] = (1 / max_distance) * (max_distance - r - 1)
-            end
-        end
-    end
-
-    # Return the full matrix and lookup maps
-    return gamma_values, I_map, K_map
-end
-
 function load_parameters(risk_pertime_file)
     risk_pertime, _ = load_burn_map(risk_pertime_file)
     T, N, _ = size(risk_pertime)
@@ -116,7 +95,10 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
 
 
     # risk_pertime is not indexed by I but rather is 2 dimensional with coordinates given by i, so we have to splat i with '...'
-    @objective(model, Max, sum(risk_pertime[1,i...]*theta[i] for i in I_possible))
+    # @objective(model, Max, sum(risk_pertime[1,i...]*theta[i] for i in I_possible))
+
+    # risk_pertime is averaged instead of looking at risk_pertime at t = 1
+    @objective(model, Max, sum((1/T)*sum(risk_pertime[t,i...] for t in 1:T)*theta[i] for i in I_possible))
 
     #constraints defining the epigraph variable theta[i] = min(1,x[i] + sum_k y[i,k]*y[k])
     @constraint(model, [i in I_possible], theta[i] <= 1)
@@ -145,8 +127,6 @@ end
 function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     println("NEW STRATEGY 2")
 
-    I_prime = nothing
-    I_second = nothing
 
     time_start = time_ns() / 1e9 
 
@@ -154,6 +134,10 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     T, N, M = size(risk_pertime)
 
     I = [(x, y) for x in 1:N for y in 1:M]
+
+    # I_prime = [(i, j) for (i, j) in I if risk_pertime[5, i, j] > 0.05]
+    I_prime = I
+    I_second = I_prime
 
 
     if I_prime === nothing
@@ -176,9 +160,12 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     @constraint(model, sum(x) <= N_grounds)
     @constraint(model, sum(y) <= N_charging) 
     # Precompute valid (i, j) pairs where L∞ distance ≤ 4
-    close_pairs = [(i, j) for i in I for j in I if i != j && maximum(abs.(i .- j)) <= 4]
+    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 4]
     # Add constraints efficiently
     @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
+
+    cs_pairs = [(i, j) for (i, j) in close_pairs if j in I_prime]  # charging-sensor
+    @constraint(model, [(i,j) in cs_pairs], y[i] + x[j] <= 1)
 
     optimize!(model)
 

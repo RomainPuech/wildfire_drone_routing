@@ -761,6 +761,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Convert Python lists of tuples to Julia Vector of tuples if needed
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
+    GroundStationSet = Set(GroundStations)  # faster lookup
     
     # println("ChargingStations: ", ChargingStations)
     
@@ -856,19 +857,45 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
 
-    #Take into account ground sensors in Julia Objective function
-    if !isempty(ground_idx)
-        @constraint(model, [t=1:T, k in ground_idx], theta[t,k] == 0)
-    end
+    # #Take into account ground sensors in Julia Objective function
+    # if !isempty(ground_idx)
+    #     @constraint(model, [t=1:T, k in ground_idx], theta[t,k] <= 0.1)
+    # end
+
+    # ground_idx_set = Set(ground_idx)  # for faster lookup
+
+    # risk_idx = zeros(T, length(GridpointsDrones))
+    # for t in 1:T
+    #     for (k, point) in enumerate(GridpointsDrones)
+    #         if k in ground_idx_set
+    #             risk_idx[t, k] = 0.0  # no reward for drone coverage
+    #         else
+    #             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+    #         end
+    #     end
+    # end
+
+   #once point is covered by drone, the next tau steps the risk is zero
+   #MAKES IT VERY SLOW
+    # tau = 2
+    # @constraint(model, [k in 1:length(GridpointsDrones), t in 1:T-tau, delta in 1:tau], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s in 1:n_drones))
     
-    # Risk objective with integer indices
+    #Risk objective with integer indices
     risk_idx = zeros(T, length(GridpointsDrones))
     for t in 1:T
         for (k, point) in enumerate(GridpointsDrones)
+            # if point in GroundStationSet #Ground stations don't add to objective, so no need for drones to go there. Risk is set to 0.
+            #     risk_idx[t,k] = 0.0
+            # else
             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+            # end
         end
     end
+
+    #capacity constraint on charging stations
+    # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
     
+
     @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)))
     
     # Initialize constraint containers
@@ -911,10 +938,11 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         # For each drone, sum over charging stations (by index)
         charging_station_idx = [grid_to_idx[station] for station in ChargingStations]
         charging_station_idxs = 1:length(ChargingStations)  # Indices into c array
+        c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
         
         constraint = @constraint(model, 
                                sum(c[i,1,s] for i in charging_station_idxs) + 
-                               sum(a[grid_to_idx[station],1,s] for station in ChargingStations) == 1)
+                               sum(a[c_index_to_grid_idx[i],1,s] for i in charging_station_idx) == 1)
         push!(routing_model.init_constraints, constraint)
     end
     
@@ -930,6 +958,9 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     t3 = time_ns() / 1e9
     println("Creating init constraints took ", t2 - t1, " seconds")
     println("Optimizing model took ", t3 - t2, " seconds")
+
+    println("Drone starting positions (Julia): ", [grid_to_idx[station] for station in ChargingStations])
+    println("Charging Stations (Julia): ", ChargingStations)
     
     # Extract results
     println("Solver Status: ", termination_status(model))

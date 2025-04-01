@@ -165,6 +165,10 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)
 
+    charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
+    
+    # Debugging Print
+    print(f"Charging Stations (Python, after conversion): {charging_stations_locations}")
     # print(f"ground_sensor_locations: {ground_sensor_locations}")
     # print(f"charging_stations_locations: {charging_stations_locations}")
 
