@@ -1,0 +1,82 @@
+{
+  "initial_drone_locations": [
+    [
+      10,
+      10
+    ]
+  ],
+  "steps": [
+    {
+      "timestep": 0,
+      "drone_locations": [
+        [
+          12,
+          10
+        ]
+      ],
+      "drone_batteries": [
+        [
+          100,
+          100
+        ]
+      ],
+      "actions": [
+        [
+          "move",
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "timestep": 1,
+      "drone_locations": [
+        [
+          12,
+          10
+        ]
+      ],
+      "drone_batteries": [
+        [
+          100,
+          100
+        ]
+      ],
+      "actions": [
+        [
+          "move",
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "timestep": 2,
+      "drone_locations": [
+        [
+          12,
+          10
+        ]
+      ],
+      "drone_batteries": [
+        [
+          100,
+          100
+        ]
+      ],
+      "actions": [
+        [
+          "move",
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  ]
+}
