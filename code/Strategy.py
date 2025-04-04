@@ -112,6 +112,8 @@ class DroneRoutingStrategy():
 #### RANDOM STRATEGIES ####
 
 class RandomSensorPlacementStrategy(SensorPlacementStrategy):
+    print("=== TEST PRINT: Entered RandomPlacementStrategy class definition ===")
+
     """
     Sensor placement strategy that places sensors randomly.
     """
@@ -256,6 +258,8 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
         print("calling julia optimization model")
         x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_2(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         print("optimization finished")
+        print("Charging Station Locations from Julia Optimization Model: ", self.charging_station_locations)
+
 
         
         self.ground_sensor_locations = list(x_vars)
@@ -657,6 +661,8 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
 #         return self.current_solution[(self.call_counter - 1) % self.reevaluation_step]
 
 class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
+    print("=== TEST PRINT: Entered DroneRoutingOptimizationModelReuseIndex class definition ===")
+
     """
     Drone routing strategy that uses the model reuse approach for improved performance.
     This class is functionally equivalent to DroneRoutingOptimizationSlow but uses model
@@ -697,10 +703,14 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         if "optimization_horizon" not in custom_initialization_parameters:
             raise ValueError("optimization_horizon is not defined")
         self.optimization_horizon = custom_initialization_parameters["optimization_horizon"]
+
+        # Store original charging stations as class attribute
+        self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
         
         # Convert to Julia indexing (Python 0-based → Julia 1-based)
         self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
         self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
+
         
     def get_initial_drone_locations(self):
         """
@@ -714,7 +724,7 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         # print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
         # print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
         # print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
-        
+
         # Create the reusable routing model
         self.routing_model = jl.create_index_routing_model(
             self.custom_initialization_parameters["burnmap_filename"],
@@ -742,6 +752,9 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         self.call_counter = 0
         
         print("Initial optimization finished")
+        print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
+
+
         return initial_positions
         
     def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
