@@ -640,7 +640,7 @@ function solve_init_routing(routing_model::RoutingModel, reevaluation_step)
     for (i, t, s) in selected_charge_indices
         movement_plan[t][s] = ("charge", i)  # Charge at station i
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
@@ -723,7 +723,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
     for (i, t, s) in selected_charge_indices
         movement_plan[t][s] = ("charge", i)  # Charge at station i
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
@@ -955,7 +955,7 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
             end
         end
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
@@ -1046,6 +1046,6 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
             end
         end
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end

@@ -254,7 +254,7 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
      
         # Call the Julia optimization function
         print("calling julia optimization model")
-        x_vars, y_vars = jl.ground_charging_opt_model_grid(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_2(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         print("optimization finished")
 
         
