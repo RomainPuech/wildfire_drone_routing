@@ -951,14 +951,14 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time - sum(a[i,1,s] for i in 1:length(GridpointsDrones))))
     end
 
-    #Capacity of each charging station is at most capacity_charging
+    #Capacity of each charging stationin the beginning is at most capacity_charging
     capacity_charging = 2
-    for i in 1:length(ChargingStations), t in 1:T
+    for i in 1:length(ChargingStations)
         charging_station_idx = [grid_to_idx[station] for station in ChargingStations]
         charging_station_idxs = 1:length(ChargingStations)  # Indices into c array
         c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
         
-        constraint = @constraint(model, sum(c[i,t,s] for s in 1:n_drones) + sum(a[grid_to_idx[ChargingStations[i]],1,s] for s in 1:n_drones) <= capacity_charging)
+        constraint = @constraint(model, sum(c[i,1,s] for s in 1:n_drones) + sum(a[grid_to_idx[ChargingStations[i]],1,s] for s in 1:n_drones) <= capacity_charging)
         push!(routing_model.init_constraints, constraint)
     end
     
@@ -969,7 +969,16 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     println("Creating init constraints took ", t2 - t1, " seconds")
     println("Optimizing model took ", t3 - t2, " seconds")
 
-    println("Drone starting positions (Julia): ", [grid_to_idx[station] for station in ChargingStations])
+    for s in 1:n_drones
+        for i in 1:length(ChargingStations)
+            if value(a[grid_to_idx[ChargingStations[i]],1,s]) ≈ 1
+                println("Drone flying positions (Julia): ", [GridpointsDrones[grid_to_idx[ChargingStations[i]]] for station in ChargingStations])
+            end
+            if value(c[i,1,s]) ≈ 1
+                println("Drone charging positions (Julia): ", [GridpointsDrones[grid_to_idx[ChargingStations[i]]] for station in ChargingStations])
+            end               
+        end
+    end
     println("Charging Stations (Julia): ", ChargingStations)
     
     # Extract results
@@ -1090,3 +1099,145 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
     
     return movement_plan[1:reevaluation_step]
 end
+
+
+# MIN DETECTION time
+
+# function create_index_routing_model_mindetection(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time)
+#     t1 = time_ns() / 1e9
+#     risk_pertime = load_burn_map(risk_pertime_file)
+#     _, N, M = size(risk_pertime)
+#     T = optimization_horizon
+    
+#     # Convert Python lists of tuples to Julia Vector of tuples if needed
+#     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
+#     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
+#     GroundStationSet = Set(GroundStations)  # faster lookup
+        
+#     I = [(x, y) for x in 1:N for y in 1:M]
+    
+#     # Get grid points and convert from Set to Vector
+#     GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+#     GridpointsDrones = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDrones_set))
+#     GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
+#     GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set))
+    
+#     # precomputing the closest distance to a charging station for each gridpoint
+#     precomputed_closest_distance_to_charging_station = closest_distances(ChargingStations, GridpointsDrones)
+    
+#     model = Model(Gurobi.Optimizer)
+#     set_silent(model)
+    
+#     # Defining the variables using simple integers for position indices
+#     # Transform grid points to integer indices
+#     grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
+#     charging_idx = [grid_to_idx[point] for point in ChargingStations]
+#     ground_idx = [grid_to_idx[point] for point in intersect(GridpointsDrones,GroundStations)]
+#     c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
+    
+#     # Create variables with integer indices
+#     a = @variable(model, [i=1:length(GridpointsDrones), t=1:T, s=1:n_drones], Bin)
+#     c = @variable(model, [i=1:length(ChargingStations), t=1:T, s=1:n_drones], Bin)
+#     b = @variable(model, [t=1:T, s=1:n_drones], Int)
+#     tau = @variable(model, [i=1:length(GridpointsDrones), s = 1:n_drones], Int)
+    
+#     # Common constraints
+#     # Each drone either charges or flies, not both
+#     @constraint(model, [t=1:T, s=1:n_drones], sum(a[i,t,s] for i=1:length(GridpointsDrones)) + sum(c[i,t,s] for i=1:length(ChargingStations)) == 1)
+
+#     # Movement constraints need to be updated to use integer indices
+#     # Map each grid point to its neighbors using integer indices
+#     neighbors_map = Dict()
+#     for (i, point) in enumerate(GridpointsDrones)
+#         neighbors_idx = [grid_to_idx[p] for p in GridpointsDrones if p in neighbors_and_point(point) && haskey(grid_to_idx, p)]
+#         neighbors_map[i] = neighbors_idx
+#     end
+    
+#     # Charging stations map
+#     charging_map = Dict()
+#     for (i, point) in enumerate(ChargingStations)
+#         charging_map[i] = grid_to_idx[point]
+#     end
+    
+#     for (i, point) in enumerate(ChargingStations)
+#         j = grid_to_idx[point]
+#         for t in 1:T-1, s in 1:n_drones
+#             @constraint(model, c[i,t+1,s] + a[j,t+1,s] <= sum(a[k,t,s] for k in neighbors_map[j]) + c[i,t,s])
+#             #@constraint(model, a[j,t,s] <= sum(a[k,t+1,s] for k in neighbors_map[j]) + c[i,t+1,s]) #TODO is it correct to remove this constraint?
+#         end
+#     end
+    
+#     for j_idx in 1:length(GridpointsDrones)
+#         point = GridpointsDrones[j_idx]
+#         if !(point in ChargingStations)  # If not a charging station
+#             for t in 1:T-1, s in 1:n_drones
+#                 @constraint(model, a[j_idx,t+1,s] <= sum(a[k,t,s] for k in neighbors_map[j_idx]))
+#                 #@constraint(model, a[j_idx,t,s] <= sum(a[k,t+1,s] for k in neighbors_map[j_idx])) #TODO is it correct to remove this constraint?
+#             end
+#         end
+#     end
+    
+#     # Min/max battery level constraints
+#     @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
+    
+#     # Battery dynamics
+#     # bilinear version
+#     # @constraint(model, [t=1:T-1, s=1:n_drones], 
+#     #     b[t+1,s] == b[t,s] - sum(a[i,t+1,s] for i=1:length(GridpointsDrones)) + 
+#     #     (max_battery_time - b[t,s]) * sum(c[i,t+1,s] for i=1:length(ChargingStations)))
+#     # linear version
+#     @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
+#     @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+#         b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in 1:length(ChargingStations)))
+
+#     # No suicide constraint
+#     # distance from closest charging station
+#     @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones)], 
+#                 b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
+
+#     # Create objective variables with integer indices
+#     theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
+#     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
+#     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
+#     @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
+
+#     #Risk objective with integer indices
+#     risk_idx = zeros(T, length(GridpointsDrones))
+#     for t in 1:T
+#         for (k, point) in enumerate(GridpointsDrones)
+#             # if k in charging_idx
+#             #     risk_idx[t, k] = 0.0  # no reward for drone coverage
+#             # else
+#             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+#             # end
+#         end
+#     end
+
+#     #difference with previous due to minimizing detection time
+#     wildfire_exp = []
+#     for i in 1:length(GridpointsDrones)
+#         wildfire_exp[i] = sum(t*risk_idx[t,i] for t = 1:T) 
+#     end
+
+#     @constraint(model, [i in 1:length(GridpointDrones), s in 1:n_drones], tau[i,s] >= wildfire_exp[i])
+
+#     for i in 1:length(GridpointsDrones), s in 1:n_drones
+#         lower_bound_t = max(1, ceil(wildfire_exp[i]))  # Find the minimum time to consider for detection
+    
+#         @constraint(model, tau[i, s] >= sum(t * a[i, t, s] for t in lower_bound_t:T))
+#     end
+    
+
+#     @objective(model, Min, sum(risk_idx[t,k]*(tau[k,s] - wildfire_exp[k]) for t=1:T, k=1:length(GridpointsDrones)))
+
+    
+#     # Initialize constraint containers
+#     init_constraints = ConstraintRef[]
+#     next_move_constraints = ConstraintRef[]
+#     t2 = time_ns() / 1e9
+#     println("Model created in ", t2 - t1, " seconds")
+#     println("DEBUG: Charging Stations received in Julia:")
+#     println(ChargingStations)
+#     return IndexRoutingModel(model, a, c, b, theta, init_constraints, next_move_constraints, 
+#                         GridpointsDrones, ChargingStations, risk_pertime, T, n_drones, grid_to_idx, charging_map, max_battery_time)
+# end

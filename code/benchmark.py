@@ -185,8 +185,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     Routing_Strat = drone_routing_strategy(automatic_initialization_parameters, custom_initialization_parameters)
     # Print initial drone locations
-    initial_drone_locations = Routing_Strat.get_initial_drone_locations()
-    print(f"\nDEBUG: Initial Drone Locations: {initial_drone_locations}")
+    # initial_drone_locations = Routing_Strat.get_initial_drone_locations()
+    # print(f"\nDEBUG: Initial Drone Locations: {initial_drone_locations}")
 
     drones = [Drone(x,y,state,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in Routing_Strat.get_initial_drone_locations()]
     drone_locations = [drone.get_position() for drone in drones]
@@ -243,6 +243,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                     fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
 
+        # Save current positions of all drones before moving them
+        drone_locations_history.append([(drone.x, drone.y) for drone in drones])
+
+        # Print positions of drones at the current time step
+        print(f"Time step {time_step}: Drone positions: {drone_locations_history[-1]}")
+
         # no fire detected, onto next time step
         t_found +=1
 
@@ -264,6 +270,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         # 3. Move the drones
         for drone_index, (drone, action) in enumerate(zip(drones, actions)):
             old_x, old_y = drone_locations[drone_index]
+
+            # if action[0] == 'stay':
+            #     # Log the 'stay' command with the drone index and current time step
+            #     stay_actions.append((drone_index, time_step))
+            #     print(f"Drone {drone_index} received 'stay' command at time step {time_step}", flush=True) 
+
             new_x, new_y, new_distance_battery, new_time_battery, new_state = drone.route(action)
 
             drone_locations[drone_index] = (new_x, new_y)

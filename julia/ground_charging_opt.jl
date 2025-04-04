@@ -135,7 +135,7 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
 
     I = [(x, y) for x in 1:N for y in 1:M]
 
-    # I_prime = [(i, j) for (i, j) in I if risk_pertime[5, i, j] > 0.05]
+    I_prime = [(i, j) for (i, j) in I if risk_pertime[5, i, j] > 0.3]
     I_prime = I
     I_second = I_prime
 
@@ -154,7 +154,8 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
     y = @variable(model, [i in I_second], Bin) # charging station variables
 
-    @objective(model, Max, sum((1/T)*sum(risk_pertime[t,i...] for t in 1:T)*x[i] for i in I_prime) + sum((1/T)*sum(risk_pertime[t,k...] for t in 1:T)*y[k] for k in I_second))
+    # @objective(model, Max, sum((1/T)*sum(risk_pertime[t,i...] for t in 1:T)*x[i] for i in I_prime) + sum((1/T)*sum(risk_pertime[t,k...] for t in 1:T)*y[k] for k in I_second))
+    @objective(model, Max, sum(risk_pertime[T,i...]*x[i] for i in I_prime) + sum(risk_pertime[T,k...]*y[k] for k in I_second))
 
     @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
     @constraint(model, sum(x) <= N_grounds)
