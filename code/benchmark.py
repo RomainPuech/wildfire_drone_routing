@@ -153,6 +153,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
+
     # 1. Get layout parameters
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
@@ -170,16 +171,23 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)
 
+    charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
+
+  
     # print(f"ground_sensor_locations: {ground_sensor_locations}")
     # print(f"charging_stations_locations: {charging_stations_locations}")
 
     # add computed positions to initialization parameters
     automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations
     automatic_initialization_parameters["charging_stations_locations"] = charging_stations_locations
-
+    
     # 3. Initialize drones
 
     Routing_Strat = drone_routing_strategy(automatic_initialization_parameters, custom_initialization_parameters)
+    # Print initial drone locations
+    initial_drone_locations = Routing_Strat.get_initial_drone_locations()
+    print(f"\nDEBUG: Initial Drone Locations: {initial_drone_locations}")
+
     drones = [Drone(x,y,state,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in Routing_Strat.get_initial_drone_locations()]
     drone_locations = [drone.get_position() for drone in drones]
     drone_batteries = [drone.get_battery() for drone in drones]

@@ -640,7 +640,7 @@ function solve_init_routing(routing_model::RoutingModel, reevaluation_step)
     for (i, t, s) in selected_charge_indices
         movement_plan[t][s] = ("charge", i)  # Charge at station i
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
@@ -723,7 +723,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
     for (i, t, s) in selected_charge_indices
         movement_plan[t][s] = ("charge", i)  # Charge at station i
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
@@ -761,6 +761,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Convert Python lists of tuples to Julia Vector of tuples if needed
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
+    GroundStationSet = Set(GroundStations)  # faster lookup
     
     # println("ChargingStations: ", ChargingStations)
     
@@ -786,8 +787,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
     charging_idx = [grid_to_idx[point] for point in ChargingStations]
     ground_idx = [grid_to_idx[point] for point in intersect(GridpointsDrones,GroundStations)]
-    
-    # println("grid_to_idx for ChargingStations: ", [grid_to_idx[point] for point in ChargingStations])
+    c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
     
     # Create variables with integer indices
     a = @variable(model, [i=1:length(GridpointsDrones), t=1:T, s=1:n_drones], Bin)
@@ -844,10 +844,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
         b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in 1:length(ChargingStations)))
 
     # No suicide constraint
-    # wrong version: distance from all charging stations rather than minimum distance
-    # @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones), j_idx=1:length(ChargingStations)], 
-    #             b[T,s] >= L_inf_distance(GridpointsDrones[i_idx], ChargingStations[j_idx])*a[i_idx,T,s])
-    # correct version: distance from closest charging station
+    # distance from closest charging station
     @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones)], 
                 b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
 
@@ -855,20 +852,47 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
+    @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
 
-    #Take into account ground sensors in Julia Objective function
-    if !isempty(ground_idx)
-        @constraint(model, [t=1:T, k in ground_idx], theta[t,k] == 0)
-    end
+    # #Take into account ground sensors in Julia Objective function
+    # if !isempty(ground_idx)
+    #     @constraint(model, [t=1:T, k in ground_idx], theta[t,k] <= 0.1)
+    # end
+
+    # ground_idx_set = Set(ground_idx)  # for faster lookup
+
+    # risk_idx = zeros(T, length(GridpointsDrones))
+    # for t in 1:T
+    #     for (k, point) in enumerate(GridpointsDrones)
+    #         if k in ground_idx_set
+    #             risk_idx[t, k] = 0.0  # no reward for drone coverage
+    #         else
+    #             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+    #         end
+    #     end
+    # end
+
+   #once point is covered by drone, the next tau steps the risk is zero
+   #MAKES IT VERY SLOW
+    # tau = 2
+    # @constraint(model, [k in 1:length(GridpointsDrones), t in 1:T-tau, delta in 1:tau], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s in 1:n_drones))
     
-    # Risk objective with integer indices
+    #Risk objective with integer indices
     risk_idx = zeros(T, length(GridpointsDrones))
     for t in 1:T
         for (k, point) in enumerate(GridpointsDrones)
+            # if k in charging_idx
+            #     risk_idx[t, k] = 0.0  # no reward for drone coverage
+            # else
             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+            # end
         end
     end
+
+    # #capacity constraint on charging stations
+    # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
     
+
     @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)))
     
     # Initialize constraint containers
@@ -876,6 +900,8 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     next_move_constraints = ConstraintRef[]
     t2 = time_ns() / 1e9
     println("Model created in ", t2 - t1, " seconds")
+    println("DEBUG: Charging Stations received in Julia:")
+    println(ChargingStations)
     return IndexRoutingModel(model, a, c, b, theta, init_constraints, next_move_constraints, 
                         GridpointsDrones, ChargingStations, risk_pertime, T, n_drones, grid_to_idx, charging_map, max_battery_time)
 end
@@ -911,10 +937,11 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         # For each drone, sum over charging stations (by index)
         charging_station_idx = [grid_to_idx[station] for station in ChargingStations]
         charging_station_idxs = 1:length(ChargingStations)  # Indices into c array
+        c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
         
         constraint = @constraint(model, 
                                sum(c[i,1,s] for i in charging_station_idxs) + 
-                               sum(a[grid_to_idx[station],1,s] for station in ChargingStations) == 1)
+                               sum(a[grid_to_idx[ChargingStations[i]],1,s] for i in charging_station_idxs) == 1)
         push!(routing_model.init_constraints, constraint)
     end
     
@@ -923,6 +950,17 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     for s in 1:n_drones
         push!(routing_model.init_constraints, @constraint(model, b[1,s] == max_battery_time - sum(a[i,1,s] for i in 1:length(GridpointsDrones))))
     end
+
+    #Capacity of each charging station is at most capacity_charging
+    capacity_charging = 2
+    for i in 1:length(ChargingStations), t in 1:T
+        charging_station_idx = [grid_to_idx[station] for station in ChargingStations]
+        charging_station_idxs = 1:length(ChargingStations)  # Indices into c array
+        c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
+        
+        constraint = @constraint(model, sum(c[i,t,s] for s in 1:n_drones) + sum(a[grid_to_idx[ChargingStations[i]],1,s] for s in 1:n_drones) <= capacity_charging)
+        push!(routing_model.init_constraints, constraint)
+    end
     
     # Optimize
     t2 = time_ns() / 1e9
@@ -930,6 +968,9 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     t3 = time_ns() / 1e9
     println("Creating init constraints took ", t2 - t1, " seconds")
     println("Optimizing model took ", t3 - t2, " seconds")
+
+    println("Drone starting positions (Julia): ", [grid_to_idx[station] for station in ChargingStations])
+    println("Charging Stations (Julia): ", ChargingStations)
     
     # Extract results
     println("Solver Status: ", termination_status(model))
@@ -955,7 +996,7 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
             end
         end
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
@@ -1046,6 +1087,6 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
             end
         end
     end
-    
+    println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
