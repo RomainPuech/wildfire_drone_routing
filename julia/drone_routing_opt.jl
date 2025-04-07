@@ -954,9 +954,6 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     #Capacity of each charging stationin the beginning is at most capacity_charging
     capacity_charging = 2
     for i in 1:length(ChargingStations)
-        charging_station_idx = [grid_to_idx[station] for station in ChargingStations]
-        charging_station_idxs = 1:length(ChargingStations)  # Indices into c array
-        c_index_to_grid_idx = Dict(i => grid_to_idx[ChargingStations[i]] for i in 1:length(ChargingStations))
         
         constraint = @constraint(model, sum(c[i,1,s] for s in 1:n_drones) + sum(a[grid_to_idx[ChargingStations[i]],1,s] for s in 1:n_drones) <= capacity_charging)
         push!(routing_model.init_constraints, constraint)
@@ -971,16 +968,15 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
 
     for s in 1:n_drones
         for i in 1:length(ChargingStations)
-            if value(a[grid_to_idx[ChargingStations[i]],1,s]) ≈ 1
-                println("Drone flying positions (Julia): ", [GridpointsDrones[grid_to_idx[ChargingStations[i]]] for station in ChargingStations])
+            if value(a[grid_to_idx[ChargingStations[i]],1,s]) >= 0.9
+                # println("Drone flying positions (Julia): ", s, [GridpointsDrones[grid_to_idx[ChargingStations[i]]] for station in ChargingStations])
+                # println("Drone flying index (Julia): ", [grid_to_idx[ChargingStations[i]] for station in ChargingStations])
             end
-            if value(c[i,1,s]) ≈ 1
-                println("Drone charging positions (Julia): ", [GridpointsDrones[grid_to_idx[ChargingStations[i]]] for station in ChargingStations])
+            if value(c[i,1,s]) >= 0.9
             end               
         end
     end
-    println("Charging Stations (Julia): ", ChargingStations)
-    
+
     # Extract results
     println("Solver Status: ", termination_status(model))
     println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
@@ -993,13 +989,13 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         for s in 1:n_drones
             # Check fly actions
             for i in 1:length(GridpointsDrones)
-                if value(a[i,t,s]) ≈ 1
+                if value(a[i,t,s]) >= 0.9 1
                     movement_plan[t][s] = ("fly", GridpointsDrones[i])
                 end
             end
             # Check charge actions
             for i in 1:length(ChargingStations)
-                if value(c[i,t,s]) ≈ 1
+                if value(c[i,t,s]) >= 0.9 1
                     movement_plan[t][s] = ("charge", ChargingStations[i])
                 end
             end
@@ -1084,13 +1080,13 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
         for s in 1:n_drones
             # Check fly actions
             for i in 1:length(GridpointsDrones)
-                if value(a[i,t,s]) ≈ 1
+                if value(a[i,t,s]) >= 0.9
                     movement_plan[t][s] = ("fly", GridpointsDrones[i])
                 end
             end
             # Check charge actions
             for i in 1:length(ChargingStations)
-                if value(c[i,t,s]) ≈ 1
+                if value(c[i,t,s]) >= 0.9
                     movement_plan[t][s] = ("charge", ChargingStations[i])
                 end
             end
