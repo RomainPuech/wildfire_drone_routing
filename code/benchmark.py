@@ -47,13 +47,14 @@ def return_no_custom_parameters():
     return {}
 
 def build_custom_init_params(input_dir, layout_name):
+    print(f"Building custom init params for {layout_name} in {input_dir}")
     base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
 
     return {
         "burnmap_filename": f"{base_path}/burn_map.npy",
         "log_file": f"{base_path}/custom_params/{layout_name}.json",
         "call_every_n_steps": 5,               
-        "optimization_horizon": 20   
+        "optimization_horizon": 20      
     }
 
 def get_burnmap_parameters(input_dir: str):
@@ -443,8 +444,9 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         return_history (bool, optional): If True, return the history of drone positions.
         custom_initialization_parameters_function (function, optional): Function for custom initialization parameters.
         max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
-    Prints:
-        Average time steps to fire detection and detection statistics by device type.
+    
+    Returns:
+        dict: Metrics dictionary containing benchmark results.
     """
     if file_format not in ["npy", "jpg"]:
         raise ValueError("file_format must be 'npy' or 'jpg'")
@@ -476,8 +478,19 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     drone_entropies = []
     sensor_entropies = []
 
-
-    custom_initialization_parameters = custom_initialization_parameters_function(input_dir, "layoutA") #NEED TO CHANGE LATER TO NOT say LayoutA everytime
+    # Extract layout name from input directory path
+    layout_name = os.path.basename(os.path.dirname(input_dir))
+    
+    # Check the number of parameters the function accepts
+    import inspect
+    sig = inspect.signature(custom_initialization_parameters_function)
+    param_count = len(sig.parameters)
+    
+    # Call the function with the appropriate number of parameters
+    if param_count >= 2:
+        custom_initialization_parameters = custom_initialization_parameters_function(input_dir, layout_name)
+    else:
+        custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
     
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
         #print(f"Processing scenario {file}")
@@ -512,17 +525,50 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         drone_entropies.append(results["avg_drone_entropy"])
         sensor_entropies.append(results["sensor_entropy"])
     
-    print(f"Avg time steps to fire detection: {delta_ts / max(1, (N_SCENARII - fails))}")
-    for device in devices.keys():
-        print(f"Fire found {round(devices[device] / N_SCENARII * 100, 2)}% of the time by {device}")
-
-    print(f"Avg routing execution time: {np.mean(total_execution_times):.4f} sec")
-    print(f"Avg fire size at detection (cells): {np.mean(total_fire_sizes):.2f}")
-    print(f"Avg fire size at detection (% of map): {np.mean(total_fire_percentages):.2f}%")
-    print(f"Avg percentage of map explored by drones: {np.mean(map_explored):.2f}%")
-    print(f"Avg total distance traveled by drones: {np.mean(total_distances):.2f} units")
-    print(f"Avg drone entropy per timestep: {np.mean(drone_entropies):.4f}")
-    print(f"Avg sensor placement entropy: {np.mean(sensor_entropies):.4f}")
+    # Calculate metrics
+    avg_time_to_detection = delta_ts / max(1, (N_SCENARII - fails))
+    device_percentages = {device: round(count / N_SCENARII * 100, 2) for device, count in devices.items()}
+    avg_execution_time = np.mean(total_execution_times)
+    avg_fire_size = np.mean(total_fire_sizes)
+    avg_fire_percentage = np.mean(total_fire_percentages)
+    avg_map_explored = np.mean(map_explored)
+    avg_distance = np.mean(total_distances)
+    avg_drone_entropy = np.mean(drone_entropies)
+    avg_sensor_entropy = np.mean(sensor_entropies)
+    
+    # Create metrics dictionary
+    metrics = {
+        "avg_time_to_detection": avg_time_to_detection,
+        "device_percentages": device_percentages,
+        "avg_execution_time": avg_execution_time,
+        "avg_fire_size": avg_fire_size,
+        "avg_fire_percentage": avg_fire_percentage,
+        "avg_map_explored": avg_map_explored,
+        "avg_distance": avg_distance,
+        "avg_drone_entropy": avg_drone_entropy,
+        "avg_sensor_entropy": avg_sensor_entropy,
+        "raw_execution_times": total_execution_times,
+        "raw_fire_sizes": total_fire_sizes,
+        "raw_fire_percentages": total_fire_percentages,
+        "raw_map_explored": map_explored,
+        "raw_distances": total_distances,
+        "raw_drone_entropies": drone_entropies,
+        "raw_sensor_entropies": sensor_entropies
+    }
+    
+    # Still print the results for console feedback
+    print(f"Avg time steps to fire detection: {avg_time_to_detection}")
+    for device, percentage in device_percentages.items():
+        print(f"Fire found {percentage}% of the time by {device}")
+    print(f"Avg routing execution time: {avg_execution_time:.4f} sec")
+    print(f"Avg fire size at detection (cells): {avg_fire_size:.2f}")
+    print(f"Avg fire size at detection (% of map): {avg_fire_percentage:.2f}%")
+    print(f"Avg percentage of map explored by drones: {avg_map_explored:.2f}%")
+    print(f"Avg total distance traveled by drones: {avg_distance:.2f} units")
+    print(f"Avg drone entropy per timestep: {avg_drone_entropy:.4f}")
+    print(f"Avg sensor placement entropy: {avg_sensor_entropy:.4f}")
+    
+    return metrics
 
 def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy"):
     """
@@ -537,6 +583,9 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
         starting_time (int, optional): Time step at which the wildfire starts.
         max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
         file_format (str, optional): Format of the scenario files.
+        
+    Returns:
+        dict: Metrics dictionary containing benchmark results.
     """
     if file_format not in ["npy", "jpg"]:
         raise ValueError("file_format must be 'npy' or 'jpg'")
@@ -565,59 +614,7 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     #print("Precomputing sensor placement and drone routing strategy on canonical scenario...")
     run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir) 
     #print("running on all scenarios...")
-    run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format)
-
-    
-
-
-
-def run_ground_log(input_dir, output_file, ground_placement_strategy, ground_parameters, max_n_scenarii=None):
-    """
-    Log ground sensor and charging station placements for multiple scenarios to a JSON file.
-
-    Args:
-        input_dir (str): Directory containing scenario files.
-        output_file (str): Path to output JSON file.
-        ground_placement_strategy (function): Strategy for placing ground sensors and charging stations.
-        ground_parameters (tuple): Parameters for ground placement strategy.
-        max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
-    """
-    if not input_dir.endswith('/'):
-        input_dir += '/'
-
-    iterable = listdir_txt_limited(input_dir, max_n_scenarii)
-    all_placements = []
-    for file in tqdm.tqdm(iterable, total = max_n_scenarii):
-        ground_sensor_locations, charging_stations_locations =  ground_placement_strategy(*ground_parameters).get_locations()
-        all_placements.append((ground_sensor_locations,charging_stations_locations))
-    with open(output_file, "w") as outfile:
-        json.dump(all_placements, outfile)
-
-def benchmark_on_sim2real_dataset(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0):
-    """
-    Run benchmarks on a simulation-to-real-world dataset structure.
-
-    Args:
-        dataset_folder_name (str): Root folder containing layout folders with scenario data.
-        ground_placement_strategy (function): Strategy for placing ground sensors and charging stations.
-        drone_routing_strategy (function): Strategy for controlling drone movements.
-        ground_parameters (tuple): Parameters for ground placement strategy.
-        routing_parameters (tuple): Parameters for routing strategy.
-        max_n_scenarii (int, optional): Maximum number of scenarios to process per layout. If None, processes all scenarios.
-        starting_time (int, optional): Time step at which the wildfire starts.
-    """
-    if not dataset_folder_name.endswith('/'):
-        dataset_folder_name += '/'
-    
-    for layout_folder in os.listdir(dataset_folder_name):
-        if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
-        run_benchmark_scenarii_sequential(dataset_folder_name + layout_folder + "/scenarii/",
-                                          ground_placement_strategy, 
-                                          drone_routing_strategy, 
-                                          custom_initialization_parameters_function, 
-                                          custom_step_parameters_function, 
-                                          starting_time=starting_time, 
-                                          max_n_scenarii=max_n_scenarii)
+    return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format)
 
 def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None):
     """
@@ -631,21 +628,36 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
         routing_parameters (tuple): Parameters for routing strategy.
         max_n_scenarii (int, optional): Maximum number of scenarios to process per layout. If None, processes all scenarios.
         starting_time (int, optional): Time step at which the wildfire starts.
+        
+    Returns:
+        dict: Dictionary mapping layout names to their respective metric dictionaries.
     """
     if not dataset_folder_name.endswith('/'):
         dataset_folder_name += '/'
     
+    all_metrics = {}
+    
     for layout_folder in listdir_folder_limited(dataset_folder_name, max_n_layouts):
         print(f"\n --- \n Processing layout {layout_folder}")
-        if not os.path.exists(layout_folder + "/scenarii/"):continue
-        run_benchmark_scenarii_sequential_precompute(layout_folder + "/scenarii/",
-                                          ground_placement_strategy, 
-                                          drone_routing_strategy, 
-                                          custom_initialization_parameters_function, 
-                                          custom_step_parameters_function, 
-                                          starting_time=starting_time, 
-                                          max_n_scenarii=max_n_scenarii)
+        layout_name = os.path.basename(layout_folder)
         
+        if not os.path.exists(layout_folder + "/scenarii/"):
+            print(f"No scenarii folder found in {layout_folder}, skipping...")
+            continue
+            
+        metrics = run_benchmark_scenarii_sequential_precompute(
+            layout_folder + "/scenarii/",
+            ground_placement_strategy, 
+            drone_routing_strategy, 
+            custom_initialization_parameters_function, 
+            custom_step_parameters_function, 
+            starting_time=starting_time, 
+            max_n_scenarii=max_n_scenarii
+        )
+        
+        all_metrics[layout_name] = metrics
+    
+    return all_metrics
 
 def run_benchmark_for_strategy(input_dir: str,
                                strategy_folder: str,
@@ -693,7 +705,7 @@ def run_benchmark_for_strategy(input_dir: str,
     # === Create sensor placement strategy ===
     print("[run_benchmark_for_strategy] Running sensor placement strategy...")
 
-    custom_init_params = custom_init_params_fn(input_dir, layout_name="layout_A")
+    custom_init_params = custom_init_params_fn(input_dir, layout_name=os.path.basename(input_dir))
 
     sensor_placement_strategy_instance = SensorPlacementStrategyClass(automatic_init_params, custom_init_params)
     drone_routing_strategy_instance = DroneRoutingStrategyClass(automatic_init_params, custom_init_params)
