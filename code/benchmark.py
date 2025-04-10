@@ -31,15 +31,15 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
     return getattr(module, class_name)
 
 
-def get_automatic_layout_parameters(scenario:np.ndarray, input_dir:str=''):
+def get_automatic_layout_parameters(scenario:np.ndarray, input_dir:str='', simulation_parameters:dict={}):
     return {
         "N": scenario.shape[1],
         "M": scenario.shape[2],
-        "max_battery_distance": -10,
-        "max_battery_time": 20,
-        "n_drones": 5,
-        "n_ground_stations": 10,
-        "n_charging_stations": 5,
+        "max_battery_distance": simulation_parameters.get("max_battery_distance", -1),
+        "max_battery_time": simulation_parameters.get("max_battery_time", 20),
+        "n_drones": simulation_parameters.get("n_drones", 5),
+        "n_ground_stations": simulation_parameters.get("n_ground_stations", 10),
+        "n_charging_stations": simulation_parameters.get("n_charging_stations", 5),
         "input_dir": input_dir
     }
 
@@ -77,15 +77,17 @@ def compute_entropy(locations, grid_size):
 
     return scipy_entropy(prob_grid)
 
-def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str=''):
+def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}):
     """
     Run a drone routing strategy to create a logfile.
     """
     # 1. Get layout parameters
     if automatic_initialization_parameters_function is None:
-        automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir)
+        automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir, simulation_parameters)
+        print("case 1 : automatic_initialization_parameters: ", automatic_initialization_parameters)
     else:
-        automatic_initialization_parameters = automatic_initialization_parameters_function(canonical_scenario, input_dir)
+        automatic_initialization_parameters = automatic_initialization_parameters_function(canonical_scenario, input_dir, simulation_parameters)
+        print("other case : automatic_initialization_parameters: ", automatic_initialization_parameters)
     
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(automatic_initialization_parameters['input_dir'])
@@ -135,7 +137,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     
     
     
-def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None):
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, simulation_parameters:dict={}):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
@@ -157,7 +159,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 1. Get layout parameters
     if automatic_initialization_parameters_function is None:
-        automatic_initialization_parameters = get_automatic_layout_parameters(scenario)
+        automatic_initialization_parameters = get_automatic_layout_parameters(scenario, simulation_parameters)
     else:
         automatic_initialization_parameters = automatic_initialization_parameters_function(scenario)
     
@@ -431,7 +433,7 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
     for device in devices.keys():
         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
-def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy"):
+def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}):
     """
     Run sequential benchmarks on multiple scenarios.
 
@@ -497,7 +499,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
-            automatic_initialization_parameters = get_automatic_layout_parameters(scenario) #TODO compute them once only per layout rather than per scenario..
+            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, simulation_parameters) #TODO compute them once only per layout rather than per scenario..
         results, _ = run_benchmark_scenario(
             scenario,
             sensor_placement_strategy,
@@ -570,7 +572,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     
     return metrics
 
-def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy"):
+def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}):
     """
     Run benchmarks on multiple scenarios sequentially, precomputing the sensor placement and drone routing strategy.
 
@@ -612,11 +614,11 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     
     # precompute the sensor placement and drone routing strategy on canonical scenario
     #print("Precomputing sensor placement and drone routing strategy on canonical scenario...")
-    run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir) 
+    run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters) 
     #print("running on all scenarios...")
-    return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format)
+    return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters)
 
-def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None):
+def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}):
     """
     Run benchmarks on a simulation-to-real-world dataset structure.
 
@@ -632,6 +634,8 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
     Returns:
         dict: Dictionary mapping layout names to their respective metric dictionaries.
     """
+    print("simulation_parameters: ", simulation_parameters)
+
     if not dataset_folder_name.endswith('/'):
         dataset_folder_name += '/'
     
@@ -652,7 +656,8 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
             custom_initialization_parameters_function, 
             custom_step_parameters_function, 
             starting_time=starting_time, 
-            max_n_scenarii=max_n_scenarii
+            max_n_scenarii=max_n_scenarii,
+            simulation_parameters=simulation_parameters
         )
         
         all_metrics[layout_name] = metrics
@@ -700,7 +705,7 @@ def run_benchmark_for_strategy(input_dir: str,
 
     # load the first scenario to get automatic parameters
     scenario = load_scenario_fn(first_file)
-    automatic_init_params = get_automatic_layout_parameters(scenario)
+    automatic_init_params = get_automatic_layout_parameters(scenario, simulation_parameters)
 
     # === Create sensor placement strategy ===
     print("[run_benchmark_for_strategy] Running sensor placement strategy...")
