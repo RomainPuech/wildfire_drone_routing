@@ -1,4 +1,12 @@
-# Wildfire Drone Routing
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/b5653f58-ff62-40d8-a422-4af13cd0ccd0" width="40%">
+
+</div>
+
+
+
+
+# WILDFIRE-DRONE-BENCH
 
 This library is designed to benchmark sensor placement and drone routing strategies on the "sim2real" dataset. It provides tools for both benchmarking and visualizing the performance of different strategies in wildfire scenarios.
 
