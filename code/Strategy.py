@@ -617,16 +617,16 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         # Extract full action tuples from step 0
         initial_plan = self.current_solution[0]  # list of (code, (x, y))
 
-        # split into positions and states
-        self.initial_positions = [pos for (_, pos) in initial_plan]
-        self.initial_states = [state for (state, _) in initial_plan]
-
+        initial_positions = self.current_solution[0]
         self.call_counter = 0
-
+        
         print("Initial optimization finished")
-        print(f"DEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
+        print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
 
-        return self.initial_positions, self.initial_states
+
+        return initial_positions
+
+        
         
     def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
         """
