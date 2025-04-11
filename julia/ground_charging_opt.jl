@@ -124,7 +124,7 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
 end
 
 #no charging stations allowed within L infinity distance of 4 of each other
-function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
+function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging, max_battery_time)
     println("NEW STRATEGY 2")
 
 
@@ -135,7 +135,7 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
 
     I = [(x, y) for x in 1:N for y in 1:M]
 
-    I_prime = [(i, j) for (i, j) in I if risk_pertime[5, i, j] > 0.3]
+    # I_prime = [(i, j) for (i, j) in I if risk_pertime[T, i, j] > 0.3]
     I_prime = I
     I_second = I_prime
 
@@ -155,13 +155,13 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     y = @variable(model, [i in I_second], Bin) # charging station variables
 
     # @objective(model, Max, sum((1/T)*sum(risk_pertime[t,i...] for t in 1:T)*x[i] for i in I_prime) + sum((1/T)*sum(risk_pertime[t,k...] for t in 1:T)*y[k] for k in I_second))
-    @objective(model, Max, sum(risk_pertime[T,i...]*x[i] for i in I_prime) + sum(risk_pertime[T,k...]*y[k] for k in I_second))
+    @objective(model, Max, sum(risk_pertime[1,i...]*x[i] for i in I_prime) + sum(risk_pertime[1,k...]*y[k] for k in I_second))
 
     @constraint(model, [i in intersect(I_prime, I_second)], x[i] + y[i] <= 1) # 2b
     @constraint(model, sum(x) <= N_grounds)
     @constraint(model, sum(y) <= N_charging) 
     # Precompute valid (i, j) pairs where L∞ distance ≤ 4
-    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 4]
+    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= floor(max_battery_time/2)]
     # Add constraints efficiently
     @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
 

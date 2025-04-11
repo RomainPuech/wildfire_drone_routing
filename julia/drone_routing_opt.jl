@@ -853,30 +853,56 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
     @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
+    
+    # #regularization for drones
+    # detecting_indices = [grid_to_idx[pt] for pt in GridpointsDronesDetecting]
+    # @expression(model, drone_loc[i in detecting_indices, t in 1:T, s in 1:n_drones], a[i,t,s])
+    # lambda = 10  
+    # drone_distance = 3
+    # # penalty_terms = []
 
-    # #Take into account ground sensors in Julia Objective function
-    # if !isempty(ground_idx)
-    #     @constraint(model, [t=1:T, k in ground_idx], theta[t,k] <= 0.1)
+    # close_pairs = [(i, j) for i in detecting_indices, j in detecting_indices if i != j && L_inf_distance(GridpointsDrones[i], GridpointsDrones[j]) < drone_distance]
+
+    # # for t in 1:T, s in 1:n_drones, s2 in s+1:n_drones, (i, j) in close_pairs
+    # # push!(penalty_terms, drone_loc[i,t,s] * drone_loc[j,t,s2])
+    # # end
+
+    # @variable(model, z[i in close_pairs, t in 1:T, s1 in 1:n_drones, s2 in s1+1:n_drones], Bin)
+
+    # for (i, j) in close_pairs, t in 1:T, s1 in 1:n_drones, s2 in 1:n_drones
+    #     if s2 > s1
+    #         @constraint(model, z[(i,j),t,s1,s2] ≥ drone_loc[i,t,s1] + drone_loc[j,t,s2] - 1)
+    #     end
     # end
 
-    # ground_idx_set = Set(ground_idx)  # for faster lookup
+    # #soft penalty overlap
+    # detecting_indices = [grid_to_idx[pt] for pt in GridpointsDronesDetecting]
+    # drone_distance = 2
+    # lambda = 0.1  # Regularization weight
 
-    # risk_idx = zeros(T, length(GridpointsDrones))
-    # for t in 1:T
-    #     for (k, point) in enumerate(GridpointsDrones)
-    #         if k in ground_idx_set
-    #             risk_idx[t, k] = 0.0  # no reward for drone coverage
-    #         else
-    #             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+    # near_charging = Set{Int}()
+    # for (i, pt) in enumerate(GridpointsDronesDetecting)
+    #     for cs in ChargingStations
+    #         if L_inf_distance(pt, cs) <= drone_distance  # or just == 1
+    #             push!(near_charging, i)
+    #             break
     #         end
     #     end
     # end
 
-   #once point is covered by drone, the next tau steps the risk is zero
-   #MAKES IT VERY SLOW
-    # tau = 2
-    # @constraint(model, [k in 1:length(GridpointsDrones), t in 1:T-tau, delta in 1:tau], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s in 1:n_drones))
-    
+    # Precompute neighborhoods
+    neighborhoods = Dict(i => [j for j in detecting_indices if L_inf_distance(GridpointsDrones[i], GridpointsDrones[j]) <= drone_distance] for i in detecting_indices)
+
+    # Define expression for neighborhood overlap
+    @expression(model, overlap[i in detecting_indices, t in 1:T], sum(a[j,t,s] for j in neighborhoods[i], s in 1:n_drones))
+    @variable(model, crowd[i in detecting_indices, t in 1:T] >= 0)
+    for i in detecting_indices, t in 1:T
+        if !(i in near_charging)
+            @constraint(model, crowd[i,t] ≥ overlap[i,t] - 1)
+        else
+            @constraint(model, crowd[i,t] == 0)  # no penalty near charging
+        end
+    end
     #Risk objective with integer indices
     risk_idx = zeros(T, length(GridpointsDrones))
     for t in 1:T
@@ -889,12 +915,13 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
         end
     end
 
-    # #capacity constraint on charging stations
-    # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
-    
+    # @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)) - lambda*sum(penalty_terms))
+    # @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)) - lambda*sum(z))
+    # @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)) - lambda*sum(overlap[i,t] for i in detecting_indices, t in 1:T))
+    # @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)) - lambda*sum(crowd[i,t] for i in detecting_indices, t in 1:T))
+    @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)) - lambda*sum(crowd[i,t] for i in detecting_indices, t in 1:T))
 
-    @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)))
-    
+
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
     next_move_constraints = ConstraintRef[]
