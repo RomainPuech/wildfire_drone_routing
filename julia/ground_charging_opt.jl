@@ -16,7 +16,8 @@ println("installing packages")
 # Pkg.add("Clustering")
 # Pkg.add("NPZ")
 # Pkg.add("NearestNeighbors")
-using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
+# Pkg.add("Statistics")
+using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ, Statistics
 
 include("helper_functions.jl")
 
@@ -160,7 +161,7 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     @constraint(model, sum(x) <= N_grounds)
     @constraint(model, sum(y) <= N_charging) 
     # Precompute valid (i, j) pairs where L∞ distance ≤ 4
-    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 4]
+    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 1]
     # Add constraints efficiently
     @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
 
@@ -175,6 +176,67 @@ function NEW_SENSOR_STRATEGY_2(risk_pertime_file, N_grounds, N_charging)
     println("Took ", (time_ns() / 1e9) - time_start, " seconds")
     println("Average risk equals")
 
+    return selected_x_indices, selected_y_indices
+end
+
+function NEW_SENSOR_STRATEGY_3(risk_pertime_file, N_grounds, N_charging)
+    println("NEW STRATEGY 3 - Optimized for speed")
+
+    time_start = time_ns() / 1e9 
+
+    risk_pertime = load_burn_map(risk_pertime_file)
+    T, N, M = size(risk_pertime)
+
+    I = [(x, y) for x in 1:N for y in 1:M]
+
+    # Precompute average risk for each cell to avoid recalculating it multiple times
+    avg_risk = zeros(N, M)
+    for i in 1:N, j in 1:M
+        avg_risk[i,j] = (1/T) * sum(risk_pertime[t,i,j] for t in 1:T)
+    end
+
+    # prerfilter: keep only cells with risk > 90% of other cells
+    first_quartile_risk = quantile(vec(avg_risk), 0.9)
+    I_prime = [(i, j) for i in 1:N, j in 1:M if avg_risk[i,j] > first_quartile_risk]
+    I_second = I_prime
+
+    # prrint how many cells are discarded
+    println("Number of cells discarded: ", length(I) - length(I_prime))
+
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    
+    # Variables 
+    x = @variable(model, [i in I_prime], Bin) # ground sensor variables
+    y = @variable(model, [i in I_second], Bin) # charging station variables
+
+    # Objective - use precomputed average risk
+    @objective(model, Max, 
+        sum(avg_risk[i...] * x[i] for i in I_prime) + 
+        sum(avg_risk[i...] * y[i] for i in I_second))
+
+    # Constraints
+    @constraint(model, [i in I_prime], x[i] + y[i] <= 1) # Can't place both at same location
+    @constraint(model, sum(x) <= N_grounds)
+    @constraint(model, sum(y) <= N_charging) 
+
+    # Precompute valid (i, j) pairs where L∞ distance ≤ 1 (reverted to NEW_SENSOR_STRATEGY_2 approach)
+    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 1]
+    # Add constraints efficiently
+    @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
+
+    cs_pairs = [(i, j) for (i, j) in close_pairs if j in I_prime]  # charging-sensor
+    @constraint(model, [(i,j) in cs_pairs], y[i] + x[j] <= 1)
+
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds to create model")
+
+    optimize!(model)
+
+    selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(x[i]) > 0.5]
+    selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) > 0.5]
+
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds total")
+    
     return selected_x_indices, selected_y_indices
 end
 

@@ -620,7 +620,7 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     #print("running on all scenarios...")
     return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters)
 
-def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}):
+def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[]):
     """
     Run benchmarks on a simulation-to-real-world dataset structure.
 
@@ -649,6 +649,10 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
         
         if not os.path.exists(layout_folder + "/scenarii/"):
             print(f"No scenarii folder found in {layout_folder}, skipping...")
+            continue
+
+        if layout_folder in skip_folder_names:
+            print(f"Skipping layout {layout_folder} because it is in the skip_folder_names list")
             continue
             
         metrics = run_benchmark_scenarii_sequential_precompute(

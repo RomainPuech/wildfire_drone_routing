@@ -32,7 +32,7 @@ default_parameters =  {
     "n_charging_stations": 8,
 }
 
-def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, custom_initialization_parameters_function:callable, test_name:str):
+def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, custom_initialization_parameters_function:callable, test_name:str, skip_folder_names:list=[]):
     dataset = "WideDataset"
     n_drones = default_parameters["n_drones"]
     n_ground_stations = default_parameters["n_ground_stations"]
@@ -58,7 +58,9 @@ def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, cus
         "n_charging_stations": n_charging_stations,
         "max_battery_distance": max_battery_distance,
         "max_battery_time": max_battery_time,
-    })
+    },
+    skip_folder_names=skip_folder_names
+    )
     end_time = time.time()
     total_time = end_time - start_time
     metrics_by_layout["total_time"] = total_time
@@ -176,7 +178,7 @@ if __name__ == "__main__":
     PLACEMENT_STRATEGY_TO_TEST = wrap_log_sensor_strategy(SensorPlacementOptimization)
     DRONE_STRATEGY_TO_TEST = wrap_log_drone_strategy(RandomDroneRoutingStrategy)
     try:
-        run(PLACEMENT_STRATEGY_TO_TEST, DRONE_STRATEGY_TO_TEST, default_parameters, regular_custom_initialization_parameters_function, "Optim Sensor, Random Drone")
+        run(PLACEMENT_STRATEGY_TO_TEST, DRONE_STRATEGY_TO_TEST, default_parameters, regular_custom_initialization_parameters_function, "Optim Sensor, Random Drone", skip_folder_names=["WideDataset/0049_01289","WideDataset/0048_01141","WideDataset/0047_05424","WideDataset/0037_01578", "WideDataset/0041_02386"])
     except Exception as e:
         print(f"Error: {e}")
 
