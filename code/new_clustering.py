@@ -25,7 +25,7 @@ def get_wrapped_strategy(BaseStrategy):
             self.drones_per_cluster = drones_per_cluster
 
             half_extent = drone_battery / 2.0
-            self.clusters = self.find_clusters(automatic_initialization_parameters["charging_stations_locations"], drone_battery)
+            
             print(f"[init] Number of clusters: {len(self.clusters)}")
             for i, cluster in enumerate(self.clusters):
                 print(f"  Cluster {i}: {cluster}")

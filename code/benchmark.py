@@ -472,6 +472,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     fails = 0
     devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
 
+    
     total_execution_times = []
     total_fire_sizes = []
     total_fire_percentages = []
@@ -526,6 +527,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         total_distances.append(results["total_distance_traveled"])
         drone_entropies.append(results["avg_drone_entropy"])
         sensor_entropies.append(results["sensor_entropy"])
+        
     
     # Calculate metrics
     avg_time_to_detection = delta_ts / max(1, (N_SCENARII - fails))
@@ -559,16 +561,16 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     }
     
     # Still print the results for console feedback
-    print(f"Avg time steps to fire detection: {avg_time_to_detection}")
-    for device, percentage in device_percentages.items():
-        print(f"Fire found {percentage}% of the time by {device}")
-    print(f"Avg routing execution time: {avg_execution_time:.4f} sec")
-    print(f"Avg fire size at detection (cells): {avg_fire_size:.2f}")
-    print(f"Avg fire size at detection (% of map): {avg_fire_percentage:.2f}%")
-    print(f"Avg percentage of map explored by drones: {avg_map_explored:.2f}%")
-    print(f"Avg total distance traveled by drones: {avg_distance:.2f} units")
-    print(f"Avg drone entropy per timestep: {avg_drone_entropy:.4f}")
-    print(f"Avg sensor placement entropy: {avg_sensor_entropy:.4f}")
+    # print(f"Avg time steps to fire detection: {avg_time_to_detection}")
+    # for device, percentage in device_percentages.items():
+    #     print(f"Fire found {percentage}% of the time by {device}")
+    # print(f"Avg routing execution time: {avg_execution_time:.4f} sec")
+    # print(f"Avg fire size at detection (cells): {avg_fire_size:.2f}")
+    # print(f"Avg fire size at detection (% of map): {avg_fire_percentage:.2f}%")
+    # print(f"Avg percentage of map explored by drones: {avg_map_explored:.2f}%")
+    # print(f"Avg total distance traveled by drones: {avg_distance:.2f} units")
+    # print(f"Avg drone entropy per timestep: {avg_drone_entropy:.4f}")
+    # print(f"Avg sensor placement entropy: {avg_sensor_entropy:.4f}")
     
     return metrics
 
