@@ -472,6 +472,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     fails = 0
     devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
 
+    
     total_execution_times = []
     total_fire_sizes = []
     total_fire_percentages = []
@@ -528,6 +529,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         total_distances.append(results["total_distance_traveled"])
         drone_entropies.append(results["avg_drone_entropy"])
         sensor_entropies.append(results["sensor_entropy"])
+        
     
     # Calculate metrics
     avg_time_to_detection = delta_ts / max(1, (N_SCENARII - fails))
