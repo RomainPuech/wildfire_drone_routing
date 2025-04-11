@@ -49,7 +49,7 @@ def wrap_log_sensor_strategy(input_strat_cls):
             self.charging_station_locations = []
 
             if os.path.exists(log_path):
-                print(f"[wrap_log_strategy] Loading placement from: {log_path}")
+                # print(f"[wrap_log_strategy] Loading placement from: {log_path}")
                 with open(log_path, "r") as log_file:
                     data = json.load(log_file)
 
@@ -57,7 +57,7 @@ def wrap_log_sensor_strategy(input_strat_cls):
                     self.ground_sensor_locations = [tuple(loc) for loc in data["ground_sensor_locations"]]
                     self.charging_station_locations = [tuple(loc) for loc in data["charging_station_locations"]]
             else:
-                print(f"[wrap_log_strategy] Log not found, running {strategy_name}...")
+                # print(f"[wrap_log_strategy] Log not found, running {strategy_name}...")
                 # call the parent strategy to compute placements
                 super().__init__(automatic_initialization_parameters, custom_initialization_parameters)
                 # save the computed locations
@@ -69,7 +69,7 @@ def wrap_log_sensor_strategy(input_strat_cls):
                         "ground_sensor_locations": self.ground_sensor_locations,
                         "charging_station_locations": self.charging_station_locations
                     }, log_file, indent=2)
-                print(f"[wrap_log_strategy] Placements saved to: {log_path}")
+                # print(f"[wrap_log_strategy] Placements saved to: {log_path}")
 
         def get_locations(self):
             return self.ground_sensor_locations, self.charging_station_locations
@@ -125,12 +125,14 @@ def wrap_log_drone_strategy(input_drone_cls):
             layout_fingerprint = "_".join([f"{x}-{y}" for x, y in sorted(charging_stations)])
 
             # Build full filename
-            log_name = f"{input_drone_cls.__name__}_" + \
+            log_name = f"{input_drone_cls.strategy_name}_" + \
                     f"{automatic_initialization_parameters['n_drones']}_drones_" + \
                     f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \
                     f"{automatic_initialization_parameters['n_ground_stations']}_ground_stations_" + \
                     layout_fingerprint + "_" + \
-                    (f"{custom_initialization_parameters['optimization_horizon']}_" if 'optimization_horizon' in custom_initialization_parameters else '') + \
+                    (f"{custom_initialization_parameters['optimization_horizon']}_" if 'optimization_horizon' in custom_initialization_parameters else '') + "_" + \
+                    (f"{custom_initialization_parameters['reevaluation_step']}_" if 'reevaluation_step' in custom_initialization_parameters else '') + \
+                    (f"{custom_initialization_parameters['regularization_param']}_" if 'regularization_param' in custom_initialization_parameters else 'no_regularization') + \
                     "logged_drone_routing.json"
 
             self.log_file = os.path.join(log_dir, log_name)
@@ -140,17 +142,18 @@ def wrap_log_drone_strategy(input_drone_cls):
             # If user wants to force recomputation, we skip loading
             # Otherwise we try to load from self.log_file
             if not custom_initialization_parameters.get("recompute_logfile", False):
+                # print(f"\033[91m WE TRY TO LOAD FROM LOGFILE \033[0m")
                 if os.path.exists(self.log_file):
-                    print(f"[wrap_log_drone_strategy] ✅ Log found at {self.log_file}, loading from disk.")
+                    # print(f"[wrap_log_drone_strategy] ✅ Log found at {self.log_file}, loading from disk.")
                     with open(self.log_file, "r") as f:
                         data = json.load(f)
                     self.log_data = data
                     self.loaded_from_log = True
-                    print(f"[wrap_log_drone_strategy] Loaded {len(self.log_data.get('actions_history', []))} steps of actions.")
-                else:
-                    print(f"[wrap_log_drone_strategy] 🚫 No log file found at {self.log_file}. Logging will be enabled.")
-            else:
-                print(f"[wrap_log_drone_strategy] 🔄 Forcing recomputation. Will overwrite {self.log_file}.")
+                    # print(f"[wrap_log_drone_strategy] Loaded {len(self.log_data.get('actions_history', []))} steps of actions.")
+                # else:
+                    # print(f"[wrap_log_drone_strategy] 🚫 No log file found at {self.log_file}. Logging will be enabled.")
+            # else:
+                # print(f"[wrap_log_drone_strategy] 🔄 Forcing recomputation. Will overwrite {self.log_file}.")
 
 
             # We'll keep a step counter for next_actions
@@ -165,7 +168,7 @@ def wrap_log_drone_strategy(input_drone_cls):
 
             # If we already have them in the log, just return it
             if self.loaded_from_log and self.log_data["initial_drone_locations"] is not None:
-                return self._unpack_initial_locations(self.log_data["initial_drone_locations"])
+                return self.log_data["initial_drone_locations"]
 
             # otherwise, call the parent's method
             raw_locations = super().get_initial_drone_locations()
@@ -182,9 +185,9 @@ def wrap_log_drone_strategy(input_drone_cls):
             # return as original style: if user’s parent returns a 2-tuple, we do that. 
             # or if it returns a single list, we do that. 
             # but you have the parent call's raw format, so let's be consistent.
-            print(f"[wrap_log_drone_strategy] ✏️ Logging initial drone positions to {self.log_file}")
-            for i, (state, pos) in enumerate(init_list):
-                print(f"  Drone {i}: {state} at {pos}")
+            # print(f"[wrap_log_drone_strategy] ✏️ Logging initial drone positions to {self.log_file}")
+            # for i, (state, pos) in enumerate(init_list):
+                # print(f"  Drone {i}: {state} at {pos}")
             return raw_locations
 
         def next_actions(self, automatic_step_parameters, custom_step_parameters):
@@ -199,6 +202,10 @@ def wrap_log_drone_strategy(input_drone_cls):
                 return self._unpack_actions(actions)
 
             # otherwise, call parent
+            print(f"[wrap_log_drone_strategy] Calling parent's next_actions")
+            print(f"len log_data: {len(self.log_data['actions_history'])}")
+            print(f"step_counter: {self.step_counter}")
+            print(f"log name: {self.log_file}")
             actions = super().next_actions(automatic_step_parameters, custom_step_parameters)
 
             # store in log_data
@@ -209,12 +216,12 @@ def wrap_log_drone_strategy(input_drone_cls):
 
             # save log
             self._save_log()
-            if self.loaded_from_log and self.step_counter < len(self.log_data["actions_history"]):
-                print(f"[wrap_log_drone_strategy] 📂 Loading step {self.step_counter} actions from log")
-            else:
-                print(f"[wrap_log_drone_strategy] ✏️ Logging actions at step {self.step_counter} to {self.log_file}")
-                for i, (typ, param) in enumerate(actions):
-                    print(f"  Drone {i}: {typ} {param}")
+            # if self.loaded_from_log and self.step_counter < len(self.log_data["actions_history"]):
+            #     # print(f"[wrap_log_drone_strategy] 📂 Loading step {self.step_counter} actions from log")
+            # else:
+            #     # print(f"[wrap_log_drone_strategy] ✏️ Logging actions at step {self.step_counter} to {self.log_file}")
+            #     for i, (typ, param) in enumerate(actions):
+            #         # print(f"  Drone {i}: {typ} {param}")
             return actions
 
         ###############
@@ -224,7 +231,7 @@ def wrap_log_drone_strategy(input_drone_cls):
         def _save_log(self):
             with open(self.log_file, "w") as f:
                 json.dump(self.log_data, f, indent=2)
-            print(f"[wrap_log_drone_strategy] 💾 Log updated and written to {self.log_file}")
+            # print(f"[wrap_log_drone_strategy] 💾 Log updated and written to {self.log_file}")
             
         def _normalize_initial_locations(self, raw):
             """
@@ -254,7 +261,7 @@ def wrap_log_drone_strategy(input_drone_cls):
                     elif len(first) == 2 and isinstance(first[0], (int, float)):
                         # e.g. (x,y)
                         # so let's store them as ("charge",(x,y)) by default
-                        print("set to be charge default for (x,y) tuples")
+                        # print("set to be charge default for (x,y) tuples")
                         newlist = [("charge",(int(x),int(y))) for (x,y) in raw]
                         return newlist
                     else:
@@ -288,9 +295,9 @@ def wrap_log_drone_strategy(input_drone_cls):
             """
             # stored is a single list => [("charge",(x,y)), ...]
 
-            print(f"[wrap_log_drone_strategy] 📦 Loaded initial drone positions from log:")
-            for i, (st, (x, y)) in enumerate(stored):
-                print(f"  Drone {i}: {st} at ({x}, {y})")
+            # print(f"[wrap_log_drone_strategy] 📦 Loaded initial drone positions from log:")
+            # for i, (st, (x, y)) in enumerate(stored):
+                # print(f"  Drone {i}: {st} at ({x}, {y})")
             positions = []
             states = []
             for (st,(x,y)) in stored:

@@ -1,6 +1,6 @@
 import math
 from collections import deque
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
 from shapely.ops import unary_union
 import matplotlib.pyplot as plt
 from Strategy import DroneRoutingStrategy
@@ -26,21 +26,35 @@ def get_wrapped_strategy(BaseStrategy):
 
             half_extent = drone_battery / 2.0
             self.clusters = self.find_clusters(automatic_initialization_parameters["charging_stations_locations"], drone_battery)
-            print(f"[init] Number of clusters: {len(self.clusters)}")
-            for i, cluster in enumerate(self.clusters):
-                print(f"  Cluster {i}: {cluster}")
+            # print(f"[init] Number of clusters: {len(self.clusters)}")
+            #for i, cluster in enumerate(self.clusters):
+                # print(f"  Cluster {i}: {cluster}")
 
             self.cluster_data = []
-
             for cid, stations in enumerate(self.clusters):
-                print(f"\n🚀 Running cluster {cid} with {len(stations)} charging stations and {drones_per_cluster[cid]} drones")
+                if len(stations) == 0:
+                    continue
                 polygons = self.get_cluster_boundary_boxes(stations, half_extent)
                 N, M, min_x, min_y = self.get_bounding_grid_size(polygons)
-                print(f"  🧱 Bounding grid: {N} x {M}, origin: ({min_x}, {min_y})")
+                # print(f"\n🚀 Running cluster {cid} with {len(stations)} charging stations and {drones_per_cluster[cid]} drones")
+                
+                # print(f"  🧱 Bounding grid: {N} x {M}, origin: ({min_x}, {min_y})")
 
-                strat = BaseStrategy(automatic_initialization_parameters, custom_initialization_parameters)
+                this_cluster_sensor_locations = []
+                for sensor_location in automatic_initialization_parameters["ground_sensor_locations"]:
+                    # if sensor is within the cluster boundary, add it to the ground sensor locations
+                    for polygon in polygons:
+                        if polygon.contains(Point(sensor_location)):
+                            this_cluster_sensor_locations.append(sensor_location)
+
+                automatic_initialization_parameters_cluster = automatic_initialization_parameters.copy()
+                automatic_initialization_parameters_cluster["charging_stations_locations"] = stations
+                automatic_initialization_parameters_cluster["n_drones"] = drones_per_cluster[cid]
+                automatic_initialization_parameters_cluster["ground_sensor_locations"] = this_cluster_sensor_locations
+                automatic_initialization_parameters_cluster["n_charging_stations"] = len(stations)
+                strat = BaseStrategy(automatic_initialization_parameters_cluster, custom_initialization_parameters)
                 self.strategy_instances.append(strat)
-                print(f"  ✅ Strategy initialized for cluster {cid}")
+                # print(f"  ✅ Strategy initialized for cluster {cid}")
 
                 self.cluster_data.append({
                     "cid": cid,
@@ -55,12 +69,13 @@ def get_wrapped_strategy(BaseStrategy):
             self.initial_states = []
 
         def find_clusters(self, charging_stations, drone_battery):
-            radius = drone_battery / 2.0
+            radius = drone_battery
             n = len(charging_stations)
             adj = [[] for _ in range(n)]
 
             for i in range(n):
                 for j in range(i+1, n):
+                    # print(f"  Checking distance between {charging_stations}")
                     if math.hypot(charging_stations[i][0] - charging_stations[j][0], charging_stations[i][1] - charging_stations[j][1]) <= radius:
                         adj[i].append(j)
                         adj[j].append(i)
@@ -117,10 +132,10 @@ def get_wrapped_strategy(BaseStrategy):
             positions = []
             states = []
 
-            print(f"\n📍 [ClusteredDroneStrategyWrapper] Fetching initial drone locations for {len(self.strategy_instances)} clusters...")
+            # print(f"\n📍 [ClusteredDroneStrategyWrapper] Fetching initial drone locations for {len(self.strategy_instances)} clusters...")
 
             for i, strat in enumerate(self.strategy_instances):
-                print(f"\n📦 Cluster {i}: Calling strategy to get initial positions and states...")
+                # print(f"\n📦 Cluster {i}: Calling strategy to get initial positions and states...")
                 raw = strat.get_initial_drone_locations()
 
                 # if it's a list of (state, position) tuples, extract both
@@ -130,8 +145,8 @@ def get_wrapped_strategy(BaseStrategy):
                 else:
                     pos, state = raw  # fallback for already-split format
 
-                for d, (p, s) in enumerate(zip(pos, state)):
-                    print(f"   🛰️ Drone {d}: {s} at {p}")
+                # for d, (p, s) in enumerate(zip(pos, state)):
+                    # print(f"   🛰️ Drone {d}: {s} at {p}")
 
                 positions.extend(pos)
                 states.extend(state)
@@ -140,15 +155,15 @@ def get_wrapped_strategy(BaseStrategy):
             self.initial_positions = positions
             self.initial_states = states
 
-            print(f"\n✅ [ClusteredDroneStrategyWrapper] Combined total drones: {len(positions)}")
+            # print(f"\n✅ [ClusteredDroneStrategyWrapper] Combined total drones: {len(positions)}")
             return list(zip(states, positions))
 
         def next_actions(self, automatic_step_parameters, custom_step_parameters):
             t = automatic_step_parameters['t']
-            print(f"\n⏱️ [ClusteredDroneStrategyWrapper] Timestep {t} - computing actions...")
+            # print(f"\n⏱️ [ClusteredDroneStrategyWrapper] Timestep {t} - computing actions...")
 
-            if not self.initialized:
-                raise RuntimeError("Must call get_initial_drone_locations() first.")
+            # if not self.initialized:
+            #     raise RuntimeError("Must call get_initial_drone_locations() first.")
 
             actions = []
             idx = 0
@@ -161,25 +176,25 @@ def get_wrapped_strategy(BaseStrategy):
                     "t": t
                 }
 
-                print(f"\n📡 Cluster {i} handling drones {idx} to {idx+count-1}")
-                for d, (loc, st) in enumerate(zip(sliced_params['drone_locations'], sliced_params['drone_states'])):
-                    print(f"   🛰️ Drone {idx + d}: {st} at {loc}")
+                # print(f"\n📡 Cluster {i} handling drones {idx} to {idx+count-1}")
+                # for d, (loc, st) in enumerate(zip(sliced_params['drone_locations'], sliced_params['drone_states'])):
+                    # print(f"   🛰️ Drone {idx + d}: {st} at {loc}")
 
                 cluster_actions = strat.next_actions(sliced_params, custom_step_parameters)
                 actions.extend(cluster_actions)
 
-                print(f"   🧠 Actions from cluster {i}:")
-                for d, act in enumerate(cluster_actions):
-                    print(f"     ↪️ Drone {idx + d}: {act}")
+                # print(f"   🧠 Actions from cluster {i}:")
+                # for d, act in enumerate(cluster_actions):
+                    # print(f"     ↪️ Drone {idx + d}: {act}")
 
                 idx += count
 
-            print(f"\n✅ [ClusteredDroneStrategyWrapper] Combined actions for timestep {t}: {actions}")
+            # print(f"\n✅ [ClusteredDroneStrategyWrapper] Combined actions for timestep {t}: {actions}")
             return actions
 
         def plot_clusters(self, title="Clustered Drone Layout", figsize=(8,8)):
             if not self.cluster_data:
-                print("No cluster data available.")
+                # print("No cluster data available.")
                 return
             plt.figure(figsize=figsize)
             plt.title(title)

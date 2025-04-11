@@ -47,7 +47,7 @@ def return_no_custom_parameters():
     return {}
 
 def build_custom_init_params(input_dir, layout_name):
-    print(f"Building custom init params for {layout_name} in {input_dir}")
+    # print(f"Building custom init params for {layout_name} in {input_dir}")
     base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
 
     return {
@@ -84,10 +84,10 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     # 1. Get layout parameters
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir, simulation_parameters)
-        print("case 1 : automatic_initialization_parameters: ", automatic_initialization_parameters)
+        #print("case 1 : automatic_initialization_parameters: ", automatic_initialization_parameters)
     else:
         automatic_initialization_parameters = automatic_initialization_parameters_function(canonical_scenario, input_dir, simulation_parameters)
-        print("other case : automatic_initialization_parameters: ", automatic_initialization_parameters)
+        #print("other case : automatic_initialization_parameters: ", automatic_initialization_parameters)
     
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(automatic_initialization_parameters['input_dir'])
@@ -132,12 +132,12 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
             drone_locations[drone_index] = (new_x, new_y)
             drone_batteries[drone_index] = (new_distance_battery, new_time_battery)
             drone_states[drone_index] = new_state
-    print("Drone routing strategy finished")
+    print(f"Drone routing strategy finished. Ran for {t} time steps")
     
     
     
     
-def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, simulation_parameters:dict={}):
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
@@ -159,9 +159,9 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 1. Get layout parameters
     if automatic_initialization_parameters_function is None:
-        automatic_initialization_parameters = get_automatic_layout_parameters(scenario, simulation_parameters)
+        automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
     else:
-        automatic_initialization_parameters = automatic_initialization_parameters_function(scenario)
+        automatic_initialization_parameters = automatic_initialization_parameters_function(scenario, input_dir, simulation_parameters)
     
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(automatic_initialization_parameters)
@@ -174,7 +174,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rows_ground, cols_ground = zip(*ground_sensor_locations)
     rows_charging, cols_charging = zip(*charging_stations_locations)
 
-    charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
+    # charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
 
   
     # print(f"ground_sensor_locations: {ground_sensor_locations}")
@@ -189,7 +189,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     Routing_Strat = drone_routing_strategy(automatic_initialization_parameters, custom_initialization_parameters)
     # Print initial drone locations
     initial_drone_locations = Routing_Strat.get_initial_drone_locations()
-    print(f"\nDEBUG: Initial Drone Locations: {initial_drone_locations}")
+    # print(f"\nDEBUG: Initial Drone Locations: {initial_drone_locations}")
 
     drones = [Drone(x,y,state,charging_stations_locations,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in Routing_Strat.get_initial_drone_locations()]
     drone_locations = [drone.get_position() for drone in drones]
@@ -499,14 +499,16 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
-            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, simulation_parameters) #TODO compute them once only per layout rather than per scenario..
+            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters) #TODO compute them once only per layout rather than per scenario..
         results, _ = run_benchmark_scenario(
             scenario,
             sensor_placement_strategy,
             drone_routing_strategy,
             custom_initialization_parameters,
             custom_step_parameters_function,
-            starting_time=starting_time
+            starting_time=starting_time,
+            input_dir=input_dir,
+            simulation_parameters=simulation_parameters
         )
 
         delta_t = results["delta_t"]
@@ -559,16 +561,16 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     }
     
     # Still print the results for console feedback
-    print(f"Avg time steps to fire detection: {avg_time_to_detection}")
-    for device, percentage in device_percentages.items():
-        print(f"Fire found {percentage}% of the time by {device}")
-    print(f"Avg routing execution time: {avg_execution_time:.4f} sec")
-    print(f"Avg fire size at detection (cells): {avg_fire_size:.2f}")
-    print(f"Avg fire size at detection (% of map): {avg_fire_percentage:.2f}%")
-    print(f"Avg percentage of map explored by drones: {avg_map_explored:.2f}%")
-    print(f"Avg total distance traveled by drones: {avg_distance:.2f} units")
-    print(f"Avg drone entropy per timestep: {avg_drone_entropy:.4f}")
-    print(f"Avg sensor placement entropy: {avg_sensor_entropy:.4f}")
+    # print(f"Avg time steps to fire detection: {avg_time_to_detection}")
+    # for device, percentage in device_percentages.items():
+    #     print(f"Fire found {percentage}% of the time by {device}")
+    # print(f"Avg routing execution time: {avg_execution_time:.4f} sec")
+    # print(f"Avg fire size at detection (cells): {avg_fire_size:.2f}")
+    # print(f"Avg fire size at detection (% of map): {avg_fire_percentage:.2f}%")
+    # print(f"Avg percentage of map explored by drones: {avg_map_explored:.2f}%")
+    # print(f"Avg total distance traveled by drones: {avg_distance:.2f} units")
+    # print(f"Avg drone entropy per timestep: {avg_drone_entropy:.4f}")
+    # print(f"Avg sensor placement entropy: {avg_sensor_entropy:.4f}")
     
     return metrics
 
@@ -705,7 +707,7 @@ def run_benchmark_for_strategy(input_dir: str,
 
     # load the first scenario to get automatic parameters
     scenario = load_scenario_fn(first_file)
-    automatic_init_params = get_automatic_layout_parameters(scenario, simulation_parameters)
+    automatic_init_params = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
 
     # === Create sensor placement strategy ===
     print("[run_benchmark_for_strategy] Running sensor placement strategy...")
