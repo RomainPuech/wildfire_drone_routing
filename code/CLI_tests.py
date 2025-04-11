@@ -185,17 +185,7 @@ def generate_violin_plots_from_results(folder_path: str, output_dir: str = "plot
 
     print(f"✅ Violin plots saved to: {output_dir}")
 
-if __name__ == "__main__":
-    # Parse command line arguments
 
-    # parser = argparse.ArgumentParser(description='Benchmarking script for strategies')
-    # parser.add_argument('--dataset', type=str, default="MinimalDataset/", help='Dataset folder path')
-    # parser.add_argument('--n_drones', type=int, default=default_parameters["n_drones"], help='Number of drones')
-    # parser.add_argument('--n_ground_stations', type=int, default=default_parameters["n_ground_stations"], help='Number of ground stations')
-    # parser.add_argument('--n_charging_stations', type=int, default=default_parameters["n_charging_stations"], help='Number of charging stations')
-    # parser.add_argument('--max_battery_distance', type=int, default=default_parameters["max_battery_distance"], help='Maximum battery distance')
-    # parser.add_argument('--max_battery_time', type=int, default=default_parameters["max_battery_time"], help='Maximum battery time')
-    # args = parser.parse_args()
 def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, custom_initialization_parameters_function:callable, test_name:str):
     dataset = "WideDataset"
     n_drones = default_parameters["n_drones"]
