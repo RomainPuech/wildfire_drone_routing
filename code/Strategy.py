@@ -274,6 +274,10 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
         print(self.charging_station_locations)
 
 
+class FixedPlacementStrategy(SensorPlacementStrategy):
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        self.charging_station_locations = [(29, 130), (34, 108), (35, 137), (35, 142), (41, 140)]
+        self.ground_sensor_locations = [(34, 132)]
 
 class DroneRoutingOptimizationSlow(DroneRoutingStrategy):
     strategy_name = "DroneRoutingOptimizationSlow"
