@@ -10,483 +10,270 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 ##############################################################################
-# 1) BFS to find clusters
+# Drone Routing Strategy Wrapper Class
 ##############################################################################
-def find_clusters(charging_stations, drone_battery):
+class DroneRoutingStrategyClusterWrapper:
     """
-    BFS-based method to group charging stations.
-    Two stations are in the same cluster if distance <= (drone_battery / 2).
-    
-    Returns: 
-      A list of clusters, each is a list of station coords [(x,y),...].
+    A wrapper class that adds clustering functionality to any drone routing strategy.
+    This wrapper provides methods for clustering, boundary box calculation, and visualization.
     """
-    n = len(charging_stations)
-    radius = drone_battery / 2.0
-    adjacency_list = [[] for _ in range(n)]
-
-    for i in range(n):
-        x1, y1 = charging_stations[i]
-        for j in range(i+1, n):
-            x2, y2 = charging_stations[j]
-            dist = math.hypot(x2 - x1, y2 - y1)
-            if dist <= radius:
-                adjacency_list[i].append(j)
-                adjacency_list[j].append(i)
-
-    cluster_labels = [-1]*n
-    current_cluster = 0
-    for start_node in range(n):
-        if cluster_labels[start_node] == -1:
-            queue = deque([start_node])
-            cluster_labels[start_node] = current_cluster
-            while queue:
-                node = queue.popleft()
-                for neighbor in adjacency_list[node]:
-                    if cluster_labels[neighbor] == -1:
-                        cluster_labels[neighbor] = current_cluster
-                        queue.append(neighbor)
-            current_cluster += 1
-
-    # group stations by cluster label
-    clusters = [[] for _ in range(current_cluster)]
-    for i, lbl in enumerate(cluster_labels):
-        clusters[lbl].append(charging_stations[i])
-
-    return clusters
-
-##############################################################################
-# 2) Use shapely to build union bounding boxes for each cluster
-##############################################################################
-def get_cluster_boundary_boxes(stations, half_extent):
-    """
-    For each station in 'stations', build a bounding box of side 2*half_extent.
-    Union them -> list of Polygon(s).
-    """
-    box_polygons = []
-    for (x, y) in stations:
-        rect = Polygon([
-            (x - half_extent, y - half_extent),
-            (x + half_extent, y - half_extent),
-            (x + half_extent, y + half_extent),
-            (x - half_extent, y + half_extent),
-        ])
-        box_polygons.append(rect)
-
-    union_poly = unary_union(box_polygons)
-    if union_poly.is_empty:
-        return []
-    if union_poly.geom_type == "Polygon":
-        return [union_poly]
-    else:
-        return list(union_poly)
-
-##############################################################################
-# Utility: from union polygon(s) => get integer grid size (N, M)
-##############################################################################
-def get_bounding_grid_size(polygons):
-    """
-    polygons: list of shapely Polygon objects (already unioned if you like).
-    We take the union and then read .bounds => (minx, miny, maxx, maxy).
-    Then we define:
-      N = (maxx - minx + 1), M = (maxy - miny + 1), 
-    after rounding outward so we have integer coverage.
-    
-    Returns: (N, M, min_x_int, min_y_int)
-       Where you can do further logic if you want to shift station coords.
-    """
-    if not polygons:
-        # fallback
-        return (1, 1, 0, 0)
-
-    union_poly = unary_union(polygons)
-    minx, miny, maxx, maxy = union_poly.bounds
-    
-    # round them outward
-    min_x_int = math.floor(minx)
-    min_y_int = math.floor(miny)
-    max_x_int = math.ceil(maxx)
-    max_y_int = math.ceil(maxy)
-
-    N = max_x_int - min_x_int + 1
-    M = max_y_int - min_y_int + 1
-    
-    return (N, M, min_x_int, min_y_int)
-
-
-from shapely.geometry import Point
-import random
-
-def sample_points_in_polygon(poly, n_points, max_tries=10_000):
-    """
-    Sample n_points uniformly at random in 'poly' by bounding-box rejection sampling.
-    poly: shapely Polygon or MultiPolygon
-    n_points: how many points you want
-    max_tries: to prevent infinite loops if the polygon is too small
-
-    Returns a list of (x, y) floating coords.
-    """
-    # Merge if it's multi
-    unioned = poly
-    if unioned.geom_type == "MultiPolygon":
-        unioned = unioned.union()  # or unary_union
-
-    minx, miny, maxx, maxy = unioned.bounds
-
-    samples = []
-    tries = 0
-    while len(samples) < n_points and tries < max_tries:
-        tries += 1
-        # pick random x,y in bounding box
-        rx = random.uniform(minx, maxx)
-        ry = random.uniform(miny, maxy)
-        candidate = Point(rx, ry)
-
-        # check if inside polygon
-        if candidate.within(unioned):
-            samples.append((rx, ry))
-
-    return samples
-
-##############################################################################
-# 3) Minimal random sensor strategy for demonstration
-##############################################################################
-class RandomSensorPlacementStrategy:
-    """
-    Sensor placement strategy that:
-      - Places ground sensors randomly.
-      - Uses the charging stations from automatic_init_params["charging_stations_locations"].
-    """
-    def __init__(self, automatic_initialization_parameters: dict, custom_initialization_parameters: dict):
+    def __init__(self, StrategyClass):
         """
         Args:
-            automatic_initialization_parameters: dict with keys:
-                "N": Grid height
-                "M": Grid width
-                "min_x": the lower left corner of that clusters bounding box in x global coordinate
-                "min_y": the lower left corner of that clusters bounding box in y global coordinate
-                "n_ground_stations": number of ground sensors to place
-                "charging_stations_locations": List of (x,y) for charging stations
-                ... (other fields as needed)
-            custom_initialization_parameters: dict
+            StrategyClass: The drone routing strategy class to wrap
         """
-        # Save references for convenience
-        self.N = automatic_initialization_parameters["N"]
-        self.M = automatic_initialization_parameters["M"]
-        self.cluster_polygon = automatic_initialization_parameters["cluster_polygon"]  # a shapely Polygon or MultiPolygon
-        self.n_ground_stations = automatic_initialization_parameters["n_ground_stations"]
-
-        # 1) Randomly place ground sensors
-        self.ground_sensor_locations = sample_points_in_polygon(
-            self.cluster_polygon, 
-            self.n_ground_stations
-        )
-
-        # 2) Use the existing station locations from the auto init param
-        #    (instead of generating them randomly).
-        self.charging_station_locations = automatic_initialization_parameters["charging_stations_locations"]
-
-    def get_locations(self):
+        self.StrategyClass = StrategyClass
+        self.clusters = None
+        self.cluster_data = None
+        
+    def find_clusters(self, charging_stations, drone_battery):
         """
-        Returns the locations of the ground sensors and charging stations.
+        BFS-based method to group charging stations.
+        Two stations are in the same cluster if distance <= (drone_battery / 2).
+        
+        Returns: 
+          A list of clusters, each is a list of station coords [(x,y),...].
         """
-        return self.ground_sensor_locations, self.charging_station_locations
+        n = len(charging_stations)
+        radius = drone_battery / 2.0
+        adjacency_list = [[] for _ in range(n)]
 
-##############################################################################
-# 4) Your LoggedDroneRoutingStrategy (unchanged code)
-##############################################################################
-class LoggedDroneRoutingStrategy:
-    """
-    LoggedDroneRoutingStrategy logs drone routing actions and locations at every timestep.
-    """
-    def __init__(self, automatic_initialization_parameters, custom_initialization_parameters):
-        self.automatic_initialization_parameters = automatic_initialization_parameters
-        self.custom_initialization_parameters = custom_initialization_parameters
+        for i in range(n):
+            x1, y1 = charging_stations[i]
+            for j in range(i+1, n):
+                x2, y2 = charging_stations[j]
+                dist = math.hypot(x2 - x1, y2 - y1)
+                if dist <= radius:
+                    adjacency_list[i].append(j)
+                    adjacency_list[j].append(i)
 
-        if "burnmap_filename" not in custom_initialization_parameters:
-            raise ValueError("Missing 'burnmap_filename' in custom_initialization_parameters")
-        if "call_every_n_steps" not in custom_initialization_parameters:
-            raise ValueError("Missing 'call_every_n_steps' in custom_initialization_parameters")
-        if "optimization_horizon" not in custom_initialization_parameters:
-            raise ValueError("Missing 'optimization_horizon' in custom_initialization_parameters")
+        cluster_labels = [-1]*n
+        current_cluster = 0
+        for start_node in range(n):
+            if cluster_labels[start_node] == -1:
+                queue = deque([start_node])
+                cluster_labels[start_node] = current_cluster
+                while queue:
+                    node = queue.popleft()
+                    for neighbor in adjacency_list[node]:
+                        if cluster_labels[neighbor] == -1:
+                            cluster_labels[neighbor] = current_cluster
+                            queue.append(neighbor)
+                current_cluster += 1
 
-        self.call_every_n_steps = custom_initialization_parameters["call_every_n_steps"]
-        self.optimization_horizon = custom_initialization_parameters["optimization_horizon"]
+        # group stations by cluster label
+        clusters = [[] for _ in range(current_cluster)]
+        for i, lbl in enumerate(cluster_labels):
+            clusters[lbl].append(charging_stations[i])
 
-        self.call_counter = 0
-        self.current_solution = []  
+        self.clusters = clusters
+        return clusters
+        
+    def get_cluster_boundary_boxes(self, stations, half_extent):
+        """
+        For each station in 'stations', build a bounding box of side 2*half_extent.
+        Union them -> list of Polygon(s).
+        """
+        box_polygons = []
+        for (x, y) in stations:
+            rect = Polygon([
+                (x - half_extent, y - half_extent),
+                (x + half_extent, y - half_extent),
+                (x + half_extent, y + half_extent),
+                (x - half_extent, y + half_extent),
+            ])
+            box_polygons.append(rect)
 
-        # LOG FILE SETUP
-        if "log_file" in custom_initialization_parameters:
-            log_file_path = custom_initialization_parameters["log_file"]
-            log_dir = os.path.dirname(log_file_path)
-            os.makedirs(log_dir, exist_ok=True)
-            self.log_file = log_file_path
+        union_poly = unary_union(box_polygons)
+        if union_poly.is_empty:
+            return []
+        if union_poly.geom_type == "Polygon":
+            return [union_poly]
         else:
-            N = self.automatic_initialization_parameters.get("N", "N")
-            M = self.automatic_initialization_parameters.get("M", "M")
-            n_drones = self.automatic_initialization_parameters.get("n_drones", 0)
-            n_charging_stations = self.automatic_initialization_parameters.get("n_charging_stations", 0)
+            return list(union_poly)
+            
+    def get_bounding_grid_size(self, polygons):
+        """
+        polygons: list of shapely Polygon objects (already unioned if you like).
+        We take the union and then read .bounds => (minx, miny, maxx, maxy).
+        Then we define:
+          N = (maxx - minx + 1), M = (maxy - miny + 1), 
+        after rounding outward so we have integer coverage.
+        
+        Returns: (N, M, min_x_int, min_y_int)
+           Where you can do further logic if you want to shift station coords.
+        """
+        if not polygons:
+            # fallback
+            return (1, 1, 0, 0)
 
-            log_filename = f"drone_strategy_{N}N_{M}M_{n_drones}drones_{n_charging_stations}charge.json"
-            log_dir = custom_initialization_parameters.get("log_dir", "logs")
-            os.makedirs(log_dir, exist_ok=True)
-            self.log_file = os.path.join(log_dir, log_filename)
+        union_poly = unary_union(polygons)
+        minx, miny, maxx, maxy = union_poly.bounds
+        
+        # round them outward
+        min_x_int = math.floor(minx)
+        min_y_int = math.floor(miny)
+        max_x_int = math.ceil(maxx)
+        max_y_int = math.ceil(maxy)
 
-        self.log_data = {
-            "initial_drone_locations": None,
-            "steps": []
-        }
-        print(f"[LoggedDroneRoutingStrategy] Initialized with log file: {self.log_file}")
+        N = max_x_int - min_x_int + 1
+        M = max_y_int - min_y_int + 1
+        
+        return (N, M, min_x_int, min_y_int)
+        
+    def run_clusters(self, 
+                 charging_stations, 
+                 drone_battery, 
+                 drones_per_cluster,
+                 timesteps,
+                 half_extent,
+                 total_ground_sensors,
+                 SensorStrategyClass,
+                 custom_init_params=None):
+        """
+        Run the routing strategies per cluster, but do NOT plot.
+        Just stores self.cluster_data so you can plot later.
+        """
+        if custom_init_params is None:
+            custom_init_params = {
+                "burnmap_filename": "dummy.txt",
+                "call_every_n_steps": 1,
+                "optimization_horizon": timesteps,
+            }
 
-    def get_initial_drone_locations(self):
-        charging_stations = self.automatic_initialization_parameters["charging_stations_locations"]
-        n_drones = self.automatic_initialization_parameters["n_drones"]
+        if self.clusters is None:
+            self.clusters = self.find_clusters(charging_stations, drone_battery)
 
-        if len(charging_stations) == 0:
-            initial_positions = [(0,0)] * n_drones
-        else:
-            n_stations = len(charging_stations)
-            q = n_drones // n_stations
-            r = n_drones % n_stations
-            initial_positions = charging_stations * q + charging_stations[:r]
+        # global bounding box
+        all_polygons = []
+        for stations_in_cluster in self.clusters:
+            all_polygons += self.get_cluster_boundary_boxes(stations_in_cluster, half_extent)
 
-        self.log_data["initial_drone_locations"] = initial_positions
-        self._write_log_to_file()
-        return initial_positions
+        N, M, min_x, min_y = self.get_bounding_grid_size(all_polygons)
 
-    def next_actions(self, automatic_step_parameters, custom_step_parameters):
-        if self.call_counter % self.call_every_n_steps == 0:
-            _, self.current_solution = self.dummy_drone_routing_robust(
-                automatic_step_parameters, custom_step_parameters
-            )
-
-        timestep_index = self.call_counter % self.call_every_n_steps
-        actions = self.current_solution[timestep_index]
-
-        self._log_timestep(
-            timestep=automatic_step_parameters["t"],
-            drone_locations=automatic_step_parameters["drone_locations"],
-            drone_batteries=automatic_step_parameters["drone_batteries"],
-            actions=actions
-        )
-
-        self.call_counter += 1
-        return actions
-
-    def dummy_drone_routing_robust(self, automatic_step_parameters, custom_step_parameters):
-        print("[Dummy Function] Generating dummy routing solution...")
-
-        n_drones = self.automatic_initialization_parameters.get("n_drones", 3)
-        n_timesteps = self.optimization_horizon
-
-        # We'll produce an action set for each of the n_timesteps
-        actions_per_timestep = []
-        for t in range(n_timesteps):
-            step_actions = []
-            for d in range(n_drones):
-                if t % 2 == 0:
-                    step_actions.append(('move', (1, 0)))
-                else:
-                    step_actions.append(('charge', None))
-            actions_per_timestep.append(step_actions)
-
-        return [], actions_per_timestep
-
-    def _log_timestep(self, timestep, drone_locations, drone_batteries, actions):
-        log_entry = {
-            "timestep": timestep,
-            "drone_locations": drone_locations,
-            "drone_batteries": drone_batteries,
-            "actions": actions
-        }
-        self.log_data["steps"].append(log_entry)
-        self._write_log_to_file()
-
-    def _write_log_to_file(self):
-        with open(self.log_file, "w") as f:
-            json.dump(self.log_data, f, indent=2)
-
-##############################################################################
-# 5) The main function that:
-#    - BFS to find clusters
-#    - For each cluster, picks # drones from your 'drones_per_cluster' list
-#    - Instantiates LoggedDroneRoutingStrategy and a sensor strategy
-#    - Runs next_actions for a few timesteps
-#    - Builds bounding polygons
-#    - Plots everything in one final figure
-##############################################################################
-def run_and_plot(
-    charging_stations, 
-    drone_battery, 
-    drones_per_cluster,
-    timesteps=5,
-    half_extent=2.0
-):
-    """
-    charging_stations : list of (x,y)
-    drone_battery     : float
-    drones_per_cluster: list of ints, # of drones in each cluster
-    timesteps         : how many timesteps to run .next_actions
-    half_extent       : bounding box expansion for polygons
-
-    We'll BFS -> get clusters -> check that len(clusters) == len(drones_per_cluster).
-    Then run sensor + logged drone strategy on each cluster in turn.
-    We'll store final states for plotting.
-    """
-
-    clusters = find_clusters(charging_stations, drone_battery)
-    num_clusters = len(clusters)
-    if num_clusters != len(drones_per_cluster):
-        raise ValueError(
-            f"Mismatch: Found {num_clusters} clusters but drones_per_cluster has length {len(drones_per_cluster)}"
-        )
-
-    print(f"Found {num_clusters} cluster(s). Running strategies...")
-
-    # We'll store info for plotting
-    cluster_data = []
-    color_map = ["blue", "orange", "green", "red", "purple", "cyan", "magenta", "gray"]
-
-    # We'll do 3 timesteps for demonstration
-    timesteps = 3
-
-    for cid, stations_in_cluster in enumerate(clusters):
-
-        color = color_map[cid % len(color_map)]
-        print(f"\n=== Cluster {cid} => stations: {stations_in_cluster}")
-        n_drones_for_this_cluster = drones_per_cluster[cid]
-        # 1) build bounding polygons for that cluster
-        polygons = get_cluster_boundary_boxes(stations_in_cluster, half_extent)
-        # unify them if multiple
-        cluster_polygon = unary_union(polygons)
-        # 2) from those polygons => get integer N,M
-        N, M, min_x, min_y = get_bounding_grid_size(polygons)
-        print(f"   bounding box => N={N}, M={M}, (min_x={min_x}, min_y={min_y})")
-
-
-       # 3) Build auto init
-        auto_init_params = {
+        auto_init_params_global = {
             "N": N,
             "M": M,
             "min_x": min_x,
             "min_y": min_y,
             "max_battery_distance": 100,
             "max_battery_time": 100,
-            "n_drones": n_drones_for_this_cluster,
-            "n_ground_stations": 1,
-            "n_charging_stations": len(stations_in_cluster),
-            "ground_sensor_locations": [],
-            "cluster_polygon": cluster_polygon,
-            # we keep station coords as-is, but they might lie outside [0..N-1].
-            # for a full solution, you might SHIFT them so min_x->0, etc.
-            "charging_stations_locations": stations_in_cluster,
+            "n_ground_stations": total_ground_sensors,
+            "n_charging_stations": len(charging_stations),
+            "charging_stations_locations": charging_stations
         }
 
-        custom_init_params = {
-            "burnmap_filename": "dummy.txt",
-            "call_every_n_steps": 1,
-            "optimization_horizon": timesteps,
-            # we skip log_file for simplicity
-        }
+        sensor_strat = SensorStrategyClass(auto_init_params_global, custom_init_params)
+        ground_sensors, _ = sensor_strat.get_locations()
 
-        # Create sensor strategy & retrieve sensor placements
-        sensor_strat = RandomSensorPlacementStrategy(auto_init_params, custom_init_params)
-        ground_sensors, placed_charging_stations = sensor_strat.get_locations()
+        color_map = ["blue", "orange", "green", "red", "purple", "cyan", "magenta", "gray"]
+        cluster_data = []
+        strategy_instances = []
 
-        # Create the LoggedDroneRoutingStrategy
-        routing_strat = LoggedDroneRoutingStrategy(auto_init_params, custom_init_params)
+        for cid, stations_in_cluster in enumerate(self.clusters):
+            print(f"\n🚀 Running cluster {cid} with {len(stations_in_cluster)} charging stations and {drones_per_cluster[cid]} drones")
+            polygons = self.get_cluster_boundary_boxes(stations_in_cluster, half_extent)
+            cluster_polygon = unary_union(polygons)
 
-        # 1) get drone initial
-        initial_drone_positions = routing_strat.get_initial_drone_locations()
-        drone_locs = list(initial_drone_positions)
-        drone_batts = [(100,100)] * n_drones_for_this_cluster  # dummy battery
-        # 2) run next_actions for a few timesteps
-        for t in range(timesteps):
-            auto_step_params = {
-                "drone_locations": drone_locs,
-                "drone_batteries": drone_batts,
-                "t": t
+            N, M, min_x, min_y = self.get_bounding_grid_size(polygons)
+            print(f"  🧱 Bounding grid: {N} x {M}, origin: ({min_x}, {min_y})")
+
+            auto_params = {
+                "N": N,
+                "M": M,
+                "min_x": min_x,
+                "min_y": min_y,
+                "max_battery_distance": 100,
+                "max_battery_time": 100,
+                "n_drones": drones_per_cluster[cid],
+                "n_ground_stations": 1,
+                "n_charging_stations": len(stations_in_cluster),
+                "ground_sensor_locations": ground_sensors,
+                "cluster_polygon": cluster_polygon,
+                "charging_stations_locations": stations_in_cluster,
             }
-            custom_step_params = {}
-            actions = routing_strat.next_actions(auto_step_params, custom_step_params)
-            # apply moves
-            for i, act in enumerate(actions):
-                if act[0] == 'move':
-                    dx, dy = act[1]
-                    oldx, oldy = drone_locs[i]
-                    newx, newy = oldx + dx, oldy + dy
-                    # no boundary clamp for brevity
-                    drone_locs[i] = (newx, newy)
-                elif act[0] == 'charge':
-                    # pretend we recharge
-                    drone_batts[i] = (100,100)
 
-        # store everything for plotting
-        cluster_data.append({
-            "cid": cid,
-            "color": color,
-            "stations": stations_in_cluster,
-            "ground_sensors": ground_sensors,
-            "charging_stations": placed_charging_stations,
-            "init_drone_positions": initial_drone_positions,
-            "final_drone_positions": drone_locs,
-            "polygons": polygons,
-        })
+            strat = self.StrategyClass(auto_params, custom_init_params)
+            strategy_instances.append(strat)
+            print(f"  ✅ Strategy initialized for cluster {cid}")
+            # only call once
+            drone_init_output = strat.get_initial_drone_locations()
+            drone_locs = list(drone_init_output[0])
+            drone_states = list(drone_init_output[1])
+            drone_batts = [(100, 100)] * drones_per_cluster[cid]
 
-    # --------------------------------------------------
-    # Plot everything
-    # --------------------------------------------------
-    plt.figure(figsize=(8,8))
-    plt.title(f"BFS Clusters, #drones per cluster, T={timesteps} steps")
+            print(f"  🚁 Initial drone positions: {drone_init_output}")
+            print(f"  🔋 Initial drone batteries: {drone_batts}")
 
-    print("cluster_data", cluster_data)
+            for t in range(timesteps):
+                actions = strat.next_actions(
+                    {
+                        "drone_locations": drone_locs, 
+                        "drone_batteries": drone_batts, 
+                        "drone_states": drone_states,
+                        "t": t
+                    },
+                    {}
+                )
+                print(f"    ⏱️ timestep {t} actions: {actions}")
+                for i, act in enumerate(actions):
+                    if act[0] == "move":
+                        dx, dy = act[1]
+                        x, y = drone_locs[i]
+                        drone_locs[i] = (x + dx, y + dy)
+                    elif act[0] == "charge":
+                        drone_batts[i] = (100, 100)
 
-    for cinfo in cluster_data:
-        cid = cinfo["cid"]
-        color = cinfo["color"]
+                print(f"    📍 Drone positions after timestep {t}: {drone_locs}")
+                print(f"    🔋 Drone batteries after timestep {t}: {drone_batts}")
+            cluster_data.append({
+                "cid": cid,
+                "color": color_map[cid % len(color_map)],
+                "stations": stations_in_cluster,
+                "ground_sensors": ground_sensors,
+                "charging_stations": stations_in_cluster,
+                "init_drone_positions": drone_init_output,
+                "final_drone_positions": drone_locs,
+                "polygons": polygons,
+            })
 
-        # stations
-        sx = [p[0] for p in cinfo["stations"]]
-        sy = [p[1] for p in cinfo["stations"]]
-        plt.scatter(sx, sy, c=color, marker='o', s=80, label=f"Cluster {cid} stations" if cid==0 else None)
+            print(f"✅ Finished simulation for cluster {cid}")
+            
+        self.cluster_data = cluster_data
+        return strategy_instances, cluster_data
 
-        # ground sensors
-        gx = [p[0] for p in cinfo["ground_sensors"]]
-        gy = [p[1] for p in cinfo["ground_sensors"]]
-        plt.scatter(gx, gy, c=color, marker='s', s=120, edgecolors='black', 
-                    label=f"Cluster {cid} ground sensors" if cid==0 else None)
+    def plot_clusters(self, title="BFS Clusters (final drone positions)", figsize=(8,8)):
+        """
+        Plot all cluster data after run_clusters has been called.
+        """
+        if not self.cluster_data:
+            print("[!] No cluster data to plot. Call run_clusters() first.")
+            return
 
-        # placed charging
-        cx = [p[0] for p in cinfo["charging_stations"]]
-        cy = [p[1] for p in cinfo["charging_stations"]]
-        plt.scatter(cx, cy, c=color, marker='*', s=140, edgecolors='black',
-                    label=f"Cluster {cid} charging stn" if cid==0 else None)
+        plt.figure(figsize=figsize)
+        plt.title(title)
 
-        # initial drone loc
-        idx = [p[0] for p in cinfo["init_drone_positions"]]
-        idy = [p[1] for p in cinfo["init_drone_positions"]]
-        plt.scatter(idx, idy, c=color, marker='D', s=80, edgecolors='black',
-                    label=f"Cluster {cid} initial drones" if cid==0 else None)
+        for cinfo in self.cluster_data:
+            cid = cinfo["cid"]
+            color = cinfo["color"]
 
-        # final drone loc
-        fdx = [p[0] for p in cinfo["final_drone_positions"]]
-        fdy = [p[1] for p in cinfo["final_drone_positions"]]
-        plt.scatter(fdx, fdy, c=color, marker='D', s=80, edgecolors='red',
-                    label=f"Cluster {cid} final drones" if cid==0 else None)
+            plt.scatter(*zip(*cinfo["stations"]), c=color, marker='o', s=80, label=f"Cluster {cid} stations")
+            plt.scatter(*zip(*cinfo["ground_sensors"]), c=color, marker='s', s=100, edgecolors='black')
+            plt.scatter(*zip(*cinfo["charging_stations"]), c=color, marker='*', s=140, edgecolors='black')
+            plt.scatter(*zip(*cinfo["init_drone_positions"]), c=color, marker='D', s=80, edgecolors='black')
+            plt.scatter(*zip(*cinfo["final_drone_positions"]), c=color, marker='D', s=80, edgecolors='red')
 
-        # bounding polygons
-        for poly in cinfo["polygons"]:
-            x, y = poly.exterior.xy
-            plt.fill(x, y, alpha=0.2, facecolor=color, edgecolor='black')
+            for poly in cinfo["polygons"]:
+                x, y = poly.exterior.xy
+                plt.fill(x, y, alpha=0.2, facecolor=color, edgecolor='black')
 
-    plt.xlabel("X")
-    plt.ylabel("Y")
-    plt.legend()
-    plt.grid(True)
-    plt.gca().set_aspect('equal', 'box')
-    plt.show()
-
-
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.legend()
+        plt.grid(True)
+        plt.gca().set_aspect('equal', 'box')
+        plt.tight_layout()
+        plt.show()
 ##############################################################################
 # Example usage
 ##############################################################################
@@ -495,13 +282,40 @@ if __name__ == "__main__":
     stations = [
         (2,2), (3,2), (4,4),
         (10,10), (11,10),
-        (22,22)
+        (22,22), (23,22)
     ]
     drone_battery = 6.0
 
     # Suppose we have 3 clusters from BFS, so we specify # drones for each cluster:
-    # e.g. cluster 0 => 2 drones, cluster 1 => 1 drone, cluster 2 => 3 drones
-    drones_per_cluster = [2, 1, 3]
+    # e.g. cluster 0 => 2 drones, cluster 1 => 1 drone, cluster 2 => 2 drones
+    drones_per_cluster = [2, 1, 2]
+    
+    # Import strategy classes
+    from Strategy import RandomSensorPlacementStrategy, LoggedDroneRoutingStrategy, DroneRoutingOptimizationModelReuseIndex
+    
+    # Create a wrapper around the strategy class
+    wrapper = DroneRoutingStrategyClusterWrapper(DroneRoutingOptimizationModelReuseIndex)
+    
+    # Run the clusters, which returns strategy instances and cluster data
+    strategy_instances, cluster_data = wrapper.run_clusters(
+        charging_stations=stations, 
+        drone_battery=drone_battery, 
+        drones_per_cluster=drones_per_cluster,
+        timesteps=2,
+        half_extent=drone_battery / 2.0,
+        total_ground_sensors=3,
+        SensorStrategyClass=RandomSensorPlacementStrategy,
+        custom_init_params={
+            "burnmap_filename": "MinimalDataset/0001/burn_map.npy",
+            "call_every_n_steps": 5,
+            "optimization_horizon": 20,
+            "reevaluation_step": 15
+        }
+    )
 
-    # We'll run 5 timesteps, bounding boxes with half_extent=2.0 
-    run_and_plot(stations, drone_battery, drones_per_cluster, timesteps=5, half_extent=2.0)
+    print(strategy_instances, cluster_data)
+    # Finally, plot the clusters (including station locations and final drone positions)
+    wrapper.plot_clusters(
+        title="Example BFS Clusters and Drone Positions", 
+        figsize=(8,8)
+    )
