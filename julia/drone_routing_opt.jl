@@ -1,6 +1,6 @@
 # import helper_functions such as load_burn_map
 include("helper_functions.jl")
-using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
+# using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
 
 function drone_routing_next_move_example(drones, batteries, risk_pertime_file, time_horizon)

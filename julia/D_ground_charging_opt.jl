@@ -5,17 +5,17 @@
 # ENV["GRB_LICENSE_FILE"] = "/Library/gurobi1103/gurobi.lic"
 
 import Pkg
-Pkg.add("IJulia")
-Pkg.add("CSV")
-Pkg.add("DataFrames")
-Pkg.add("Distances")
-Pkg.add("MAT")
-Pkg.add("Plots")
-Pkg.add("FFMPEG")
-Pkg.add("JuMP")
-Pkg.add("Gurobi")
-Pkg.add("Clustering")
-Pkg.add("NPZ")
+# Pkg.add("IJulia")
+# Pkg.add("CSV")
+# Pkg.add("DataFrames")
+# Pkg.add("Distances")
+# Pkg.add("MAT")
+# Pkg.add("Plots")
+# Pkg.add("FFMPEG")
+# Pkg.add("JuMP")
+# Pkg.add("Gurobi")
+# Pkg.add("Clustering")
+# Pkg.add("NPZ")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
 include("helper_functions.jl")

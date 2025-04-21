@@ -1,14 +1,14 @@
 import Pkg
-Pkg.add("IJulia")
-Pkg.add("CSV")
-Pkg.add("DataFrames")
-Pkg.add("Distances")
-Pkg.add("MAT")
-Pkg.add("Plots")
-Pkg.add("FFMPEG")
-Pkg.add("JuMP")
-Pkg.add("Gurobi")
-Pkg.add("Clustering")
+# Pkg.add("IJulia")
+# Pkg.add("CSV")
+# Pkg.add("DataFrames")
+# Pkg.add("Distances")
+# Pkg.add("MAT")
+# Pkg.add("Plots")
+# Pkg.add("FFMPEG")
+# Pkg.add("JuMP")
+# Pkg.add("Gurobi")
+# Pkg.add("Clustering")
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP
 
 ## ------------------- LOAD THE DATA --------------------
