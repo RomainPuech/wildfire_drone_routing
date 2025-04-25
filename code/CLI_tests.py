@@ -18,10 +18,7 @@ import math
 # from benchmark import benchmark_on_sim2real_dataset_precompute, return_no_custom_parameters
 # # from displays import create_scenario_video
 # from new_clustering import get_wrapped_strategy
-from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
 
-PLACEMENT_STRATEGY_TO_TEST = wrap_log_sensor_strategy(RandomSensorPlacementStrategy)
-DRONE_STRATEGY_TO_TEST = wrap_log_drone_strategy(RandomDroneRoutingStrategy)
 
 
 # change values here to change benchmarking parameters
@@ -37,7 +34,6 @@ default_parameters =  {
 def custom_initialization_parameters_function(input_dir:str):
     print(f"input_dir: {input_dir}")
     return {"burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy", "reevaluation_step": 5, "optimization_horizon":5, "strategy_drone": DroneRoutingOptimizationModelReuseIndex, "strategy_sensor": RandomSensorPlacementStrategy}
-
 
 
 def plot_metrics_from_precomputed(metrics_dict):
@@ -88,8 +84,6 @@ def plot_metrics_from_precomputed(metrics_dict):
         plt.close()
 
 
-
-
 def load_and_plot_metrics(filepath):
     """
     Loads a metrics dictionary from a file and plots selected metrics.
@@ -112,14 +106,17 @@ def load_and_plot_metrics(filepath):
 
         plot_metrics_from_precomputed(data)
 
+
 def generate_violin_plots_from_results(folder_path: str, output_dir: str = "plots_violin"):
     """
-    Generates violin plots for selected raw metrics across different strategies.
+    Generates violin plots for selected raw metrics across different strategies, including
+    % of fires detected by drones, % undetected, and avg_time_to_detection.
 
     Args:
         folder_path (str): Path to the folder containing JSON result files.
         output_dir (str): Path to save violin plots.
     """
+
     selected_raw_metrics = [
         "raw_execution_times",
         "raw_fire_sizes",
@@ -133,7 +130,19 @@ def generate_violin_plots_from_results(folder_path: str, output_dir: str = "plot
     os.makedirs(output_dir, exist_ok=True)
     records = []
 
+    filename_to_strategy = {
+        "TEST_Greedy_RandomSensorPlacementStrategy_DroneRoutingOptimizationModelReuseIndex_WideDataset_20_drones_12_grd_stations_8_char_st_20_max_battery_time_2_opt_hor_2_reev_step_0.0001_reg_param.json": "Greedy",
+        "TEST_Random_Random_RandomSensorPlacementStrategy_RandomDroneRoutingStrategy_WideDataset_20_drones_12_grd_stations_8_char_st_20_max_battery_time_0_opt_hor_0_reev_step_0_reg_param.json": "Random",
+        "TEST_Regular_RandomSensorPlacementStrategy_DroneRoutingOptimizationModelReuseIndex_WideDataset_20_drones_12_grd_stations_8_char_st_20_max_battery_time_6_opt_hor_6_reev_step_0.0001_reg_param.json": "Regular",
+        "TEST_Regularized_RandomSensorPlacementStrategy_DroneRoutingOptimizationModelReuseIndexRegularized_WideDataset_20_drones_12_grd_stations_8_char_st_20_max_battery_time_6_opt_hor_6_reev_step_0.0001_reg_param.json": "Regularized",
+        "TEST_Very_Regularized_RandomSensorPlacementStrategy_DroneRoutingOptimizationModelReuseIndexRegularized_WideDataset_20_drones_12_grd_stations_8_char_st_20_max_battery_time_6_opt_hor_6_reev_step_1_reg_param.json": "Very Regularized"
+    }
+
     for filename in os.listdir(folder_path):
+        print("Folder Path!!", folder_path)
+        print(f"Processing file: {filename}")
+        print(f"File path: {os.path.join(folder_path, filename)}")
+
         if not filename.endswith(".json"):
             continue
 
@@ -148,12 +157,28 @@ def generate_violin_plots_from_results(folder_path: str, output_dir: str = "plot
         except Exception:
             data = eval(raw_text, {"nan": float("nan")})
 
-        strategy_name = filename.split("_")[1]
+        if filename not in filename_to_strategy:
+            print(f"⚠️ Skipping unknown strategy file: {filename}")
+            continue
+
+        strategy_name = filename_to_strategy[filename]
+
+        drone_percentages = []
+        undetected_percentages = []
 
         for layout_id, metrics in data.items():
             if not isinstance(metrics, dict):
                 continue
 
+            # extract device percentages for the layout
+            device_perc = metrics.get("device_percentages", {})
+            drone_percent = device_perc.get("drone", 0.0)
+            undetected_percent = device_perc.get("undetected", 0.0)
+
+            drone_percentages.append(drone_percent)
+            undetected_percentages.append(undetected_percent)
+
+            # collect raw list-based metrics
             for raw_metric in selected_raw_metrics:
                 if raw_metric in metrics:
                     values = metrics[raw_metric]
@@ -166,6 +191,31 @@ def generate_violin_plots_from_results(folder_path: str, output_dir: str = "plot
                                     "value": float(v)
                                 })
 
+            # collect avg_time_to_detection (single float)
+            avg_time = metrics.get("avg_time_to_detection", None)
+            if avg_time is not None and not (isinstance(avg_time, float) and np.isnan(avg_time)):
+                records.append({
+                    "strategy": strategy_name,
+                    "metric": "avg_time_to_detection",
+                    "value": float(avg_time)
+                })
+
+        # add detection percentages
+        for v in drone_percentages:
+            records.append({
+                "strategy": strategy_name,
+                "metric": "percent_by_drone",
+                "value": v
+            })
+
+        for v in undetected_percentages:
+            records.append({
+                "strategy": strategy_name,
+                "metric": "percent_undetected",
+                "value": v
+            })
+
+    # create plots
     if not records:
         print("⚠️ No valid data found.")
         return
@@ -185,7 +235,18 @@ def generate_violin_plots_from_results(folder_path: str, output_dir: str = "plot
 
     print(f"✅ Violin plots saved to: {output_dir}")
 
+<<<<<<< Updated upstream:code/CLI_tests.py
+||||||| Stash base:code/CLI.py
+if __name__ == "__main__":
+    # Parse command line arguments
+=======
 
+if __name__ == "__main__":
+    # Parse command line arguments
+    generate_violin_plots_from_results("code/results")
+>>>>>>> Stashed changes:code/CLI.py
+
+<<<<<<< Updated upstream:code/CLI_tests.py
 def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, custom_initialization_parameters_function:callable, test_name:str):
     dataset = "WideDataset"
     n_drones = default_parameters["n_drones"]
@@ -193,9 +254,43 @@ def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, cus
     n_charging_stations = default_parameters["n_charging_stations"]
     max_battery_distance = default_parameters["max_battery_distance"]
     max_battery_time = default_parameters["max_battery_time"]
+||||||| Stash base:code/CLI.py
+    # parser = argparse.ArgumentParser(description='Benchmarking script for strategies')
+    # parser.add_argument('--dataset', type=str, default="MinimalDataset/", help='Dataset folder path')
+    # parser.add_argument('--n_drones', type=int, default=default_parameters["n_drones"], help='Number of drones')
+    # parser.add_argument('--n_ground_stations', type=int, default=default_parameters["n_ground_stations"], help='Number of ground stations')
+    # parser.add_argument('--n_charging_stations', type=int, default=default_parameters["n_charging_stations"], help='Number of charging stations')
+    # parser.add_argument('--max_battery_distance', type=int, default=default_parameters["max_battery_distance"], help='Maximum battery distance')
+    # parser.add_argument('--max_battery_time', type=int, default=default_parameters["max_battery_time"], help='Maximum battery time')
+    # args = parser.parse_args()
+def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, custom_initialization_parameters_function:callable, test_name:str):
+    dataset = "WideDataset"
+    n_drones = default_parameters["n_drones"]
+    n_ground_stations = default_parameters["n_ground_stations"]
+    n_charging_stations = default_parameters["n_charging_stations"]
+    max_battery_distance = default_parameters["max_battery_distance"]
+    max_battery_time = default_parameters["max_battery_time"]
+=======
+    
+    # parser = argparse.ArgumentParser(description='Benchmarking script for strategies')
+    # parser.add_argument('--dataset', type=str, default="MinimalDataset/", help='Dataset folder path')
+    # parser.add_argument('--n_drones', type=int, default=default_parameters["n_drones"], help='Number of drones')
+    # parser.add_argument('--n_ground_stations', type=int, default=default_parameters["n_ground_stations"], help='Number of ground stations')
+    # parser.add_argument('--n_charging_stations', type=int, default=default_parameters["n_charging_stations"], help='Number of charging stations')
+    # parser.add_argument('--max_battery_distance', type=int, default=default_parameters["max_battery_distance"], help='Maximum battery distance')
+    # parser.add_argument('--max_battery_time', type=int, default=default_parameters["max_battery_time"], help='Maximum battery time')
+    # args = parser.parse_args()
+>>>>>>> Stashed changes:code/CLI.py
 
-    # print(f"Running benchmark for strategy: {placement_strategy.strategy_name} and {drone_strategy.strategy_name}")
+    # def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, custom_initialization_parameters_function:callable, test_name:str):
+    #     dataset = "WideDataset"
+    #     n_drones = default_parameters["n_drones"]
+    #     n_ground_stations = default_parameters["n_ground_stations"]
+    #     n_charging_stations = default_parameters["n_charging_stations"]
+    #     max_battery_distance = default_parameters["max_battery_distance"]
+    #     max_battery_time = default_parameters["max_battery_time"]
 
+<<<<<<< Updated upstream:code/CLI_tests.py
     start_time = time.time()
     
     metrics_by_layout = benchmark_on_sim2real_dataset_precompute(
@@ -224,33 +319,90 @@ def run(placement_strategy:str, drone_strategy:str, default_parameters:dict, cus
     optimization_horizon = custom_params.get("optimization_horizon", 0)
     reevaluation_step = custom_params.get("reevaluation_step", 0)
     regularization_param = custom_params.get("regularization_param", 0)
-
-    logfile_name = f"results/TEST_{test_name}_{placement_strategy.strategy_name}_{drone_strategy.strategy_name}_{"_".join(dataset.strip('/').split('/'))}_{n_drones}_drones_{n_ground_stations}_grd_stations_{n_charging_stations}_char_st_{max_battery_time}_max_battery_time_{optimization_horizon}_opt_hor_{reevaluation_step}_reev_step_{regularization_param}_reg_param.json"
-    with open(logfile_name, "w") as f:
-        json.dump(str(metrics_by_layout), f)
-
-    print(metrics_by_layout)
-    print("Done!")
-    print(f"Time taken: {end_time - start_time} seconds")
+||||||| Stash base:code/CLI.py
+    start_time = time.time()
     
+    metrics_by_layout = benchmark_on_sim2real_dataset_precompute(
+    dataset_folder_name=dataset,
+    ground_placement_strategy=placement_strategy,
+    drone_routing_strategy=drone_strategy,
+    custom_initialization_parameters_function=custom_initialization_parameters_function,
+    custom_step_parameters_function=return_no_custom_parameters,
+    max_n_scenarii=100,
+    starting_time=0,
+    simulation_parameters = {
+        "n_drones": n_drones,
+        "n_ground_stations": n_ground_stations,
+        "n_charging_stations": n_charging_stations,
+        "max_battery_distance": max_battery_distance,
+        "max_battery_time": max_battery_time,
+    })
+    end_time = time.time()
+    total_time = end_time - start_time
+    metrics_by_layout["total_time"] = total_time
+    # save them in a json file
+    
+    custom_params = custom_initialization_parameters_function(dataset)
+    optimization_horizon = custom_params.get("optimization_horizon", 0)
+    reevaluation_step = custom_params.get("reevaluation_step", 0)
+    regularization_param = custom_params.get("regularization_param", 0)
+=======
+    #     # print(f"Running benchmark for strategy: {placement_strategy.strategy_name} and {drone_strategy.strategy_name}")
+>>>>>>> Stashed changes:code/CLI.py
 
-def delete_all_logs(dataset:str):
-    for layout in os.listdir(f"{dataset}"):
-        if layout == ".DS_Store":
-            continue
-        # check if log directory exists
-        if not os.path.exists(f"{dataset}/{layout}/logs/"):
-            continue
-        for logfile in os.listdir(f"{dataset}/{layout}/logs/"):
-            if logfile == ".DS_Store":
-                continue
-            print(f"Deleting {dataset}/{layout}/logs/{logfile}")
-            os.remove(f"{dataset}/{layout}/logs/{logfile}")
+    #     start_time = time.time()
+        
+    #     metrics_by_layout = benchmark_on_sim2real_dataset_precompute(
+    #     dataset_folder_name=dataset,
+    #     ground_placement_strategy=placement_strategy,
+    #     drone_routing_strategy=drone_strategy,
+    #     custom_initialization_parameters_function=custom_initialization_parameters_function,
+    #     custom_step_parameters_function=return_no_custom_parameters,
+    #     max_n_scenarii=100,
+    #     starting_time=0,
+    #     simulation_parameters = {
+    #         "n_drones": n_drones,
+    #         "n_ground_stations": n_ground_stations,
+    #         "n_charging_stations": n_charging_stations,
+    #         "max_battery_distance": max_battery_distance,
+    #         "max_battery_time": max_battery_time,
+    #     })
+    #     end_time = time.time()
+    #     total_time = end_time - start_time
+    #     metrics_by_layout["total_time"] = total_time
+    #     # save them in a json file
+        
+    #     custom_params = custom_initialization_parameters_function(dataset)
+    #     optimization_horizon = custom_params.get("optimization_horizon", 0)
+    #     reevaluation_step = custom_params.get("reevaluation_step", 0)
+    #     regularization_param = custom_params.get("regularization_param", 0)
+
+    #     logfile_name = f"results/TEST_{test_name}_{placement_strategy.strategy_name}_{drone_strategy.strategy_name}_{"_".join(dataset.strip('/').split('/'))}_{n_drones}_drones_{n_ground_stations}_grd_stations_{n_charging_stations}_char_st_{max_battery_time}_max_battery_time_{optimization_horizon}_opt_hor_{reevaluation_step}_reev_step_{regularization_param}_reg_param.json"
+    #     with open(logfile_name, "w") as f:
+    #         json.dump(str(metrics_by_layout), f)
+
+    #     print(metrics_by_layout)
+    #     print("Done!")
+    #     print(f"Time taken: {end_time - start_time} seconds")
+        
+
+    # def delete_all_logs(dataset:str):
+    #     for layout in os.listdir(f"{dataset}"):
+    #         if layout == ".DS_Store":
+    #             continue
+    #         # check if log directory exists
+    #         if not os.path.exists(f"{dataset}/{layout}/logs/"):
+    #             continue
+    #         for logfile in os.listdir(f"{dataset}/{layout}/logs/"):
+    #             if logfile == ".DS_Store":
+    #                 continue
+    #             print(f"Deleting {dataset}/{layout}/logs/{logfile}")
+    #             os.remove(f"{dataset}/{layout}/logs/{logfile}")
 
 
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
     # delete_all_logs("WideDataset")
     #exit()
     # Parse command line arguments
@@ -289,8 +441,8 @@ if __name__ == "__main__":
     
     
     
-    def regular_custom_initialization_parameters_function(input_dir:str):
-        return {"burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy", "reevaluation_step": 6, "optimization_horizon":6, "regularization_param": 0.0001}
+    # def regular_custom_initialization_parameters_function(input_dir:str):
+    #     return {"burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy", "reevaluation_step": 6, "optimization_horizon":6, "regularization_param": 0.0001}
      
     # print("TEST 3 - Fixed placement, Optimization Drone")
 
@@ -327,18 +479,31 @@ if __name__ == "__main__":
     #     print(f"Error: {e}")
 
 
-    print("TEST X - Optim Sensor, Random Drone (Long time to run)")
+    # print("TEST X - Optim Sensor, Random Drone (Long time to run)")
 
+<<<<<<< Updated upstream:code/CLI_tests.py
     PLACEMENT_STRATEGY_TO_TEST = wrap_log_sensor_strategy(SensorPlacementOptimization)
     DRONE_STRATEGY_TO_TEST = wrap_log_drone_strategy(RandomDroneRoutingStrategy)
     try:
         run(PLACEMENT_STRATEGY_TO_TEST, DRONE_STRATEGY_TO_TEST, default_parameters, regular_custom_initialization_parameters_function, "Optim Sensor, Random Drone", skip_folder_names=["WideDataset/0049_01289","WideDataset/0048_01141","WideDataset/0047_05424","WideDataset/0037_01578", "WideDataset/0041_02386"])
     except Exception as e:
         print(f"Error: {e}")
+||||||| Stash base:code/CLI.py
+    PLACEMENT_STRATEGY_TO_TEST = wrap_log_sensor_strategy(SensorPlacementOptimization)
+    DRONE_STRATEGY_TO_TEST = wrap_log_drone_strategy(RandomDroneRoutingStrategy)
+    try:
+        run(PLACEMENT_STRATEGY_TO_TEST, DRONE_STRATEGY_TO_TEST, default_parameters, regular_custom_initialization_parameters_function, "Optim Sensor, Random Drone")
+    except Exception as e:
+        print(f"Error: {e}")
+=======
+    # PLACEMENT_STRATEGY_TO_TEST = wrap_log_sensor_strategy(SensorPlacementOptimization)
+    # DRONE_STRATEGY_TO_TEST = wrap_log_drone_strategy(RandomDroneRoutingStrategy)
+    # try:
+    #     run(PLACEMENT_STRATEGY_TO_TEST, DRONE_STRATEGY_TO_TEST, default_parameters, regular_custom_initialization_parameters_function, "Optim Sensor, Random Drone")
+    # except Exception as e:
+    #     print(f"Error: {e}")
+>>>>>>> Stashed changes:code/CLI.py
 
 
     
 
-
-
-    

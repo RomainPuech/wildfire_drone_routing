@@ -50,14 +50,15 @@ def gather_data_from_layouts(
 
     # A list of metrics we want to store from run_benchmark_scenario's output:
     metric_keys = [
-        "delta_t",
+        "avg_time_to_detection",
         "avg_execution_time",
-        "fire_size_cells",
-        "fire_size_percentage",
-        "percentage_map_explored",
-        "total_distance_traveled",
+        "avg_fire_size",
+        "avg_fire_percentage",
+        "avg_map_explored",
+        "avg_distance",
         "avg_drone_entropy",
-        "sensor_entropy",
+        "avg_sensor_entropy"
+    
     ]
 
     # -------------------------------------------------------------------
