@@ -739,3 +739,21 @@ def run_benchmark_for_strategy(input_dir: str,
         file_format=file_format
     )
 
+
+
+def histogram_sim2real(dataset_folder_name):
+    """
+    plot the histogram of starting times of the fire in the dataset
+    """
+    starting_times = []
+    for layout_folder in listdir_folder_limited(dataset_folder_name, max_n_layouts):
+        for file in listdir_npy_limited(layout_folder + "/scenarii/", max_n_scenarii):
+            scenario = load_scenario_npy(file)
+            # find first time step where fire is present
+            for t in range(scenario.shape[0]):
+                if np.any(scenario[t, :, :]):
+                    starting_times.append(t)
+                    break
+    plt.hist(starting_times, bins=100)
+    plt.show()
+    
