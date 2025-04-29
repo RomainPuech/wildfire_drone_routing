@@ -7,8 +7,9 @@ import json
 import importlib.util
 from concurrent.futures import ThreadPoolExecutor
 from scipy.stats import entropy as scipy_entropy
-from burn_map_model import BurnMapPredictor, load_weather_data
 from dataset import load_scenario_npy, load_scenario_jpg, listdir_limited
+from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
+from new_clustering import get_wrapped_clustering_strategy
 from Strategy import SensorPlacementStrategy, DroneRoutingStrategy
 
 def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
@@ -31,33 +32,55 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
     return getattr(module, class_name)
 
 
-def get_automatic_layout_parameters(scenario:np.ndarray, input_dir:str='', simulation_parameters:dict={}):
+def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str = '', simulation_parameters: dict = {}):
     return {
         "N": scenario.shape[1],
         "M": scenario.shape[2],
-        "max_battery_distance": simulation_parameters.get("max_battery_distance", -1),
-        "max_battery_time": simulation_parameters.get("max_battery_time", 20),
-        "n_drones": simulation_parameters.get("n_drones", 5),
-        "n_ground_stations": simulation_parameters.get("n_ground_stations", 10),
-        "n_charging_stations": simulation_parameters.get("n_charging_stations", 5),
-        "input_dir": input_dir
+        "max_battery_distance": simulation_parameters.get("max_battery_distance", DEFAULT_SIMULATION_PARAMETERS["max_battery_distance"]),
+        "max_battery_time": simulation_parameters.get("max_battery_time", DEFAULT_SIMULATION_PARAMETERS["max_battery_time"]),
+        "n_drones": simulation_parameters.get("n_drones", DEFAULT_SIMULATION_PARAMETERS["n_drones"]),
+        "n_ground_stations": simulation_parameters.get("n_ground_stations", DEFAULT_SIMULATION_PARAMETERS["n_ground_stations"]),
+        "n_charging_stations": simulation_parameters.get("n_charging_stations", DEFAULT_SIMULATION_PARAMETERS["n_charging_stations"]),
+        "input_dir": input_dir,
     }
 
 def return_no_custom_parameters():
     return {}
 
-def build_custom_init_params(input_dir, layout_name):
-    # print(f"Building custom init params for {layout_name} in {input_dir}")
-    base_path = '/'.join(input_dir.strip('/').split('/')[:-1])
+DEFAULT_SIMULATION_PARAMETERS = {
+    "call_every_n_steps": 5,
+    "optimization_horizon": 5,
+    "reevaluation_step": 5,
+    "max_battery_distance": 20,
+    "max_battery_time": 20,
+    "n_drones": 5,
+    "n_ground_stations": 10,
+    "n_charging_stations": 5,
+}
 
-    return {
-        "burnmap_filename": f"{base_path}/burn_map.npy",
-        # "weather_file": f"{base_path}/Weather_Data/scenario_{layout_name}.txt",  # Make sure this matches
-        "log_file": f"{base_path}/custom_params/{layout_name}.json",
-        "call_every_n_steps": 5,               
-        "optimization_horizon": 20      
+def build_custom_init_params(input_dir, layout_name):
+    base_path = os.path.abspath(os.path.join(input_dir, ".."))
+
+    params = {
+        "burnmap_filename": os.path.join(base_path, "burn_map.npy"),
+        "log_file": os.path.join(base_path, f"{layout_name}.json"),
     }
 
+    # Inject all simulation parameters
+    params.update(DEFAULT_SIMULATION_PARAMETERS)
+
+    return params
+
+def print_simulation_parameters(simulation_params: dict, title: str = "Simulation Parameters"):
+    """
+    Pretty print the simulation parameters at the beginning of the run.
+    """
+    print("\n" + "=" * 60)
+    print(f" {title}")
+    print("=" * 60)
+    for key, value in simulation_params.items():
+        print(f"  {key:<25}: {value}")
+    print("=" * 60 + "\n")
 
 def get_burnmap_parameters(input_dir: str):
     return {
@@ -340,13 +363,21 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     t_found = 0
     device = 'undetected'
 
-    # 4. Load the burn map model
-    # Load trained burn map model (once)
-    burn_predictor = BurnMapPredictor(
-    model_path=custom_initialization_parameters["model_path"],     # You must add this param when calling this function
-    burn_map_path=custom_initialization_parameters["burnmap_filename"],
-    num_weather_timesteps=5
-    )
+    # # 4. Load the burn map model
+    # # Load trained burn map model (once)
+    # burn_predictor = BurnMapPredictor(
+    # model_path=custom_initialization_parameters["model_path"],     # You must add this param when calling this function
+    # burn_map_path=custom_initialization_parameters["burnmap_filename"],
+    # num_weather_timesteps=5
+    # )
+
+
+    # # Load real weather history
+    # weather_file = custom_initialization_parameters["weather_file"]
+    # num_timesteps = burn_predictor.num_weather_timesteps
+    # concat_len = burn_predictor.concat_len
+    # features_per_timestep = concat_len // num_timesteps
+
 
     for time_step in range(-starting_time,len(scenario)):
         if time_step >= 0: # The fire has started.
@@ -381,30 +412,27 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         ### Move the drones
 
         # 1. Get the parameters
-        # custom_step_parameters = custom_step_parameters_function() # TODO: add weather parameters
+        custom_step_parameters = custom_step_parameters_function() # TODO: add weather parameters
 
-        # ✅ Replace with actual weather data lookup (placeholder for now)
-        # Load real weather history
-        weather_file = custom_initialization_parameters["weather_file"]  # Add this to your init params
-        num_timesteps = burn_predictor.num_weather_timesteps
-        concat_len = burn_predictor.concat_len
-        features_per_timestep = concat_len // num_timesteps
 
-        weather_vectors = []
-        for k in range(num_timesteps):
-            t = t_found - k
-            vec = load_weather_data(weather_file, t, features_per_timestep) if t >= 0 else np.zeros(features_per_timestep)
-            weather_vectors.append(vec)
+        # weather_vectors = []
+        # for k in range(num_timesteps):
+        #     t = t_found - k
+        #     vec = load_weather_data(weather_file, t) if t >= 0 else np.zeros(features_per_timestep)
+        #     vec = vec if vec.shape[0] == features_per_timestep else np.zeros(features_per_timestep)
+        #     weather_vectors.append(vec)
 
-        weather_features = np.concatenate(weather_vectors).astype(np.float32)
+        # weather_features = np.concatenate(weather_vectors).astype(np.float32)
 
-        # ✅ Predict the dynamic burn map at current time
-        predicted_burn_map = burn_predictor.predict(timestep=t_found, weather_history=weather_features)
+        # # ✅ Predict the dynamic burn map at current time
+        # predicted_burn_map = burn_predictor.predict(timestep=t_found, weather_history=weather_features)
+        # print("SHAPE!!", predicted_burn_map.shape)
+        # # ✅ Pass the prediction to the routing strategy
+        # custom_step_parameters = {
+        #     "burn_map": predicted_burn_map
+        # }
+        # print("Custom STEP Parameters!", custom_step_parameters)
 
-        # ✅ Pass the prediction to the routing strategy
-        custom_step_parameters = {
-            "burn_map": predicted_burn_map
-        }
         automatic_step_parameters = {
             "drone_locations": drone_locations,
             "drone_batteries": drone_batteries,
@@ -712,7 +740,8 @@ def run_benchmark_for_strategy(input_dir: str,
                                starting_time: int = 0,
                                file_format: str = "npy",
                                custom_init_params_fn= build_custom_init_params,
-                               custom_step_params_fn= return_no_custom_parameters):
+                               custom_step_params_fn= return_no_custom_parameters,
+                               simulation_parameters: dict = {}):
     """
     Runs benchmarks for the given sensor and drone strategies on all scenarios in input_dir.
     """
@@ -735,6 +764,10 @@ def run_benchmark_for_strategy(input_dir: str,
     SensorPlacementStrategyClass = load_strategy(strategy_folder, sensor_strategy_file, sensor_class_name)
     DroneRoutingStrategyClass = load_strategy(strategy_folder, drone_strategy_file, drone_class_name)
 
+     # === Auto-wrap the strategies ===
+    SensorPlacementStrategyClass = wrap_log_sensor_strategy(SensorPlacementStrategyClass)
+    DroneRoutingStrategyClass = wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingStrategyClass))
+
     # === Load the first scenario to get parameters ===
     first_file = next(iter(iterable), None)
     if first_file is None:
@@ -750,15 +783,21 @@ def run_benchmark_for_strategy(input_dir: str,
 
     custom_init_params = custom_init_params_fn(input_dir, layout_name=os.path.basename(input_dir))
 
+    # === Create sensor placement strategy ===
     sensor_placement_strategy_instance = SensorPlacementStrategyClass(automatic_init_params, custom_init_params)
-    drone_routing_strategy_instance = DroneRoutingStrategyClass(automatic_init_params, custom_init_params)
-    # === update automatic_init_params with sensor placements ===
+
+    # === Get ground and charging station locations ===
     ground_sensor_locations, charging_station_locations = sensor_placement_strategy_instance.get_locations()
+
+    # === Update automatic_init_params with sensor locations ===
     automatic_init_params["ground_sensor_locations"] = ground_sensor_locations
     automatic_init_params["charging_stations_locations"] = charging_station_locations
 
+    # === Now create the drone routing strategy ===
+    drone_routing_strategy_instance = DroneRoutingStrategyClass(automatic_init_params, custom_init_params)
+
     # === call the existing function ===
-    run_benchmark_scenarii_sequential(
+    metrics = run_benchmark_scenarii_sequential(
         input_dir=input_dir,
         sensor_placement_strategy=lambda *_: sensor_placement_strategy_instance,
         drone_routing_strategy=lambda *_: drone_routing_strategy_instance,
@@ -766,6 +805,9 @@ def run_benchmark_for_strategy(input_dir: str,
         custom_step_parameters_function=custom_step_params_fn,
         starting_time=starting_time,
         max_n_scenarii=max_n_scenarii,
-        file_format=file_format
+        file_format=file_format,
+        simulation_parameters=simulation_parameters
     )
+    
+    return metrics
 

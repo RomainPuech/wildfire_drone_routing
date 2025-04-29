@@ -3,9 +3,8 @@ from collections import deque
 from shapely.geometry import Polygon, Point
 from shapely.ops import unary_union
 import matplotlib.pyplot as plt
-from Strategy import DroneRoutingStrategy
 
-def get_wrapped_strategy(BaseStrategy):
+def get_wrapped_clustering_strategy(BaseStrategy):
 
     class ClusteredDroneStrategyWrapped(BaseStrategy):
         def __init__(self,automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
@@ -217,52 +216,6 @@ def get_wrapped_strategy(BaseStrategy):
             plt.gca().set_aspect('equal', 'box')
             plt.tight_layout()
             plt.show()
-
-        # def run(self, timesteps=5, verbose=True):
-
-        #     print(f"\n▶️ Running clustered strategy for {timesteps} timesteps")
-
-        #     locs, states = self.get_initial_drone_locations()
-        #     batts = [(10, 10)] * len(locs)
-
-        #     for t in range(timesteps):
-        #         if verbose:
-        #             print(f"\n⏱️ timestep {t}")
-        #         actions = self.next_actions({
-        #             "drone_locations": locs,
-        #             "drone_batteries": batts,
-        #             "drone_states": states,
-        #             "t": t
-        #         }, {})
-
-        #         new_locs = []
-        #         new_states = []
-        #         for i, action in enumerate(actions):
-        #             x, y = locs[i]
-        #             if action[0] == "move":
-        #                 dx, dy = action[1]
-        #                 new_locs.append((x + dx, y + dy))
-        #                 new_states.append("fly")
-        #             elif action[0] == "fly":
-        #                 new_locs.append(action[1])
-        #                 new_states.append("fly")
-        #             elif action[0] == "charge":
-        #                 new_locs.append((x, y))
-        #                 new_states.append("charge")
-        #             else:
-        #                 new_locs.append((x, y))
-        #                 new_states.append("fly")
-
-        #             if verbose:
-        #                 moved = new_locs[-1] != (x, y)
-        #                 print(f"  🚁 Drone {i} {'moved to' if moved else 'stayed at'} {new_locs[-1]} [{action[0]}]")
-
-        #         locs = new_locs
-        #         states = new_states
-        #         batts = [(10, 10)] * len(locs)  # reset battery for simplicity
-
-        #     print("\n✅ Simulation finished.")
-
 
     return ClusteredDroneStrategyWrapped
 

@@ -1,0 +1,8 @@
+2025-04-29 12:10:08,769 - INFO - Starting benchmark runner...
+2025-04-29 12:10:08,770 - INFO - Parameters: {'dataset': '/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask', 'model': 'JULIAX', 'sensor_strategy': 'sensor_placement_optimization.py', 'sensor_class': 'SensorPlacementOptimization', 'drone_strategy': 'reuse_index_drone_routing.py', 'drone_class': 'DroneRoutingOptimizationModelReuseIndex', 'strategy_folder': '/Users/josephye/Desktop/wildfire_drone_routing/code/strategy', 'max_n': 3, 'starting_time': 0, 'file_format': 'jpg', 'results_dir': 'results/'}
+2025-04-29 12:10:09,408 - INFO - Saved latest results to results/latest_results.json
+2025-04-29 12:10:09,423 - INFO - Updated leaderboard at results/leaderboard.csv
+2025-04-29 12:10:09,423 - INFO - ✅ Saved Markdown report to results/reports/benchmark_summary_Satellite_Images_Mask_JULIAX_20250429_121009.md
+2025-04-29 12:10:09,954 - INFO - Saved plot to results/visualizations/accuracy_plot_Satellite_Images_Mask_JULIAX_20250429_121009.png
+2025-04-29 12:10:09,967 - INFO - Saved HTML leaderboard to results/reports/leaderboard.html
+2025-04-29 12:10:09,967 - INFO - Benchmark completed successfully!

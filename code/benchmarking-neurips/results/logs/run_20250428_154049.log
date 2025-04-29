@@ -1,0 +1,21 @@
+2025-04-28 15:40:49,987 - INFO - Starting benchmark runner...
+2025-04-28 15:40:49,987 - INFO - Parameters: {'dataset': '/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask', 'model': 'JULIAX', 'sensor_strategy': 'sensor_placement_optimization.py', 'sensor_class': 'SensorPlacementOptimization', 'drone_strategy': 'reuse_index_drone_routing.py', 'drone_class': 'DroneRoutingOptimizationModelReuseIndex', 'strategy_folder': '/Users/josephye/Desktop/wildfire_drone_routing/code/strategy', 'max_n': 3, 'starting_time': 0, 'file_format': 'jpg', 'results_dir': 'results/'}
+2025-04-28 15:40:51,041 - ERROR - Error during benchmark: Object of type int64 is not JSON serializable
+Traceback (most recent call last):
+  File "/Users/josephye/Desktop/wildfire_drone_routing/code/benchmarking-neurips/benchmarks/benchmark_runner.py", line 202, in main
+    save_metrics(metrics, args.results_dir, args.dataset, args.model)
+  File "/Users/josephye/Desktop/wildfire_drone_routing/code/benchmarking-neurips/benchmarks/benchmark_runner.py", line 53, in save_metrics
+    json.dump(metrics, f, indent=2)
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/json/__init__.py", line 179, in dump
+    for chunk in iterable:
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/json/encoder.py", line 431, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/json/encoder.py", line 405, in _iterencode_dict
+    yield from chunks
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/json/encoder.py", line 325, in _iterencode_list
+    yield from chunks
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/json/encoder.py", line 438, in _iterencode
+    o = _default(o)
+  File "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/json/encoder.py", line 179, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type int64 is not JSON serializable

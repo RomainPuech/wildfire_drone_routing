@@ -1,0 +1,51 @@
+{
+  "avg_time_to_detection": 0.0,
+  "device_percentages": {
+    "ground sensor": 0.0,
+    "charging station": 0.0,
+    "drone": 0.0,
+    "undetected": 100.0
+  },
+  "avg_execution_time": 4.216115482728489e-06,
+  "avg_fire_size": 10095.333333333334,
+  "avg_fire_percentage": 21.504597578726877,
+  "avg_map_explored": 0.22224589058117653,
+  "avg_distance": 409.0,
+  "avg_drone_entropy": 1.5871731848161141,
+  "avg_sensor_entropy": 2.3025850929940455,
+  "raw_execution_times": [
+    5.494464527476918e-06,
+    3.6093923780653213e-06,
+    3.5444895426432293e-06
+  ],
+  "raw_fire_sizes": [
+    13386,
+    6819,
+    10081
+  ],
+  "raw_fire_percentages": [
+    28.514218766641815,
+    14.52550857386303,
+    21.47406539567579
+  ],
+  "raw_map_explored": [
+    0.21727553520076684,
+    0.23644690595377568,
+    0.21301523058898714
+  ],
+  "raw_distances": [
+    409,
+    441,
+    377
+  ],
+  "raw_drone_entropies": [
+    1.5842325604137386,
+    1.5863330064154353,
+    1.5909539876191687
+  ],
+  "raw_sensor_entropies": [
+    2.3025850929940455,
+    2.3025850929940455,
+    2.3025850929940455
+  ]
+}

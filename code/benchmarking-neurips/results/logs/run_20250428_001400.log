@@ -1,0 +1,9 @@
+2025-04-28 00:14:00,512 - INFO - Starting benchmark runner...
+2025-04-28 00:14:00,512 - INFO - Parameters: {'dataset': '/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask', 'model': 'JULIAX', 'sensor_strategy': 'sensor_placement_optimization.py', 'sensor_class': 'SensorPlacementOptimization', 'drone_strategy': 'reuse_index_drone_routing.py', 'drone_class': 'DroneRoutingOptimizationModelReuseIndex', 'strategy_folder': '/Users/josephye/Desktop/wildfire_drone_routing/code/strategy', 'max_n': 3, 'starting_time': 0, 'file_format': 'jpg', 'results_dir': 'results/'}
+2025-04-28 00:14:08,797 - ERROR - Error during benchmark: 'SensorPlacementOptimization' object has no attribute 'get_locations'
+Traceback (most recent call last):
+  File "/Users/josephye/Desktop/wildfire_drone_routing/code/benchmarking-neurips/benchmarks/benchmark_runner.py", line 173, in main
+    metrics = run_benchmark_for_strategy(
+  File "/Users/josephye/Desktop/wildfire_drone_routing/code/benchmark.py", line 784, in run_benchmark_for_strategy
+    ground_sensor_locations, charging_station_locations = sensor_placement_strategy_instance.get_locations()
+AttributeError: 'SensorPlacementOptimization' object has no attribute 'get_locations'
