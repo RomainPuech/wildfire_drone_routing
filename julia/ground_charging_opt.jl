@@ -221,7 +221,7 @@ function NEW_SENSOR_STRATEGY_3(risk_pertime_file, N_grounds, N_charging)
     @constraint(model, sum(y) <= N_charging) 
 
     # Precompute valid (i, j) pairs where L∞ distance ≤ 1 (reverted to NEW_SENSOR_STRATEGY_2 approach)
-    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 1]
+    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 5]
     # Add constraints efficiently
     @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
 
@@ -240,3 +240,102 @@ function NEW_SENSOR_STRATEGY_3(risk_pertime_file, N_grounds, N_charging)
     return selected_x_indices, selected_y_indices
 end
 
+function NEW_SENSOR_STRATEGY_4(risk_pertime_file, N_grounds, N_charging)
+    println("NEW STRATEGY 3 - Optimized for speed")
+
+    time_start = time_ns() / 1e9 
+
+    risk_pertime = load_burn_map(risk_pertime_file)
+    T, N, M = size(risk_pertime)
+    optimization_horizon = 3
+    n_drones = 5
+    T_opt = optimization_horizon
+    max_battery_time = 10
+
+    I = [(x, y) for x in 1:N for y in 1:M]
+
+    # Precompute average risk for each cell to avoid recalculating it multiple times
+    avg_risk = zeros(N, M)
+    for i in 1:N, j in 1:M
+        avg_risk[i,j] = (1/T) * sum(risk_pertime[t,i,j] for t in 1:T)
+    end
+
+    # prerfilter: keep only cells with risk > 90% of other cells
+    first_quartile_risk = quantile(vec(avg_risk), 0.9)
+    I_prime = [(i, j) for i in 1:N, j in 1:M if avg_risk[i,j] > first_quartile_risk]
+    I_second = I_prime
+
+    I_third = get_drone_gridpoints(I_second, floor(max_battery_time/2), I)
+    GridpointsDrones = convert(Vector{Tuple{Int,Int}}, collect(I_third))
+
+    # prrint how many cells are discarded
+    println("Number of cells discarded: ", length(I) - length(I_prime))
+
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    
+    # Variables 
+    x = @variable(model, [i in I_prime], Bin) # ground sensor variables
+    y = @variable(model, [i in I_second], Bin) # charging station variables
+    a = @variable(model, [i in I_third, t=1:T, s=1:n_drones], Bin)
+    c = @variable(model, [i in I_prime, t=1:T, s=1:n_drones], Bin)
+    b = @variable(model, [t=1:T, s=1:n_drones], Int)
+    theta = @variable(model, [t=1:T_opt, k in I_third])
+
+
+    # Objective - use precomputed average risk
+    @objective(model, Max, 
+        sum(avg_risk[i...] * x[i] for i in I_prime) + 
+        sum(avg_risk[i...] * y[i] for i in I_second) + sum(risk_pertime[30+t,k[1],k[2]]*theta[t,k] for t=1:T_opt, k in I_third))
+
+    # Constraints
+    @constraint(model, [i in I_prime], x[i] + y[i] <= 1) # Can't place both at same location
+    @constraint(model, sum(x) <= N_grounds)
+    @constraint(model, sum(y) <= N_charging) 
+
+
+    # Precompute valid (i, j) pairs where L∞ distance ≤ 1 (reverted to NEW_SENSOR_STRATEGY_2 approach)
+    close_pairs = [(i, j) for i in I_second for j in I_second if i != j && maximum(abs.(i .- j)) <= 4]
+    # Add constraints efficiently
+    @constraint(model, [(i, j) in close_pairs], y[i] + y[j] <= 1)
+
+    cs_pairs = [(i, j) for (i, j) in close_pairs if j in I_prime]  # charging-sensor
+    @constraint(model, [(i,j) in cs_pairs], y[i] + x[j] <= 1)
+
+    # Common constraints - using tuple indices directly
+    # Each drone either charges or flies, not both
+    @constraint(model, [t=1:T_opt, s=1:n_drones], 
+               sum(a[i,t,s] for i in I_third) + 
+               sum(c[i,t,s] for i in I_second) == 1)
+
+    # Movement constraints - using tuple indexing
+    # Drone can only charge/fly at j at t+1 if it already charged at j or if it flew in a neighboring gridpoint at t
+    @constraint(model, [j in I_second, t in 1:T_opt-1, s in 1:n_drones], 
+                c[j,t+1,s] + a[j,t+1,s] <= sum(a[i,t,s] for i in I if i in neighbors_and_point(j)) + c[j,t,s])
+    
+    @constraint(model, [j in setdiff(I_third,I_second), t in 1:T_opt-1, s in 1:n_drones], 
+                a[j,t+1,s] <= sum(a[i,t,s] for i in I_third if i in neighbors_and_point(j)) + sum(c[i,t,s] for i in I_second if i in neighbors_and_point(j)))
+    
+    @constraint(model, [t=1:T_opt, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
+
+    @constraint(model, [s in 1:n_drones, t in 1:T_opt],
+    b[t,s] >= max_battery_time*sum(c[i,t,s] for i in I_second))
+    @constraint(model, [t in 1:T_opt-1, s in 1:n_drones], b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in I_second))
+
+    # Objective function with theta variables
+    @constraint(model, [t=1:T_opt, k in I_second], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones) + x[k] + y[k])
+    @constraint(model, [t=1:T_opt, k in setdiff(I_third,I_second)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
+
+    @constraint(model, [t=1:T_opt, k in I_third], 0 <= theta[t,k] <= 1)
+
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds to create model")
+
+    optimize!(model)
+
+    selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(x[i]) > 0.5]
+    selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) > 0.5]
+
+    println("Took ", (time_ns() / 1e9) - time_start, " seconds total")
+    
+    return selected_x_indices, selected_y_indices
+end

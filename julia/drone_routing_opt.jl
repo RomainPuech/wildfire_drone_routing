@@ -555,8 +555,6 @@ function create_routing_model(risk_pertime_file, n_drones, ChargingStations, Gro
     @constraint(model, [s=1:n_drones], 
     b[T,s] >= sum(a[i,T,s]*(precomputed_closest_distance_to_charging_station[i]) for i in GridpointsDrones))
     
-    
-    
     # Objective function with theta variables
     theta = @variable(model, [t=1:T, k in GridpointsDrones])
     @constraint(model, [t=1:T, k in GridpointsDrones], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
@@ -853,6 +851,12 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
     @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
+
+    # tau = 1
+    # for delta = 1:tau
+    #     @constraint(model, [t=1:T-delta, k=1:length(GridpointsDrones)], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s=1:n_drones))
+    # end
+
 
     # #Take into account ground sensors in Julia Objective function
     # if !isempty(ground_idx)
