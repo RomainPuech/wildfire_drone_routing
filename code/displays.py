@@ -183,6 +183,42 @@ def save_ignition_map_image(ignition_map, timestep, output_dir="images", burn_ma
     plt.savefig(image_path, bbox_inches="tight")
     plt.close()
 
+def display_ignition_map_image(ignition_map, timestep, burn_map=False):
+    
+    import matplotlib.pyplot as plt
+    
+    N = ignition_map.shape[0]
+    
+    # Create figure and axis
+    plt.figure(figsize=(10, 8))
+    
+    # Create custom colormap from white to yellow to red
+    from matplotlib.colors import LinearSegmentedColormap
+    colors = [(1, 1, 1), (1, 1, 0), (1, 0, 0)]  # White to yellow to red
+    n_bins = 100  # Number of color gradients
+    cmap = LinearSegmentedColormap.from_list("custom", colors, N=n_bins)
+    
+    # Plot the heatmap
+    im = plt.imshow(ignition_map, cmap=cmap, vmin=0, vmax=np.max(ignition_map))
+    
+    # Add colorbar with formatted labels
+    label = 'Ignition Probability' if not burn_map else f"Burn Probability"
+    cbar = plt.colorbar(im, label=label)
+    max_val = np.max(ignition_map)
+    tick_count = 5
+    ticks = np.linspace(0, max_val, tick_count)
+    cbar.set_ticks(ticks)
+    cbar.set_ticklabels([f'{v:.4f}' for v in ticks])
+    
+    # Add title and labels
+    image_title = label = 'Ignition Probability Map' if not burn_map else f"Burn Probability Map at t={timestep}"
+    plt.title(image_title)
+    plt.xlabel('Y coordinate')
+    plt.ylabel('X coordinate')
+    
+    
+
+    plt.show()
 
 
 def create_video_from_images(image_dir="images", output_filename="simulation.mp4", frames_per_image=1):
