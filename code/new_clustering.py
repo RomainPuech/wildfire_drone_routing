@@ -14,16 +14,30 @@ def get_wrapped_clustering_strategy(BaseStrategy):
             self.clusters = self.find_clusters(automatic_initialization_parameters["charging_stations_locations"], automatic_initialization_parameters["max_battery_time"])
             drone_battery = automatic_initialization_parameters["max_battery_time"]
 
-            num_clusters = len(self.clusters)
-            base = total_drones // num_clusters
-            drones_per_cluster = [base] * num_clusters
+            charging_stations_per_cluster = [len(cluster) for cluster in self.clusters]
+            total_charging_stations = sum(charging_stations_per_cluster)
 
-            for i in range(total_drones % num_clusters):
-                drones_per_cluster[i] += 1
+            # Calculate drones per cluster proportionally to the number of charging stations
+            drones_per_cluster = [
+                max(1, round(total_drones * (stations / total_charging_stations)))
+                for stations in charging_stations_per_cluster
+            ]
+
+            # Adjust to ensure the total number of drones matches exactly
+            while sum(drones_per_cluster) > total_drones:
+                for i in range(len(drones_per_cluster)):
+                    if drones_per_cluster[i] > 1:
+                        drones_per_cluster[i] -= 1
+                        if sum(drones_per_cluster) == total_drones:
+                            break
+
+            while sum(drones_per_cluster) < total_drones:
+                for i in range(len(drones_per_cluster)):
+                    drones_per_cluster[i] += 1
+                    if sum(drones_per_cluster) == total_drones:
+                        break
 
             self.drones_per_cluster = drones_per_cluster
-
-            half_extent = drone_battery / 2.0
             
             # print(f"[init] Number of clusters: {len(self.clusters)}")
             #for i, cluster in enumerate(self.clusters):
@@ -33,7 +47,7 @@ def get_wrapped_clustering_strategy(BaseStrategy):
             for cid, stations in enumerate(self.clusters):
                 if len(stations) == 0:
                     continue
-                polygons = self.get_cluster_boundary_boxes(stations, half_extent)
+                polygons = self.get_cluster_boundary_boxes(stations, drone_battery)
                 N, M, min_x, min_y = self.get_bounding_grid_size(polygons)
                 # print(f"\n🚀 Running cluster {cid} with {len(stations)} charging stations and {drones_per_cluster[cid]} drones")
                 
