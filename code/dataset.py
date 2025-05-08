@@ -296,7 +296,7 @@ def jpg_scenario_to_npy(jpg_folder_name, npy_folder_name = None, npy_filename = 
     scenario = load_scenario_jpg(jpg_folder_name)
     save_scenario_npy(scenario, npy_folder_name + npy_filename + ".npy")
 
-def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False):
+def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False, n_max_layouts = None):
     """
     Convert all JPG scenarios in the sim2real dataset to NPY files for faster processing.
     Args:
@@ -312,7 +312,12 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
     if not npy_folder_name.endswith("/"):
         npy_folder_name += "/"
 
+    n_layout = 0
     for layout_folder in os.listdir(dataset_folder_name):
+        print(layout_folder)
+        if n_max_layouts is not None and n_layout >= n_max_layouts:
+            break
+        n_layout += 1
         if verbose: print(f"Converting JPG scenarios to NPY for {dataset_folder_name + layout_folder}")
         if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/"):continue
@@ -389,7 +394,7 @@ def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy")
 
 ####### Prepocess the sim2real dataset #######
 
-def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension = ".npy"):
+def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension = ".npy", n_max_layouts = None):
     """
     Compute the burn map for all scenarios in the sim2real dataset and save them as NPY files.
     Args:
@@ -397,19 +402,21 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension =
     """
     if not dataset_folder_name.endswith("/"):
         dataset_folder_name += "/"
-    
+    n_layout = 0
     for layout_folder in os.listdir(dataset_folder_name):
+        if n_max_layouts is not None and n_layout >= n_max_layouts:
+            break
         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
         burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
-
-def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None):
+        n_layout += 1
+def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None):
     """
     Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
     Args:
         dataset_folder_name (str): Path to the dataset folder
         n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
     """
-    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout)
+    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts)
     print("Computing burn maps...")
-    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name)
+    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
