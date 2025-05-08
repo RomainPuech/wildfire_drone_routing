@@ -852,6 +852,12 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
     @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
 
+    phi = @variable(model, [i = 1:length(GridpointsDrones), t=1:T])
+    @constraint(model, [i in 1:length(GridpointsDrones)], sum(phi[i,t] for t in 1:T) <= 1)
+    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] <= theta[t,i])
+    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] + sum(theta[tau,i] for tau = 1:(t-1)) <= 1)
+
+
     # tau = 1
     # for delta = 1:tau
     #     @constraint(model, [t=1:T-delta, k=1:length(GridpointsDrones)], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s=1:n_drones))
@@ -897,7 +903,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
     
 
-    @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)))
+    @objective(model, Max, sum(risk_idx[t,k]*phi[k,t] for k=1:length(GridpointsDrones), t=1:T))
     
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
