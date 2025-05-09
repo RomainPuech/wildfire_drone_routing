@@ -1467,29 +1467,11 @@ function create_regularized_index_routing_model(risk_pertime_file, n_drones, Cha
     @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
     @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
 
-    # #Take into account ground sensors in Julia Objective function
-    # if !isempty(ground_idx)
-    #     @constraint(model, [t=1:T, k in ground_idx], theta[t,k] <= 0.1)
-    # end
+    phi = @variable(model, [i = 1:length(GridpointsDrones), t=1:T])
+    @constraint(model, [i in 1:length(GridpointsDrones)], sum(phi[i,t] for t in 1:T) <= 1)
+    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] <= theta[t,i])
+    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] + sum(theta[tau,i] for tau = 1:(t-1)) <= 1)
 
-    # ground_idx_set = Set(ground_idx)  # for faster lookup
-
-    # risk_idx = zeros(T, length(GridpointsDrones))
-    # for t in 1:T
-    #     for (k, point) in enumerate(GridpointsDrones)
-    #         if k in ground_idx_set
-    #             risk_idx[t, k] = 0.0  # no reward for drone coverage
-    #         else
-    #             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
-    #         end
-    #     end
-    # end
-
-   #once point is covered by drone, the next tau steps the risk is zero
-   #MAKES IT VERY SLOW
-    # tau = 2
-    # @constraint(model, [k in 1:length(GridpointsDrones), t in 1:T-tau, delta in 1:tau], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s in 1:n_drones))
-    
     #Risk objective with integer indices
     risk_idx = zeros(T, length(GridpointsDrones))
     for t in 1:T
@@ -1502,11 +1484,8 @@ function create_regularized_index_routing_model(risk_pertime_file, n_drones, Cha
         end
     end
 
-    # #capacity constraint on charging stations
-    # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
-    
 
-    @objective(model, Max, sum(risk_idx[t,k]*theta[t,k] for t=1:T, k=1:length(GridpointsDrones)) + regularization_param*total_linf_dist)
+    @objective(model, Max, sum(risk_idx[t,k]*phi[k,t] for t=1:T, k=1:length(GridpointsDrones)) + regularization_param*total_linf_dist)
     
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
