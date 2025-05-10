@@ -117,8 +117,11 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
         int: Number of drone movement substeps per data timestep
     """
     coverage_width_m = 2 * coverage_radius_m
-    coverage_width_cells = coverage_width_m // data_cell_size_m
-    print
+    print("coverage radius", coverage_radius_m)
+    print("datacellsize", data_cell_size_m)
+    print("dronespeed", drone_speed_m_per_min)
+    coverage_width_cells = coverage_width_m / data_cell_size_m
+    print(coverage_width_cells)
     coverage_width_cells = max(1, round(coverage_width_cells))  # Ensure it's at least 1 and rounded
 
     if coverage_width_cells % 2 == 0:  # If even, make it odd
@@ -127,6 +130,7 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
     drone_distance_m = 60 * drone_speed_m_per_min
     drone_distance_operational_cells_per_timestep = drone_distance_m // coverage_width_cells
     assert drone_distance_operational_cells_per_timestep == round(drone_distance_m/coverage_width_cells)
+    print(f"Drone distance in operational cells per timestep: {drone_distance_operational_cells_per_timestep}")
     return max(1, round(drone_distance_operational_cells_per_timestep))
 
 
@@ -478,7 +482,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
         # 🔁 Drone updates happen more frequently
         for substep in range(operational_substeps):
-            print(f"[DEBUG] Substep {substep+1}/{operational_substeps} at t={time_step}")
+            # print(f"[DEBUG] Substep {substep+1}/{operational_substeps} at t={time_step}")
 
             # === Routing & movement ===
             custom_step_parameters = custom_step_parameters_function()
@@ -537,7 +541,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     if device == 'undetected':
         delta_t = len(scenario)
-        print("Fire was not detected by any device.")
+        # print("Fire was not detected by any device.")
         final_grid = scenario[-1]
         fire_size_cells = np.sum(final_grid == 1)
         fire_size_percentage = fire_size_cells / (final_grid.shape[0] * final_grid.shape[1]) * 100

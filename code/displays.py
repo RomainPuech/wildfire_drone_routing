@@ -337,7 +337,7 @@ if __name__ == "__main__":
     from new_clustering import get_wrapped_clustering_strategy
 
     
-    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00033.npy")
+    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00058.npy")
     def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
         return {
             "N": scenario.shape[1],
@@ -360,7 +360,7 @@ if __name__ == "__main__":
                                                                                                                 custom_step_parameters_function = return_no_custom_parameters, 
                                                                                                                 automatic_initialization_parameters_function=my_automatic_layout_parameters, 
                                                                                                                 return_history=True)
-    print("POSITION HISTORY", position_history, len(position_history))
+    # print("POSITION HISTORY", position_history, len(position_history))
     print("RESULTS", results)
     print("Ground sensors", ground)
     print("Charging stations", charging)
