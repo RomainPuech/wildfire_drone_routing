@@ -13,9 +13,11 @@ def get_wrapped_clustering_strategy(BaseStrategy):
             total_drones = automatic_initialization_parameters["n_drones"]
             self.clusters = self.find_clusters(automatic_initialization_parameters["charging_stations_locations"], automatic_initialization_parameters["max_battery_time"])
             drone_battery = automatic_initialization_parameters["max_battery_time"]
+            drone_transmission_range = automatic_initialization_parameters["transmission_range"]
+            # print("self.clusters" , self.clusters)
 
             charging_stations_per_cluster = [len(cluster) for cluster in self.clusters]
-            total_charging_stations = sum(charging_stations_per_cluster)
+            total_charging_stations = automatic_initialization_parameters["n_charging_stations"]
 
             # Calculate drones per cluster proportionally to the number of charging stations
             drones_per_cluster = [
@@ -37,7 +39,10 @@ def get_wrapped_clustering_strategy(BaseStrategy):
                     if sum(drones_per_cluster) == total_drones:
                         break
 
+            # print(f"Number of drones per cluster: {drones_per_cluster}")
             self.drones_per_cluster = drones_per_cluster
+
+            # half_extent = drone_battery / 2.0
             
             # print(f"[init] Number of clusters: {len(self.clusters)}")
             #for i, cluster in enumerate(self.clusters):
@@ -47,7 +52,7 @@ def get_wrapped_clustering_strategy(BaseStrategy):
             for cid, stations in enumerate(self.clusters):
                 if len(stations) == 0:
                     continue
-                polygons = self.get_cluster_boundary_boxes(stations, drone_battery)
+                polygons = self.get_cluster_boundary_boxes(stations, min(drone_transmission_range, drone_battery/2.0))
                 N, M, min_x, min_y = self.get_bounding_grid_size(polygons)
                 # print(f"\n🚀 Running cluster {cid} with {len(stations)} charging stations and {drones_per_cluster[cid]} drones")
                 
@@ -251,7 +256,7 @@ if __name__ == "__main__":
     drones_per_cluster = [2, 1, 2]  # one per cluster, in order
 
     # get the strategy class dynamically
-    ClusteredStrategyClass = get_wrapped_strategy(
+    ClusteredStrategyClass = get_wrapped_clustering_strategy(
         BaseStrategy=LoggedDroneRoutingOptimization,
         charging_stations=stations,
         drone_battery=drone_battery,

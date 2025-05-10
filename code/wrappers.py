@@ -199,10 +199,10 @@ def wrap_log_drone_strategy(input_drone_cls):
                 return self._unpack_actions(actions)
 
             # otherwise, call parent
-            print(f"[wrap_log_drone_strategy] Calling parent's next_actions")
-            print(f"len log_data: {len(self.log_data['actions_history'])}")
-            print(f"step_counter: {self.step_counter}")
-            print(f"log name: {self.log_file}")
+            # print(f"[wrap_log_drone_strategy] Calling parent's next_actions")
+            # print(f"len log_data: {len(self.log_data['actions_history'])}")
+            # print(f"step_counter: {self.step_counter}")
+            # print(f"log name: {self.log_file}")
             actions = super().next_actions(automatic_step_parameters, custom_step_parameters)
 
             # store in log_data

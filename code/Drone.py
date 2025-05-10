@@ -29,6 +29,7 @@ class Drone():
         self.distance_battery = max_distance_battery if current_distance_battery is None else current_distance_battery
         self.time_battery = max_time_battery if current_time_battery is None else current_time_battery    
         self.state = state
+        self.alive = True
         if state == "charge":
             self.distance_battery = self.max_distance_battery
             self.time_battery = self.max_time_battery
@@ -41,6 +42,9 @@ class Drone():
     
     def get_state(self):
         return self.state
+
+    def is_alive(self):
+        return self.alive
     
     def move(self, dx, dy):
         self.state = "fly"
@@ -50,6 +54,9 @@ class Drone():
         self.y = max(0,min(self.y,self.M-1))
         self.distance_battery -= (abs(dx) + abs(dy)) # manhathan distance for the moment
         self.time_battery -= 1
+        if not self._check_battery():
+            print(f"Drone is dead at ({self.x}, {self.y})")
+            return self.x, self.y, self.distance_battery, self.time_battery, "dead"
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
     def fly(self, x,y):
@@ -58,6 +65,9 @@ class Drone():
         self.y = y
         self.distance_battery -= (abs(self.x-x) + abs(self.y-y))
         self.time_battery -= 1
+        if not self._check_battery():
+            print(f"Drone is dead at ({self.x}, {self.y})")
+            return self.x, self.y, self.distance_battery, self.time_battery, "dead"
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
     def recharge(self,x,y):
@@ -80,3 +90,8 @@ class Drone():
         else:
             raise ValueError(f"Invalid action: {action}")
 
+    def _check_battery(self):
+        if self.distance_battery <= 0 or self.time_battery <= 0:
+            self.alive = False
+            return False
+        return True

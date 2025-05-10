@@ -307,3 +307,16 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     )
     
     # print(f"Video saved as {base_filename}.mp4")
+if __name__ == "__main__":
+    # Example usage
+    from benchmark import run_benchmark_scenario
+    delta , device , (position_history, ground, charging)  = run_benchmark_scenario(scenario, SensorPlacementOptimization, 
+                                                            RandomDroneRoutingStrategy, 
+                                                            custom_initialization_parameters = {"burnmap_filename": "./WideDataset/0001/burn_map.npy"},
+                                                            custom_step_parameters_function = return_no_custom_parameters, 
+                                                            automatic_initialization_parameters_function=my_automatic_layout_parameters, 
+                                                            return_history=True)
+    create_scenario_video(scenario[:len(position_history)],
+                          drone_locations_history=position_history,starting_time=0,
+                          out_filename='test_simulation', ground_sensor_locations = ground, 
+                          charging_stations_locations = charging)
