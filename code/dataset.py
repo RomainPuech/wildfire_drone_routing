@@ -38,6 +38,11 @@ def listdir_limited(input_dir, max_n_scenarii=None):
                 if not max_n_scenarii is None and count >= max_n_scenarii:
                     break
 
+
+
+
+
+
 ####### Functions to load data #######
 
 # DEPRECATED
@@ -104,7 +109,7 @@ def listdir_limited(input_dir, max_n_scenarii=None):
 #         raise Exception(f"Error loading scenario: {str(e)}")
     
 
-def load_scenario_jpg(folder_path, binary=False):
+def load_scenario_jpg(folder_path, binary=True, first_frame_only=False):
     """
     Load a wildfire scenario from a sequence of grayscale JPG images.
 
@@ -144,6 +149,8 @@ def load_scenario_jpg(folder_path, binary=False):
     
     # Read first image to get dimensions
     first_image = Image.open(os.path.join(folder_path, jpg_files[0])).convert('L')
+    if first_frame_only:
+        return np.array(first_image).astype(float) / 255.0
     height, width = first_image.size[1], first_image.size[0]  # Get both dimensions
     T = len(jpg_files)
     
@@ -195,6 +202,9 @@ def load_scenario_npy(filename):
         raise FileNotFoundError(f"Could not find file: {filename}")
     except Exception as e:
         raise Exception(f"Error loading scenario: {str(e)}")
+
+
+
     
 ####### Functions to save data #######
 
@@ -328,7 +338,7 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
             except Exception as e:
                 print(f"Error converting {dataset_folder_name + layout_folder + '/Satellite_Images_Mask/' + scenario_folder} to NPY: {e}")
 
-def load_scenario(file_or_folder_name, extension = ".npy"):
+def load_scenario(file_or_folder_name, extension = ".npy", first_frame_only=False):
     """
     Load a scenario from a file or a folder.
     Args:
@@ -340,7 +350,7 @@ def load_scenario(file_or_folder_name, extension = ".npy"):
     if extension == ".npy":
         return load_scenario_npy(file_or_folder_name)
     else:
-        return load_scenario_jpg(file_or_folder_name)
+        return load_scenario_jpg(file_or_folder_name, first_frame_only=first_frame_only)
     
 
 def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy"):
