@@ -171,9 +171,9 @@ class ScenarioSamplerDate:
                 date = d0 + timedelta(days=math.ceil(dateshift / 2) * (1 if dateshift % 2 == 0 else -1))
                 shift_generator = two_partitions_with_negatives(leeway_distance)
             x,y = x0 + x_shift, y0 + y_shift
-            print(x,y)
+            #print(x,y)
             for (fire_points, filename) in self.ignition_map.get(date, []):
-                print(filename)
+                #print(filename)
                 if (x,y) in fire_points:
                     if filename.split('.')[0] not in exclude_scenarios:
                         candidates.append(filename)
