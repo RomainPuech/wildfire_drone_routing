@@ -94,8 +94,8 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     
     # 2. Get ground sensor locations
     ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
-    rows_ground, cols_ground = zip(*ground_sensor_locations)
-    rows_charging, cols_charging = zip(*charging_stations_locations)
+    rows_ground, cols_ground = zip(*ground_sensor_locations) if ground_sensor_locations else ((),())
+    rows_charging, cols_charging = zip(*charging_stations_locations) if charging_stations_locations else ((),())
 
     # add computed positions to initialization parameters
     automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations
@@ -171,8 +171,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 2. Get ground sensor locations
     ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
-    rows_ground, cols_ground = zip(*ground_sensor_locations)
-    rows_charging, cols_charging = zip(*charging_stations_locations)
+    rows_ground, cols_ground = zip(*ground_sensor_locations) if ground_sensor_locations else ((),())
+    rows_charging, cols_charging = zip(*charging_stations_locations) if charging_stations_locations else ((),())
 
     # charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
 
@@ -480,6 +480,9 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     total_distances = []
     drone_entropies = []
     sensor_entropies = []
+    deltas = []
+    min_delta = np.inf
+    min_delta_file = ''
 
     # Extract layout name from input directory path
     layout_name = os.path.basename(os.path.dirname(input_dir))
@@ -518,8 +521,12 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         if delta_t == -1:
             fails += 1
             delta_t = 0
-
-        delta_ts += delta_t
+        else:
+            deltas.append(delta_t)
+            if delta_t == 16:
+                min_delta = delta_t
+                min_delta_file = file
+            delta_ts += delta_t
         devices[device] += 1
 
         total_execution_times.append(results["avg_execution_time"])
@@ -533,6 +540,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     
     # Calculate metrics
     avg_time_to_detection = delta_ts / max(1, (N_SCENARII - fails))
+    avg_delta = np.mean(deltas)
     device_percentages = {device: round(count / N_SCENARII * 100, 2) for device, count in devices.items()}
     avg_execution_time = np.mean(total_execution_times)
     avg_fire_size = np.mean(total_fire_sizes)
@@ -541,10 +549,24 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     avg_distance = np.mean(total_distances)
     avg_drone_entropy = np.mean(drone_entropies)
     avg_sensor_entropy = np.mean(sensor_entropies)
+
+    # standard deviations
+    std_deltas = np.std(deltas)
+    std_execution_time = np.std(total_execution_times)
+    std_fire_size = np.std(total_fire_sizes)
+    std_fire_percentage = np.std(total_fire_percentages)
+    std_map_explored = np.std(map_explored)
+    std_distance = np.std(total_distances)
+    std_drone_entropy = np.std(drone_entropies)
+    std_sensor_entropy = np.std(sensor_entropies)
+
     
     # Create metrics dictionary
     metrics = {
+        "min_delta": min_delta,
+        "min_delta_file": min_delta_file,
         "avg_time_to_detection": avg_time_to_detection,
+        "avg_delta": avg_delta,
         "device_percentages": device_percentages,
         "avg_execution_time": avg_execution_time,
         "avg_fire_size": avg_fire_size,
@@ -553,13 +575,24 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         "avg_distance": avg_distance,
         "avg_drone_entropy": avg_drone_entropy,
         "avg_sensor_entropy": avg_sensor_entropy,
+        # stds
+        "std_deltas": std_deltas,
+        "std_execution_time": std_execution_time,
+        "std_fire_size": std_fire_size,
+        "std_fire_percentage": std_fire_percentage,
+        "std_map_explored": std_map_explored,
+        "std_distance": std_distance,
+        "std_drone_entropy": std_drone_entropy,
+        "std_sensor_entropy": std_sensor_entropy,
+        # raw data
         "raw_execution_times": total_execution_times,
         "raw_fire_sizes": total_fire_sizes,
         "raw_fire_percentages": total_fire_percentages,
         "raw_map_explored": map_explored,
         "raw_distances": total_distances,
         "raw_drone_entropies": drone_entropies,
-        "raw_sensor_entropies": sensor_entropies
+        "raw_sensor_entropies": sensor_entropies,
+        
     }
     
     # Still print the results for console feedback

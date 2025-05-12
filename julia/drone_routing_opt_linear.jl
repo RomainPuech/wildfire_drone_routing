@@ -2,6 +2,9 @@
 include("helper_functions.jl")
 # using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
 
+# Uncomment to run the example
+# example_routing_model_reuse()
+
 
 # Index-based implementation for model reuse
 # -----------------------------------------
@@ -24,7 +27,7 @@ struct IndexRoutingModel
     max_battery_time::Int
 end
 
-function create_index_routing_model_linear(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time, objective_type="min_cumulative_prob") # 
+function create_index_routing_model_linear(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time, objective_type="max_coverage") #min_cumulative_prob 
     t1 = time_ns() / 1e9
     risk_pertime = load_burn_map(risk_pertime_file)
     _, N, M = size(risk_pertime)
@@ -133,9 +136,13 @@ function create_index_routing_model_linear(risk_pertime_file, n_drones, Charging
         # Linear approximation of the routing: Variable of the visit time:
     
         # w_itt2:= 1 if in t2 between last z_it visit and t // 0 otherwise 
-        zeta = @variable(model, zeta[i=1:length(GridpointsDrones), t=1:T], Int)
+        zeta =  @variable(model, zeta[i=1:length(GridpointsDrones), t=0:T], Int)
+        y_bar = @variable(model, y_bar[i=1:length(GridpointsDrones), t=1:T], Bin)
         w = @variable(model, w[i=1:length(GridpointsDrones), t=1:T, t2=1:t], Bin)
 
+        @constraint(model, [t=1:T, i=1:length(GridpointsDrones)              ], y_bar[i,t] <= sum(a[i,t,s] for s=1:n_drones))
+        @constraint(model, [t=1:T, i=1:length(GridpointsDrones), s=1:n_drones], a[i,t,s]   <= y_bar[i,t] )
+        
         # w = @variable(model, w[i=1:length(GridpointsDrones), t=1:T, t2=1:t, s=1:n_drones], Bin)
         # @constraint(model, [i=1:length(GridpointsDrones), t=1:T, t2=1:t, s=1:n_drones], zeta[i,t,s] <= t2*w[i,t,t2,s]) # can be merged
         # @constraint(model, [i=1:length(GridpointsDrones), t=1:T, t2=1:t, s=1:n_drones], t2*w[i,t,t2,s] <= t)
@@ -147,15 +154,18 @@ function create_index_routing_model_linear(risk_pertime_file, n_drones, Charging
         # @constraint(model, [t=1:T, i=1:length(GridpointsDrones), s=1:n_drones, t2=1:t], t >= zeta[i,t,s]                ) # Past visits
 
         # @constraint(model, [t=1:T, i=1:length(GridpointsDrones), s=1:n_drones, t2=1:t], zeta[i,t] >= t2*a[i,t2,s]) # Past visits # NOT NECESSARY?
-        @constraint(model, [t=2:T, i=1:length(GridpointsDrones)], zeta[i,t] >= zeta[i,t-1])
-        @constraint(model,        [i=1:length(GridpointsDrones)], zeta[i,1] >= 0)
+        @constraint(model, [t=1:T, i=1:length(GridpointsDrones)], zeta[i,t] >= zeta[i,t-1])
+        @constraint(model, [t=1:T, i=1:length(GridpointsDrones)], zeta[i,t] >= t*y_bar[i,t])
+        # @constraint(model,        [i=1:length(GridpointsDrones)], zeta[i,1] >= 0)
         
         # @constraint(model, [t=1:T, i=1:length(not_g_ch_index), s=1:n_drones, t2=1:t], zeta[not_g_ch_index[i],t] >= t2*a[not_g_ch_index[i],t2,s]) # Past visits
         # @constraint(model, [t=1:T, i=1:length(GridpointsDrones), s=1:n_drones, t3=t:T], 0 <= zeta[i,t,s]                ) # Future visits
         # @constraint(model, [t=1:T, i=1:length(GridpointsDrones), s=1:n_drones, t3=t:T], zeta[i,t] <= t3*a[i,t3,s]) # Future visits
-        @constraint(model, [t=1:T, i=1:length(GridpointsDrones), s=1:n_drones], zeta[i,t] <= t) # Future visits
-        @constraint(model, [t=2:T, i=1:length(GridpointsDrones), s=1:n_drones], zeta[i,t] <= zeta[i,t-1]+t*a[i,t,s]) # Future visits
-        @constraint(model,        [i=1:length(GridpointsDrones), s=1:n_drones], zeta[i,1] <= a[i,1,s]) # Future visits
+        @constraint(model, [t=1:T, i=1:length(GridpointsDrones)], zeta[i,t] <= t) # Future visits
+        @constraint(model, [t=1:T, i=1:length(GridpointsDrones)], zeta[i,t] <= zeta[i,t-1]+t*y_bar[i,t]) # Future visits
+        # @constraint(model,        [i=1:length(GridpointsDrones), s=1:n_drones], zeta[i,1] <= a[i,1,s]) # Future visits
+        @constraint(model,        [i=1:length(GridpointsDrones)], zeta[i,0] == 0) # Future visits
+            
         # @constraint(model, [t=1:T, i=1:length(not_g_ch_index), s=1:n_drones, t3=t:T], zeta[not_g_ch_index[i],t] <= t3*a[not_g_ch_index[i],t3,s]) # Future visits
         # If ground or charging, always visited at t 
         # @constraint(model, [t=1:T, i=1:length(g_ch_index), s=1:n_drones, t2=1:t], zeta[g_ch_index[i],t] == t) # Past visits
@@ -170,8 +180,12 @@ function create_index_routing_model_linear(risk_pertime_file, n_drones, Charging
         # @constraint(model, [i=1:length(GridpointsDrones), t=1:T, t2=1:(t-1), s=1:n_drones],                                                 t2*w[i,t,t2,s] <= t + T*(zeta[i,t,s]-zeta[i,t2,s])) # z_it < t2 <= t case. Only bound if z_it = z_it2 (in between)
         
         @constraint(model, [t=1:T, i=1:length(GridpointsDrones), t2=1:t], (t2 - zeta[i,t]) <= t*w[i,t,t2] )
-        @constraint(model, [t=1:T, k=1:length(ChargingStations), t2=1:t],  w[k,t,t2] == 1 ) # always visiting this ones
-        # @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
+        # @constraint(model, [t=1:T, i=1:length(GridpointsDrones)        ], zeta[i,t] <= t*w[i,t,t2] )
+
+        # @constraint(model, [t=1:T, k=1:length(ChargingStations), t2=1:t],  w[k,t,t2] == 1 ) # always visiting this ones
+        @constraint(model, [t=1:T, k=1:length(ChargingStations)], zeta[grid_to_idx[ChargingStations[k]], t]==t)
+        @constraint(model, [t=1:T, k in ground_idx], zeta[k, t]==t)
+
 
 
         # @constraint(model, )

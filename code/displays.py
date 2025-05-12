@@ -277,7 +277,7 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     scenario = None
     if isinstance(scenario_or_filename, str):  # Using isinstance instead of type()
         # the input is a file name
-        base_filename = scenario_or_filename.replace('.txt', '')  # Fixed variable name
+        base_filename = "_".join(scenario_or_filename.replace('.npy', '').split('/'))  # Fixed variable name
         filename = scenario_or_filename  # Fixed variable name
     else:
         base_filename = out_filename
@@ -305,7 +305,7 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     
     # Load the scenario
     if scenario is None:
-        scenario, starting_time = load_scenario(filename)
+        scenario = load_scenario(filename)
     T, height, width = scenario.shape  # Using height and width instead of N
     # print("scenario.shape = ", scenario.shape)
     

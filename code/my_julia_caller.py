@@ -11,7 +11,7 @@ print("initializing the ground sensor julia module")
 jl.include("julia/ground_charging_opt.jl")
 
 print("initializing the drone julia module")
-# jl.include("julia/drone_routing_opt.jl")
+jl.include("julia/drone_routing_opt.jl")
 
 jl.include("julia/drone_routing_opt_linear.jl")
 
