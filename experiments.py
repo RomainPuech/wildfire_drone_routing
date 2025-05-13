@@ -14,7 +14,7 @@ from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
 from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, SensorPlacementOptimization, RandomSensorPlacementStrategy, LoggedOptimizationSensorPlacementStrategy,DroneRoutingOptimizationSlow, DroneRoutingOptimizationModelReuse, DroneRoutingOptimizationModelReuseIndex, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingRegularizedMaxCoverageResetStatic, FixedPlacementStrategy, DroneRoutingRegularizedMaxCoverageResetStatic
 from benchmark import run_benchmark_scenario,run_benchmark_scenarii_sequential, get_burnmap_parameters,run_benchmark_scenarii_sequential_precompute, benchmark_on_sim2real_dataset_precompute
 from displays import create_scenario_video
-from new_clustering import get_wrapped_strategy
+from new_clustering import get_wrapped_clustering_strategy
 
 # housekeeping : delete temporary burn maps
 if os.path.exists("tmp_burnmaps"):
@@ -45,7 +45,7 @@ custom_initialization_parameters = {
 layout_folder = "IP_Dataset/0101_02057/cropped_scenarii"
 scenario_name = "0101_00002"
 sensor_strategy = FixedPlacementStrategy
-drone_strategy = get_wrapped_strategy(DroneRoutingRegularizedMaxCoverageResetStatic) #wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
+drone_strategy = get_wrapped_clustering_strategy(DroneRoutingRegularizedMaxCoverageResetStatic) #wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
 
 def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
     return simulation_parameters

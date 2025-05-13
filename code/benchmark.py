@@ -1132,7 +1132,7 @@ if __name__ == "__main__":
     # That's very fast to run!
     print("starting benchmark")
     time_start = time.time()
-    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/00058.npy")
+    scenario = load_scenario_npy("./MinimalDataset/0001/scenarii/0001_00058.npy")
     results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, wrap_log_sensor_strategy(SensorPlacementOptimization), 
                                                                             wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingOptimizationModelReuseIndex)),
                                                                               custom_initialization_parameters = {"burnmap_filename": "./MinimalDataset/0001/burn_map.npy", 
