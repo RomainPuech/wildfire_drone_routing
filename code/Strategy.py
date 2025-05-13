@@ -1548,6 +1548,9 @@ class DroneRoutingRegularizedMaxCoverageResetStatic(DroneRoutingStrategy):
             raise ValueError("burnmap_filename is not defined")
         self.initial_burnmap = load_scenario(self.custom_initialization_parameters["burnmap_filename"])
         self.current_burnmap = self.initial_burnmap.copy()
+        if self.current_burnmap.shape[0] ==1:
+            # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
+            self.current_burnmap = np.tile(self.initial_burnmap, (100, 1, 1))
         self.len_burnmap = self.initial_burnmap.shape[0]
         self.current_burnmap_filename = "./tmp_burnmaps/tmp_burnmap_" + str(self.call_ID) + ".npy"
         # create the tmp_burnmaps folder if it doesn't exist
@@ -1591,9 +1594,11 @@ class DroneRoutingRegularizedMaxCoverageResetStatic(DroneRoutingStrategy):
         print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
         print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
 
+        save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+
         # Create the reusable routing model
         self.routing_model = jl.create_regularized_index_routing_model(
-            self.custom_initialization_parameters["burnmap_filename"],
+            self.current_burnmap_filename,
             self.automatic_initialization_parameters["n_drones"],
             self.julia_charging_stations_locations,
             self.julia_ground_sensor_locations,

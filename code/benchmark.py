@@ -1124,7 +1124,7 @@ if __name__ == "__main__":
             "n_drones": 10,
             "n_ground_stations": 12,
             "n_charging_stations": 10,
-            "speed_m_per_min": 10,
+            "speed_m_per_min": 9,
             "coverage_radius_m": 45,
             "cell_size_m": 30,
             "transmission_range": 100,

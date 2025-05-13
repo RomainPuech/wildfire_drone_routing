@@ -32,23 +32,30 @@ simulation_parameters =  {
     "n_drones": 2,
     "n_ground_stations": 0,
     "n_charging_stations": 2,
+    "speed_m_per_min": 9,
+    "coverage_radius_m": 45,
+    "cell_size_m": 30,
+    "transmission_range": 100,
     }
 
 custom_initialization_parameters = {
-    "burnmap_filename": "IP_Dataset/0101_02057/cropped_burn_map.npy",
+    "burnmap_filename": "WideDataset/0101_02057/static_risk.npy",
      "load_from_logfile": False, 
      "reevaluation_step": 15, 
      "optimization_horizon":15,
      "regularization_param": 1
      } #"regularization_param": 0.0001}
 
-layout_folder = "IP_Dataset/0101_02057/cropped_scenarii"
-scenario_name = "0101_00002"
+layout_folder = "WideDataset/0101_02057/scenarii"
+scenario_name = "0101_00001"
 sensor_strategy = FixedPlacementStrategy
 drone_strategy = get_wrapped_clustering_strategy(DroneRoutingRegularizedMaxCoverageResetStatic) #wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
 
 def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
+    simulation_parameters["N"] = scenario.shape[1]
+    simulation_parameters["M"] = scenario.shape[2]
     return simulation_parameters
+
 def return_no_custom_parameters():
     return {}
 def custom_initialization_parameters_function(input_dir: str, layout_name: str = None):
