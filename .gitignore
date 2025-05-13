@@ -19,3 +19,4 @@ display_test_simulation/*
 display_*
 IP_Dataset/*
 *.gpkg
+./ML_burn_map/results/*
