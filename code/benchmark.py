@@ -594,9 +594,9 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     speed_m_per_min = automatic_initialization_parameters.get("speed_m_per_min", 5)
     coverage_radius_m = automatic_initialization_parameters.get("coverage_radius_m", 45)
 
-    # operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
+    operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
     coverage_radius_cells = round(coverage_radius_m / cell_size_m)
-    # print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
+    print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
 
     # print(f"drone_locations: {drone_locations}")
     # print(f"drone_batteries: {drone_batteries}")
@@ -656,7 +656,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                     break
 
         # 🔁 Drone updates happen more frequently
-        for substep in range(2):
+        for substep in range(operational_substeps):
             # print(f"[DEBUG] Substep {substep+1}/{operational_substeps} at t={time_step}")
 
             # === Routing & movement ===
@@ -665,7 +665,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 "drone_locations": drone_locations,
                 "drone_batteries": drone_batteries,
                 "drone_states": drone_states,
-                "t": t_found + substep #/ operational_substeps # add fractional time if needed ###CHANGE
+                "t": t_found + substep / operational_substeps # add fractional time if needed ###CHANGE
             }
             start_time = time.time()
             actions = Routing_Strat.next_actions(automatic_step_parameters, custom_step_parameters)
