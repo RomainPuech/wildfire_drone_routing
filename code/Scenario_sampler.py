@@ -114,7 +114,7 @@ class ScenarioSamplerDate:
         for filename in listdir_limited(self.scenario_folder):
             if extension == '.npy' and not filename.endswith('.npy') or filename == '.DS_Store':
                 continue
-            try:
+            if True:
                 scenario_frame = load_scenario(os.path.join(self.scenario_folder, filename), extension = extension, first_frame_only=True)
                 
                 # get the date of the scenario from weather file
@@ -126,7 +126,7 @@ class ScenarioSamplerDate:
                 with open(weather_file, 'r') as f:
                     line1 = f.readline()
                     date = line1[:10]
-                    date = datetime.strptime(date, '%Y %m %d')
+                    date = datetime.strptime(date, '%Y %m %d').date()
 
                 if date not in self.ignition_map:
                     self.ignition_map[date] = []
@@ -137,9 +137,9 @@ class ScenarioSamplerDate:
                     continue
                 self.ignition_map[date].append((fire_points, filename))
 
-            except Exception as e:
-                print(f"Error processing {filename}: {e}")
-        print(f"Sampler built with {len(self.ignition_map)} ignition dates.")
+            # except Exception as e:
+            #     print(f"Error processing {filename}: {e}")
+        #print(f"Sampler built with {len(self.ignition_map)} ignition dates.")
         #print(self.ignition_map[datetime(2023, 8, 4)])
 
     def get_scenario_location(self, ignition_point, date, leeway_distance, leeway_date, sampling_method='clostest', exclude_scenarios=[]):
@@ -153,6 +153,10 @@ class ScenarioSamplerDate:
         Returns:
             str: Filename of the selected scenario
         """
+        try:
+            date = date.date()
+        except:
+            pass
         candidates = []
         d0 = date
         x0, y0 = ignition_point
@@ -162,6 +166,7 @@ class ScenarioSamplerDate:
         found = False
         # priority is same date, then closest distance
         while not found:
+            #print("trying date", date)
             try:
                 x_shift, y_shift = next(shift_generator)
             except StopIteration:
@@ -171,6 +176,7 @@ class ScenarioSamplerDate:
                 date = d0 + timedelta(days=math.ceil(dateshift / 2) * (1 if dateshift % 2 == 0 else -1))
                 shift_generator = two_partitions_with_negatives(leeway_distance)
             x,y = x0 + x_shift, y0 + y_shift
+            #print(x,y)
             #print(x,y)
             for (fire_points, filename) in self.ignition_map.get(date, []):
                 #print(filename)
@@ -187,12 +193,21 @@ class ScenarioSamplerDate:
 
         if not candidates:
             # warnings.warn(f"No scenario found around {ignition_point} with leeway {leeway_distance}")
-            return None, None
+            return None, None, None
         
         if sampling_method == 'random':
             return random.choice(candidates)
         elif sampling_method == 'closest':
             return candidates[0], ignition_point, ignition_date
+
+    def get_all_scenario_dates(self):
+        return list(self.ignition_map.keys())
+    
+    def get_all_scenario_ignition_points(self):
+        return list([example[0] for example in self.ignition_map.values()])
+
+    def get_scenarios_at_a_date(self, date):
+        return self.ignition_map[date]
 
 
 if __name__ == "__main__":
@@ -212,7 +227,10 @@ if __name__ == "__main__":
         ignition_point = (96, 161)
         ignition_date = datetime(2023, 8, 4)
         leeway = 2000
-        selected_scenario = sampler.get_scenario_location(ignition_point, ignition_date, leeway, 0, sampling_method='closest') #exclude_scenarios=['0002_00100', '0002_00026'])
+        selected_scenario = sampler.get_scenario_location(ignition_point, ignition_date.date(), leeway, 0, sampling_method='closest') #exclude_scenarios=['0002_00100', '0002_00026'])
         print(f"Selected scenario near {ignition_point} (leeway {leeway}): {selected_scenario}")
+        print(sampler.get_all_scenario_dates())
+        #print(sampler.get_scenarios_at_a_date(ignition_date.date()))
+        #print(sampler.get_scenarios_at_a_date(ignition_date.date()))
     except ValueError as e:
         print(f"Error: {e}")

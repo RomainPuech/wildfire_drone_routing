@@ -2,7 +2,7 @@
 
 # TODO strict typing
 
-println("installing packages")
+# println("installing packages")
 # import Pkg
 # Pkg.add("IJulia")
 # Pkg.add("CSV")
