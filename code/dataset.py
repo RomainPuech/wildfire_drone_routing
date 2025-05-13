@@ -9,7 +9,32 @@ import time
 import os
 from PIL import Image
 import re
+import rasterio
 
+def convert_tif_to_npy(input_folder, output_folder):
+    """
+    Convert all .tif or .tiff files in a folder to .npy format.
+
+    Args:
+        input_folder (str): Path to the directory containing .tif/.tiff files.
+        output_folder (str): Path to the directory where .npy files will be saved.
+        max_files (int, optional): Maximum number of .tif files to process. If None, process all files.
+
+    Yields:
+        str: Path to each .npy file created.
+    """
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for file in os.listdir(input_folder):
+        if file.lower().endswith('.tif') or file.lower().endswith('.tiff'):
+            tif_path = os.path.join(input_folder, file)
+            with rasterio.open(tif_path) as src:
+                data = src.read(1)  # Read the first band
+
+            npy_filename = os.path.splitext(file)[0] + '.npy'
+            np.save(os.path.join(output_folder, npy_filename), data)
+            print(f"Converted {file} to {npy_filename}")
 
 def listdir_limited(input_dir, max_n_scenarii=None):
     """
