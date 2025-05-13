@@ -114,7 +114,6 @@ class DroneRoutingStrategy():
 
 class RandomSensorPlacementStrategy(SensorPlacementStrategy):
     strategy_name = "RandomSensorPlacementStrategy"
-    print("=== TEST PRINT: Entered RandomPlacementStrategy class definition ===")
 
     """
     Sensor placement strategy that places sensors randomly.
@@ -538,7 +537,6 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
 
 class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
     strategy_name = "DroneRoutingOptimizationModelReuseIndex"
-    print("=== TEST PRINT: Entered DroneRoutingOptimizationModelReuseIndex class definition ===")
 
     """
     Drone routing strategy that uses the model reuse approach for improved performance.
@@ -1199,7 +1197,6 @@ class LoggedDroneRoutingStrategy(DroneRoutingStrategy):
 
 class DroneRoutingOptimizationModelReuseIndexRegularized(DroneRoutingStrategy):
     strategy_name = "DroneRoutingOptimizationModelReuseIndexRegularized"
-    print("=== TEST PRINT: Entered DroneRoutingOptimizationModelReuseIndex class definition ===")
 
     """
     Drone routing strategy that uses the model reuse approach for improved performance.
@@ -1360,7 +1357,6 @@ class DroneRoutingOptimizationModelReuseIndexRegularized(DroneRoutingStrategy):
 
 class DroneRoutingLinearMinTime(DroneRoutingStrategy):
     strategy_name = "DroneRoutingLinearMinTime"
-    print("=== TEST PRINT: Entered DroneRoutingLinearMinTime class definition ===")
 
     """
     Drone routing strategy that uses a linear programming approach to minimize the time taken by the drones to cover detect the fire in expected value.
@@ -1570,6 +1566,9 @@ class DroneRoutingRegularizedMaxCoverageResetStatic(DroneRoutingStrategy):
             raise ValueError("regularization_param is not defined")
         self.regularization_param = custom_initialization_parameters["regularization_param"]
 
+       
+        self.reset_time = custom_initialization_parameters.get("reset_time", 10)
+        
         # Store original charging stations as class attribute
         self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
         
@@ -1683,8 +1682,9 @@ class DroneRoutingRegularizedMaxCoverageResetStatic(DroneRoutingStrategy):
         # print(f"[debug] returning plan step {self.call_counter} of {len(self.current_solution)}")
         # update the burnmap: set every visited cell to 0
         for action in self.current_solution[idx]:
-            if action[0] == "move":
-                self.current_burnmap[0:30,action[1][0], action[1][1]] = 0
+            if action[0] == "fly":
+                print(f"setting burnmap at {action[1]} to 0 at time {self.t}")
+                self.current_burnmap[self.t:self.t+self.reset_time,action[1][0], action[1][1]] = 0
                 save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         self.t += 1
         return self.current_solution[idx]
