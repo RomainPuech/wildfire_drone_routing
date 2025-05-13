@@ -680,7 +680,8 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
                                      for code, (x, y) in plan] for plan in self.current_solution]
             
 
-
+        if self.current_solution is None:
+            raise RuntimeError("Julia optimization did not return a solution.")
         # Return the appropriate step from the pre-computed plan
         self.call_counter += 1
         idx = min(self.call_counter, len(self.current_solution) - 1)

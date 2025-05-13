@@ -260,7 +260,7 @@ def create_video_from_images(image_dir="images", output_filename="simulation.mp4
 
 
 
-def create_scenario_video(scenario_or_filename, drone_locations_history = None, burn_map = False, out_filename = "simulation", starting_time = 0, ground_sensor_locations = [], charging_stations_locations = []):
+def create_scenario_video(scenario_or_filename, drone_locations_history = None, burn_map = False, out_filename = "simulation", starting_time = 0, ground_sensor_locations = [], charging_stations_locations = [], substeps_per_timestep = 1):
     """
     Create a video visualization of a saved scenario or burn_map
     
@@ -314,17 +314,37 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
         smoke_grid = np.zeros((height, width))
         
         # Create images for each time step
-        for t in range(T):
-            save_grid_image(
-                grid=scenario[t],           # Current time step of scenario
-                smoke_grid=smoke_grid,      # Empty smoke grid
-                drones=drone_locations_history[t] if drone_locations_history is not None else None,              
-                display={'fire'} if drone_locations_history is None else {'fire', 'drones'},
-                ground_sensors_locations=ground_sensor_locations, 
-                charging_stations_locations=charging_stations_locations,
-                timestep=t,
-                output_dir=output_dir
-            )
+        if drone_locations_history is not None:
+            total_substeps = len(drone_locations_history)
+
+            print("total_substeps = ", total_substeps)
+            print("substeps_per_timestep = ", substeps_per_timestep)
+            print("T = ", T)
+            
+            for t in range(total_substeps):
+                scenario_index = min(t // substeps_per_timestep, T - 1)  
+                save_grid_image(
+                    grid=scenario[scenario_index],
+                    smoke_grid=smoke_grid,
+                    drones=drone_locations_history[t],
+                    display={'fire', 'drones'},
+                    ground_sensors_locations=ground_sensor_locations,
+                    charging_stations_locations=charging_stations_locations,
+                    timestep=t,
+                    output_dir=output_dir
+                )
+        else:
+            for t in range(T):
+                save_grid_image(
+                    grid=scenario[t],
+                    smoke_grid=smoke_grid,
+                    drones=None,
+                    display={'fire'},
+                    ground_sensors_locations=ground_sensor_locations,
+                    charging_stations_locations=charging_stations_locations,
+                    timestep=t,
+                    output_dir=output_dir
+                )
     else:
         # Create images for each time step
         for t in range(T):
@@ -343,3 +363,46 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     )
     
     # print(f"Video saved as {base_filename}.mp4")
+if __name__ == "__main__":
+    # Example usage
+    from benchmark import run_benchmark_scenario
+    from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, SensorPlacementOptimization, RandomSensorPlacementStrategy, LoggedOptimizationSensorPlacementStrategy,DroneRoutingOptimizationSlow, DroneRoutingOptimizationModelReuse, DroneRoutingOptimizationModelReuseIndex, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingOptimizationModelReuseIndexRegularized
+    # change values here to change benchmarking parameters
+    from dataset import load_scenario_npy
+    from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
+    from new_clustering import get_wrapped_clustering_strategy
+
+    
+    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00058.npy")
+    def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
+        return {
+            "N": scenario.shape[1],
+            "M": scenario.shape[2],
+            "max_battery_distance": -1,
+            "max_battery_time": 20,
+            "n_drones": 10,
+            "n_ground_stations": 12,
+            "n_charging_stations": 10,
+            "speed_m_per_min": 10,
+            "coverage_radius_m": 10,
+            "cell_size_m": 40,
+            "transmission_range": 100,
+    }
+    results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, wrap_log_sensor_strategy(SensorPlacementOptimization), 
+                                                                            wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingOptimizationModelReuseIndex)), 
+                                                                            custom_initialization_parameters = {"burnmap_filename": "./MinimalDataset/0001/burn_map.npy", 
+                                                                                                                "load_from_logfile": False, "reevaluation_step": 6, 
+                                                                                                                "optimization_horizon":6, "regularization_param": 0.0001}, 
+                                                                                                                custom_step_parameters_function = return_no_custom_parameters, 
+                                                                                                                automatic_initialization_parameters_function=my_automatic_layout_parameters, 
+                                                                                                                return_history=True)
+    # print("POSITION HISTORY", position_history, len(position_history))
+    print("RESULTS", results)
+    print("Ground sensors", ground)
+    print("Charging stations", charging)
+    
+    create_scenario_video(scenario[:len(position_history)],
+                          drone_locations_history=position_history,starting_time=0,
+                          out_filename='test_simulation', ground_sensor_locations = ground, 
+                          charging_stations_locations = charging, 
+                          substeps_per_timestep= results["substeps_per_timestep"])

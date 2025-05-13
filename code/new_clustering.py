@@ -3,9 +3,8 @@ from collections import deque
 from shapely.geometry import Polygon, Point
 from shapely.ops import unary_union
 import matplotlib.pyplot as plt
-from Strategy import DroneRoutingStrategy
 
-def get_wrapped_strategy(BaseStrategy):
+def get_wrapped_clustering_strategy(BaseStrategy):
 
     class ClusteredDroneStrategyWrapped(BaseStrategy):
         def __init__(self,automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
@@ -14,18 +13,37 @@ def get_wrapped_strategy(BaseStrategy):
             total_drones = automatic_initialization_parameters["n_drones"]
             self.clusters = self.find_clusters(automatic_initialization_parameters["charging_stations_locations"], automatic_initialization_parameters["max_battery_time"])
             drone_battery = automatic_initialization_parameters["max_battery_time"]
+            drone_transmission_range = automatic_initialization_parameters["transmission_range"]
+            # print("self.clusters" , self.clusters)
 
-            num_clusters = len(self.clusters)
-            base = total_drones // num_clusters
-            drones_per_cluster = [base] * num_clusters
+            charging_stations_per_cluster = [len(cluster) for cluster in self.clusters]
+            total_charging_stations = automatic_initialization_parameters["n_charging_stations"]
 
-            for i in range(total_drones % num_clusters):
-                drones_per_cluster[i] += 1
+            # Calculate drones per cluster proportionally to the number of charging stations
+            drones_per_cluster = [
+                max(1, round(total_drones * (stations / total_charging_stations)))
+                for stations in charging_stations_per_cluster
+            ]
 
+            # Adjust to ensure the total number of drones matches exactly
+            while sum(drones_per_cluster) > total_drones:
+                for i in range(len(drones_per_cluster)):
+                    if drones_per_cluster[i] > 1:
+                        drones_per_cluster[i] -= 1
+                        if sum(drones_per_cluster) == total_drones:
+                            break
+
+            while sum(drones_per_cluster) < total_drones:
+                for i in range(len(drones_per_cluster)):
+                    drones_per_cluster[i] += 1
+                    if sum(drones_per_cluster) == total_drones:
+                        break
+
+            # print(f"Number of drones per cluster: {drones_per_cluster}")
             self.drones_per_cluster = drones_per_cluster
 
-            half_extent = drone_battery / 2.0
-            self.clusters = self.find_clusters(automatic_initialization_parameters["charging_stations_locations"], drone_battery)
+            # half_extent = drone_battery / 2.0
+            
             # print(f"[init] Number of clusters: {len(self.clusters)}")
             #for i, cluster in enumerate(self.clusters):
                 # print(f"  Cluster {i}: {cluster}")
@@ -34,7 +52,7 @@ def get_wrapped_strategy(BaseStrategy):
             for cid, stations in enumerate(self.clusters):
                 if len(stations) == 0:
                     continue
-                polygons = self.get_cluster_boundary_boxes(stations, half_extent)
+                polygons = self.get_cluster_boundary_boxes(stations, min(drone_transmission_range, drone_battery/2.0))
                 N, M, min_x, min_y = self.get_bounding_grid_size(polygons)
                 # print(f"\n🚀 Running cluster {cid} with {len(stations)} charging stations and {drones_per_cluster[cid]} drones")
                 
@@ -218,107 +236,8 @@ def get_wrapped_strategy(BaseStrategy):
             plt.tight_layout()
             plt.show()
 
-        # def run(self, timesteps=5, verbose=True):
-
-        #     print(f"\n▶️ Running clustered strategy for {timesteps} timesteps")
-
-        #     locs, states = self.get_initial_drone_locations()
-        #     batts = [(10, 10)] * len(locs)
-
-        #     for t in range(timesteps):
-        #         if verbose:
-        #             print(f"\n⏱️ timestep {t}")
-        #         actions = self.next_actions({
-        #             "drone_locations": locs,
-        #             "drone_batteries": batts,
-        #             "drone_states": states,
-        #             "t": t
-        #         }, {})
-
-        #         new_locs = []
-        #         new_states = []
-        #         for i, action in enumerate(actions):
-        #             x, y = locs[i]
-        #             if action[0] == "move":
-        #                 dx, dy = action[1]
-        #                 new_locs.append((x + dx, y + dy))
-        #                 new_states.append("fly")
-        #             elif action[0] == "fly":
-        #                 new_locs.append(action[1])
-        #                 new_states.append("fly")
-        #             elif action[0] == "charge":
-        #                 new_locs.append((x, y))
-        #                 new_states.append("charge")
-        #             else:
-        #                 new_locs.append((x, y))
-        #                 new_states.append("fly")
-
-        #             if verbose:
-        #                 moved = new_locs[-1] != (x, y)
-        #                 print(f"  🚁 Drone {i} {'moved to' if moved else 'stayed at'} {new_locs[-1]} [{action[0]}]")
-
-        #         locs = new_locs
-        #         states = new_states
-        #         batts = [(10, 10)] * len(locs)  # reset battery for simplicity
-
-        #     print("\n✅ Simulation finished.")
-
-
     return ClusteredDroneStrategyWrapped
 
 
 if __name__ == "__main__":
-    from wrappers import wrap_log_drone_strategy
-    from Strategy import RandomSensorPlacementStrategy, DroneRoutingOptimizationModelReuseIndex
-
-    # wrap the base strategy with logging
-    LoggedDroneRoutingOptimization = wrap_log_drone_strategy(DroneRoutingOptimizationModelReuseIndex)
-
-    # example charging station layout
-    stations = [
-        (2, 2), (3, 2), (4, 4),       # cluster 0
-        (10, 10), (11, 10),           # cluster 1
-        (22, 22), (23, 22), (23, 23)  # cluster 2
-    ]
-    drone_battery = 6.0
-    drones_per_cluster = [2, 1, 2]  # one per cluster, in order
-
-    # get the strategy class dynamically
-    ClusteredStrategyClass = get_wrapped_strategy(
-        BaseStrategy=LoggedDroneRoutingOptimization,
-        charging_stations=stations,
-        drone_battery=drone_battery,
-        drones_per_cluster=drones_per_cluster
-    )
-
-    # construct automatic and custom parameters
-    automatic_parameters = {
-        "N": 30,
-        "M": 30,
-        "max_battery_distance": 10,
-        "max_battery_time": 10,
-        "n_drones": sum(drones_per_cluster),
-        "n_ground_stations": 5,
-        "n_charging_stations": len(stations),
-        "charging_stations_locations": stations,
-        "ground_sensor_locations": [(1, 1), (2, 3), (3, 5), (4, 7), (5, 9)],
-    }
-
-    custom_parameters = {
-        "burnmap_filename": "MinimalDataset/0001/burn_map.npy",
-        "call_every_n_steps": 5,
-        "optimization_horizon": 20,
-        "reevaluation_step": 10
-    }
-
-    # instantiate the strategy
-    wrapped_strategy = ClusteredStrategyClass(
-        automatic_initialization_parameters=automatic_parameters,
-        custom_initialization_parameters=custom_parameters
-    )
-
-    # simulate a small run
-    wrapped_strategy.run(timesteps=5)
-
-    # optional debug visualization
-    wrapped_strategy.plot_clusters()
+    pass
