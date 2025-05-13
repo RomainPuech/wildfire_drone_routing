@@ -20,3 +20,4 @@ display_*
 IP_Dataset/*
 *.gpkg
 ./ML_burn_map/results/*
+./ML_burn_map/ML/MLDatasets/*
