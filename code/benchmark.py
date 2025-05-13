@@ -58,7 +58,6 @@ DEFAULT_SIMULATION_PARAMETERS = {
 
 def build_custom_init_params(input_dir, layout_name):
     base_path = os.path.abspath(os.path.join(input_dir, ".."))
-
     params = {
         "burnmap_filename": os.path.join(base_path, "burn_map.npy"),
         "log_file": os.path.join(base_path, f"{layout_name}.json"),
@@ -189,8 +188,8 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     
     # 2. Get ground sensor locations
     ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
-    rows_ground, cols_ground = zip(*ground_sensor_locations)
-    rows_charging, cols_charging = zip(*charging_stations_locations)
+    rows_ground, cols_ground = zip(*ground_sensor_locations) if ground_sensor_locations else ((),())
+    rows_charging, cols_charging = zip(*charging_stations_locations) if charging_stations_locations else ((),())
 
     # add computed positions to initialization parameters
     automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations
@@ -386,8 +385,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 2. Get ground sensor locations
     ground_sensor_locations, charging_stations_locations =  sensor_placement_strategy(automatic_initialization_parameters, custom_initialization_parameters).get_locations()
-    rows_ground, cols_ground = zip(*ground_sensor_locations)
-    rows_charging, cols_charging = zip(*charging_stations_locations)
+    rows_ground, cols_ground = zip(*ground_sensor_locations) if ground_sensor_locations else ((),())
+    rows_charging, cols_charging = zip(*charging_stations_locations) if charging_stations_locations else ((),())
 
     # charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
 
@@ -906,7 +905,7 @@ if __name__ == "__main__":
     # That's very fast to run!
     print("starting benchmark")
     time_start = time.time()
-    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00058.npy")
+    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00033.npy")
     results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, wrap_log_sensor_strategy(SensorPlacementOptimization), 
                                                                             wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingOptimizationModelReuseIndex)),
                                                                               custom_initialization_parameters = {"burnmap_filename": "./MinimalDataset/0001/burn_map.npy", 
