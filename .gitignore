@@ -15,3 +15,6 @@ WideDataset
 Z/*
 Danique/*
 display_test_simulation/*
+display_*
+IP_Dataset/*
+*.gpkg
