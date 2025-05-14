@@ -588,6 +588,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 drone_states[drone_index] = new_state
                 total_distance_traveled += abs(new_x_data_scale - old_x_data_scale) + abs(new_y_data_scale - old_y_data_scale)
                 drone_visited_cells.add((new_x_data_scale, new_y_data_scale))
+                # ...
 
             if return_history:
                 drone_locations_history.append(tuple(drone_locations_data_scale))
