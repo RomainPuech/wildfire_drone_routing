@@ -108,8 +108,8 @@ def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_s
         selected_ids = load_selected_scenarios(selected_file_path)
         
         print(f"Processing layout: {layout_name}, selected scenarios: {len(selected_ids)}")
-        seasonal_match = os.path.exists(os.path.join(layout_path, "selected_senarios_seasonal.txt"))
-        historical_match = os.path.exists(os.path.join(layout_path, "selected_senarios_historical.txt"))
+        seasonal_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_seasonal.txt"))
+        historical_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_historical.txt"))
         scenarios_folder = os.path.join(layout_path, "Satellite_Images_Mask")
 
         for scenario_folder_name in os.listdir(scenarios_folder):

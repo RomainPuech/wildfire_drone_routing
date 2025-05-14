@@ -111,8 +111,8 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
             if x >= 0 and x < N and y >= 0 and y < M:
                 transformed_y = y
                 ax.scatter(x, transformed_y, c="black", s=5, marker="D", label="Drone")
-                for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2):
-                    for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2):
+                for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2+1):
+                    for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2+1):
                         if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
                                 transformed_y = y_cov
                                 ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
@@ -122,8 +122,8 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
         if x >= 0 and x < N and y >= 0 and y < M:
             transformed_y = y
             ax.scatter(x, transformed_y, c="green", s=10, marker="s", label="Ground Sensor")
-            for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2):
-                for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2):
+            for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2+1):
+                for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2+1):
                     if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
                         transformed_y = y_cov
                         ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
@@ -132,8 +132,8 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
         if x >= 0 and x < N and y >= 0 and y < M:
             transformed_y = y
             ax.scatter(x, transformed_y, c="blue", s=10, marker="*", label="Charging Station")
-            for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2):
-                for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2):
+            for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2+1):
+                for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2+1):
                     if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
                         transformed_y = y_cov
                         ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
