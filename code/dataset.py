@@ -427,6 +427,19 @@ def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy")
     
     return burn_map
 
+def load_burn_map(filename, extension = ".npy"):
+    """
+    Load a burn map from a npy file.
+    Args:
+        filename (str): Path to the npy file containing the burn map
+    """
+    if not extension.startswith("."):
+        extension = "." + extension
+    if extension == ".npy":
+        return load_scenario(filename, ".npy")
+    else:
+        return load_scenario(filename, ".jpg")
+
 ####### Prepocess the sim2real dataset #######
 
 def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension = ".npy", n_max_layouts = None):

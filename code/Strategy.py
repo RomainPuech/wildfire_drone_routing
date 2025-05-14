@@ -1,6 +1,6 @@
 import random
 import os
-from my_julia_caller import jl # DEACTIVATE IT TO RUN THINGS IN PARALLEL 
+# from my_julia_caller import jl # DEACTIVATE IT TO RUN THINGS IN PARALLEL 
 import json
 import numpy as np
 from dataset import load_scenario, save_burn_map
@@ -654,6 +654,7 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
             # print("Solving next move with model reuse (integer indexing)")
             
             # Convert drone locations to Julia indexing
+            print("THE PB IS HERE : ", automatic_step_parameters["drone_locations"])
             julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
             
             # print("--- parameters for julia (Julia indexing) ---")
