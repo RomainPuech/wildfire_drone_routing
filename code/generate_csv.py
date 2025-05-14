@@ -106,10 +106,26 @@ def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_s
             continue
         
         selected_ids = load_selected_scenarios(selected_file_path)
+        # Build set of used weather filenames like '0047_03634.txt'
+        used_weather_files = {f"{sid}.txt" for sid in selected_ids}
+
+        weather_folder = os.path.join(layout_path, "Weather_Data")
+        for fname in os.listdir(weather_folder):
+            if not fname.endswith(".txt"):
+                continue
+            if fname not in used_weather_files:
+                trash_dir = os.path.abspath(os.path.join(root_folder, "..", "trash"))
+                os.makedirs(trash_dir, exist_ok=True)
+
+                src = os.path.join(weather_folder, fname)
+                dst = os.path.join(trash_dir, fname)
+
+                print(f"Moving unused weather file: {fname} → {trash_dir}")
+                os.rename(src, dst)
         
         print(f"Processing layout: {layout_name}, selected scenarios: {len(selected_ids)}")
-        seasonal_match = os.path.exists(os.path.join(layout_path, "selected_senarios_seasonal.txt"))
-        historical_match = os.path.exists(os.path.join(layout_path, "selected_senarios_historical.txt"))
+        seasonal_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_seasonal.txt"))
+        historical_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_historical.txt"))
         scenarios_folder = os.path.join(layout_path, "Satellite_Images_Mask")
 
         for scenario_folder_name in os.listdir(scenarios_folder):
