@@ -93,80 +93,103 @@ def load_selected_scenarios(selected_file_path):
 
 def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_scenarios.txt", km_per_cell=1):
     records = []
+    errors = []
     for layout_name in os.listdir(root_folder):
-        # print(f"Processing layout: {layout_name}")
-        layout_path = os.path.join(root_folder, layout_name)
-        if not os.path.isdir(layout_path):
+        try:
+            # print(f"Processing layout: {layout_name}")
+            layout_path = os.path.join(root_folder, layout_name)
+            if not os.path.isdir(layout_path):
+                continue
+
+            selected_file_path = os.path.join(layout_path, selected_file_name)
+            print(f"Selected file path: {selected_file_path}")
+            if not os.path.exists(selected_file_path):
+                # print("HERE!")
+                continue
+            
+            selected_ids = load_selected_scenarios(selected_file_path)
+            # Build set of used weather filenames like '0047_03634.txt'
+            used_weather_files = {f"{sid}.txt" for sid in selected_ids}
+
+            weather_folder = os.path.join(layout_path, "Weather_Data")
+            for fname in os.listdir(weather_folder):
+                if not fname.endswith(".txt"):
+                    continue
+                if fname not in used_weather_files:
+                    trash_dir = os.path.abspath(os.path.join(root_folder, "..", "trash"))
+                    os.makedirs(trash_dir, exist_ok=True)
+
+                    src = os.path.join(weather_folder, fname)
+                    dst = os.path.join(trash_dir, fname)
+
+                    # print(f"Moving unused weather file: {fname} → {trash_dir}")
+                    os.rename(src, dst)
+            
+            print(f"Processing layout: {layout_name}, selected scenarios: {len(selected_ids)}")
+            seasonal_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_seasonal.txt"))
+            historical_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_historical.txt"))
+            scenarios_folder = os.path.join(layout_path, "Satellite_Images_Mask")
+
+            for scenario_folder_name in os.listdir(scenarios_folder):
+                if scenario_folder_name not in selected_ids:
+                    trash_dir = os.path.abspath(os.path.join(root_folder, "..", "trash"))
+                    os.makedirs(trash_dir, exist_ok=True)
+
+                    src = os.path.join(scenarios_folder, scenario_folder_name)
+                    dst = os.path.join(trash_dir, scenario_folder_name)
+
+                    #print(f"Moving unused scenario: {scenario_folder_name} → {trash_dir}")
+                    os.rename(src, dst)
+                    continue
+
+                scenario_folder = os.path.join(scenarios_folder, scenario_folder_name)
+                if not os.path.isdir(scenario_folder):
+                    continue
+
+                try:
+                    layout_number, scenario_number = scenario_folder_name.split("_")
+                except ValueError:
+                    print(f"Invalid scenario folder name: {scenario_folder_name}")
+                    continue
+
+                scenario = load_scenario_jpg(scenario_folder, binary=True)
+
+                season, first_date = get_scenario_season(layout_path, layout_number, scenario_number)
+                season_number = ['Winter', 'Spring', 'Summer', 'Autumn'].index(season) + 1 if season else None
+
+                final_t = scenario[-1]
+                final_fire_size = (final_t == 1).sum()
+                final_radius_km = compute_fire_radius(final_t) * km_per_cell
+
+                t10_index = min(10, len(scenario)-1)
+                t10_size = (scenario[t10_index] == 1).sum()
+                fast_fire = t10_size >= 0.5 * final_fire_size
+                slow_fire = not fast_fire
+
+                record = {
+                    "layout_number": layout_number,
+                    "scenario_number": scenario_number,
+                    "season_number": season_number,
+                    "seasonal_match": seasonal_match,
+                    "historical_match": historical_match,
+                    "big_fire": final_radius_km >= 20,
+                    "small_fire": final_radius_km < 20,
+                    "fast_fire": fast_fire,
+                    "slow_fire": slow_fire
+                }
+
+                records.append(record)
+        except Exception as e:
+            print(f"Error processing layout {layout_name}: {e}")
+            errors.append(layout_name)
             continue
-
-        selected_file_path = os.path.join(layout_path, selected_file_name)
-        print(f"Selected file path: {selected_file_path}")
-        if not os.path.exists(selected_file_path):
-            # print("HERE!")
-            continue
-        
-        selected_ids = load_selected_scenarios(selected_file_path)
-        
-        print(f"Processing layout: {layout_name}, selected scenarios: {len(selected_ids)}")
-        seasonal_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_seasonal.txt"))
-        historical_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_historical.txt"))
-        scenarios_folder = os.path.join(layout_path, "Satellite_Images_Mask")
-
-        for scenario_folder_name in os.listdir(scenarios_folder):
-            if scenario_folder_name not in selected_ids:
-                trash_dir = os.path.abspath(os.path.join(root_folder, "..", "trash"))
-                os.makedirs(trash_dir, exist_ok=True)
-
-                src = os.path.join(scenarios_folder, scenario_folder_name)
-                dst = os.path.join(trash_dir, scenario_folder_name)
-
-                print(f"Moving unused scenario: {scenario_folder_name} → {trash_dir}")
-                os.rename(src, dst)
-                continue
-
-            scenario_folder = os.path.join(scenarios_folder, scenario_folder_name)
-            if not os.path.isdir(scenario_folder):
-                continue
-
-            try:
-                layout_number, scenario_number = scenario_folder_name.split("_")
-            except ValueError:
-                print(f"Invalid scenario folder name: {scenario_folder_name}")
-                continue
-
-            scenario = load_scenario_jpg(scenario_folder, binary=True)
-
-            season, first_date = get_scenario_season(layout_path, layout_number, scenario_number)
-            season_number = ['Winter', 'Spring', 'Summer', 'Autumn'].index(season) + 1 if season else None
-
-            final_t = scenario[-1]
-            final_fire_size = (final_t == 1).sum()
-            final_radius_km = compute_fire_radius(final_t) * km_per_cell
-
-            t10_index = min(10, len(scenario)-1)
-            t10_size = (scenario[t10_index] == 1).sum()
-            fast_fire = t10_size >= 0.5 * final_fire_size
-            slow_fire = not fast_fire
-
-            record = {
-                "layout_number": layout_number,
-                "scenario_number": scenario_number,
-                "season_number": season_number,
-                "seasonal_match": seasonal_match,
-                "historical_match": historical_match,
-                "big_fire": final_radius_km >= 20,
-                "small_fire": final_radius_km < 20,
-                "fast_fire": fast_fire,
-                "slow_fire": slow_fire
-            }
-
-            records.append(record)
 
     df = pd.DataFrame(records)
     csv_path = os.path.join(root_folder, "scenario_summary.csv")
     df.to_csv(csv_path, index=False)
+    print(f"Errors: {errors}")
     return df
 
 
 if __name__ == "__main__":
-    summarize_selected_scenarios_jpg("./MinimalDataset")
+    summarize_selected_scenarios_jpg("./WideDataset")

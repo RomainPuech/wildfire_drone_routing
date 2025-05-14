@@ -32,7 +32,10 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
     return getattr(module, class_name)
 
 
-def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str = '', simulation_parameters: dict = {}):
+
+
+def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simulation_parameters: dict):
+    #print("simulation_parameters", simulation_parameters)
     return {
         "N": scenario.shape[1],
         "M": scenario.shape[2],
@@ -45,15 +48,41 @@ def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str = '', s
         "coverage_radius_m": simulation_parameters.get("coverage_radius_m", DEFAULT_SIMULATION_PARAMETERS["coverage_radius_m"]),
         "cell_size_m": simulation_parameters.get("cell_size_m", DEFAULT_SIMULATION_PARAMETERS["cell_size_m"]),
         "input_dir": input_dir,
+        "transmission_range": simulation_parameters.get("transmission_range", DEFAULT_SIMULATION_PARAMETERS["transmission_range"]),
     }
+
 
 def return_no_custom_parameters():
     return {}
 
+# should not be used
+# DEFAULT_SIMULATION_PARAMETERS = {
+#     "call_every_n_steps": 5,
+#     "optimization_horizon": 5,
+#     "reevaluation_step": 5,
+#     "max_battery_distance": 100000,
+#     "max_battery_time": 100000,
+#     "n_drones": 1,
+#     "n_ground_stations": 0,
+#     "n_charging_stations": 0,
+#     "drone_speed_m_per_min": 1200,
+#     "coverage_radius_m": 150,
+#     "cell_size_m": 30,
+#     "transmission_range": 50000,
+# }
 DEFAULT_SIMULATION_PARAMETERS = {
-    "call_every_n_steps": 5,
-    "optimization_horizon": 5,
-    "reevaluation_step": 5,
+    "call_every_n_steps": -1,
+    "optimization_horizon": -1,
+    "reevaluation_step": -1,
+    "max_battery_distance": -1,
+    "max_battery_time": -1,
+    "n_drones": -1,
+    "n_ground_stations": -1,
+    "n_charging_stations": -1,
+    "drone_speed_m_per_min": -1,
+    "coverage_radius_m": -1,
+    "cell_size_m": -1,
+    "transmission_range": -1,
 }
 
 def build_custom_init_params(input_dir, layout_name):
@@ -116,6 +145,9 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
     Returns:
         int: Number of drone movement substeps per data timestep
     """
+    print("data_cell_size_m", data_cell_size_m)
+    print("drone_speed_m_per_min", drone_speed_m_per_min)
+    print("coverage_radius_m", coverage_radius_m)
     coverage_width_m = 2 * coverage_radius_m
     coverage_width_cells = coverage_width_m / data_cell_size_m
     coverage_width_cells = max(1, round(coverage_width_cells))  # Ensure it's at least 1 and rounded
@@ -125,8 +157,8 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
     
     drone_distance_m = 60 * drone_speed_m_per_min
     print("drone distance", drone_distance_m)
-    drone_distance_operational_cells_per_timestep = drone_distance_m / (coverage_width_cells*data_cell_size_m)
-    assert drone_distance_operational_cells_per_timestep == round(drone_distance_m/(coverage_width_cells*data_cell_size_m)), f"drone_distance_operational_cells_per_timestep: {drone_distance_operational_cells_per_timestep} != {round(drone_distance_m/(coverage_width_cells*data_cell_size_m))}"
+    drone_distance_operational_cells_per_timestep = drone_distance_m // (coverage_width_cells*data_cell_size_m)
+    #assert drone_distance_operational_cells_per_timestep == round(drone_distance_m/(coverage_width_cells*data_cell_size_m)), f"drone_distance_operational_cells_per_timestep: {drone_distance_operational_cells_per_timestep} != {round(drone_distance_m/(coverage_width_cells*data_cell_size_m))}"
     print(f"Drone distance in operational cells per timestep: {drone_distance_operational_cells_per_timestep}")
     return max(1, round(drone_distance_operational_cells_per_timestep))
 
@@ -518,6 +550,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         if time_step >= 0: # The fire has started.
             # 1. Check if a fire is detected
             grid = scenario[time_step]
+            print("grid")
+            print(grid)
             print(f"grid shape: {grid.shape}")
             
             if ground_sensor_locations_data_scale:
@@ -549,16 +583,16 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 "drone_states": drone_states,
                 "t": t_found
             }
-            print("automatic_step_parameters_opt_scale: ", automatic_step_parameters_opt_scale)
+            #print("automatic_step_parameters_opt_scale: ", automatic_step_parameters_opt_scale)
             start_time = time.time()
             actions_opt_scale = Routing_Strat.next_actions(automatic_step_parameters_opt_scale, custom_step_parameters)
-            print(f"[DEBUG]: Actions: {actions_opt_scale}")
+            #print(f"[DEBUG]: Actions: {actions_opt_scale}")
             actions_data_scale = []
             for action in actions_opt_scale:
                 action_type, coords_opt_scale = action
 
                 if action_type in ['move', 'fly']:
-                    print(f"[{action_type.upper()}] Original: {coords_opt_scale}")
+                    #print(f"[{action_type.upper()}] Original: {coords_opt_scale}")
                     if action_type == 'fly':
                         converted = operational_space_to_dataspace_coordinates( 
                             coords_opt_scale,
@@ -592,7 +626,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 drone_states[drone_index] = new_state
                 total_distance_traveled += abs(new_x_data_scale - old_x_data_scale) + abs(new_y_data_scale - old_y_data_scale)
                 drone_visited_cells.add((new_x_data_scale, new_y_data_scale))
-                # ...
+                
 
             if return_history:
                 drone_locations_history.append(tuple(drone_locations_data_scale))
@@ -643,8 +677,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         # "avg_drone_entropy": avg_drone_entropy,
         # "sensor_entropy": sensor_entropy
     }
-    print("\n\n\n\n")
-    print("history: ", drone_locations_history)
+    #print("\n\n\n\n")
+    #print("history: ", drone_locations_history)
     return results, (drone_locations_history, ground_sensor_locations_data_scale, charging_stations_locations_data_scale) if return_history else ()
 
 def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}):
@@ -995,7 +1029,7 @@ if __name__ == "__main__":
     # print("operational substeps: ", op)
     # print("--------------------------------")
     # That's very fast to run!
-    print("starting benchmark")
+    #print("starting benchmark")
     time_start = time.time()
     scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00034.npy")
     results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, RandomSensorPlacementStrategy, 
@@ -1006,7 +1040,7 @@ if __name__ == "__main__":
                                                                                                                   custom_step_parameters_function = return_no_custom_parameters, 
                                                                                                                   automatic_initialization_parameters_function=my_automatic_layout_parameters, 
                                                                                                                   return_history=True)
-    print(results)
+    #print(results)
     print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
     create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0, out_filename='test_simulation', ground_sensor_locations = ground, charging_stations_locations = charging, substeps_per_timestep=6)
 

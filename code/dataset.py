@@ -2,6 +2,7 @@
 
 import os
 import tqdm
+import shutil
 import numpy as np
 import numpy as np
 import random
@@ -63,6 +64,19 @@ def listdir_limited(input_dir, max_n_scenarii=None):
                 if not max_n_scenarii is None and count >= max_n_scenarii:
                     break
 
+def delete_logs_folder(folder_path):
+    """
+    Deletes the 'logs' subfolder in the given folder_path.
+    
+    Args:
+        folder_path (str): The path to the directory containing the 'logs' folder.
+    """
+    logs_path = os.path.join(folder_path, 'logs')
+    if os.path.exists(logs_path) and os.path.isdir(logs_path):
+        shutil.rmtree(logs_path)
+        print(f"Deleted 'logs' folder at: {logs_path}")
+    else:
+        print(f"No 'logs' folder found at: {logs_path}")
 
 
 

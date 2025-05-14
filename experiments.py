@@ -25,31 +25,27 @@ if os.path.exists("tmp_burnmaps"):
 print("-- Starting experiments --")
 
 simulation_parameters =  {
-    "N": 50,
-    "M": 50,
     "max_battery_distance": -1,
-    "max_battery_time": 28,
+    "max_battery_time": 2,
     "n_drones": 2,
     "n_ground_stations": 0,
     "n_charging_stations": 2,
-    "speed_m_per_min": 9,
-    "coverage_radius_m": 45,
+    "drone_speed_m_per_min": 1200,
+    "coverage_radius_m": 150,
     "cell_size_m": 30,
-    "transmission_range": 100,
+    "transmission_range": 50000,
     }
 
 custom_initialization_parameters = {
-    "burnmap_filename": "WideDataset/0101_02057/static_risk.npy",
      "load_from_logfile": False, 
      "reevaluation_step": 15, 
      "optimization_horizon":15,
      "regularization_param": 1
      } #"regularization_param": 0.0001}
 
-layout_folder = "WideDataset/0101_02057/scenarii"
-scenario_name = "0101_00001"
-sensor_strategy = FixedPlacementStrategy
-drone_strategy = get_wrapped_clustering_strategy(DroneRoutingRegularizedMaxCoverageResetStatic) #wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
+layout_folder = "WideDataset/"
+sensor_strategy = wrap_log_sensor_strategy(RandomSensorPlacementStrategy)
+drone_strategy = wrap_log_drone_strategy(RandomDroneRoutingStrategy) #wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
 
 def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
     simulation_parameters["N"] = scenario.shape[1]
@@ -58,25 +54,25 @@ def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
 
 def return_no_custom_parameters():
     return {}
-def custom_initialization_parameters_function(input_dir: str, layout_name: str = None):
-    return custom_initialization_parameters
-scenario = load_scenario_npy(layout_folder + "/" + scenario_name + ".npy")
 
+def custom_initialization_parameters_function(input_dir:str):
+    print(f"input_dir: {input_dir}")
+    return {"burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/static_risk.npy", "reevaluation_step": 5, "optimization_horizon":5}
+
+dataset_folder_name = "WideDataset/"
+benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=2, starting_time=0, max_n_layouts=2, simulation_parameters = simulation_parameters)
 
 #run_benchmark_scenarii_sequential_precompute(layout_folder, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, file_format="npy", simulation_parameters=simulation_parameters)
-time_start = time.time()
-results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, sensor_strategy, drone_strategy, custom_initialization_parameters, custom_step_parameters_function = return_no_custom_parameters, automatic_initialization_parameters_function=my_automatic_layout_parameters, return_history=True)
 
+# print(results)
+# print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
+# create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0,out_filename='test_simulation', ground_sensor_locations = ground, charging_stations_locations = charging)
+# # display a random burn map if there are any
+# if os.path.exists("tmp_burnmaps") and len(os.listdir("tmp_burnmaps")) > 0:
+#     tmp_burnmap_filename = os.path.join("tmp_burnmaps", os.listdir("tmp_burnmaps")[0])
+#     bm = load_scenario_npy(tmp_burnmap_filename)
+#     create_scenario_video(bm, burn_map = True, out_filename = "test_burn_map")
 
-print(results)
-print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
-create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0,out_filename='test_simulation', ground_sensor_locations = ground, charging_stations_locations = charging)
-# display a random burn map if there are any
-if os.path.exists("tmp_burnmaps") and len(os.listdir("tmp_burnmaps")) > 0:
-    tmp_burnmap_filename = os.path.join("tmp_burnmaps", os.listdir("tmp_burnmaps")[0])
-    bm = load_scenario_npy(tmp_burnmap_filename)
-    create_scenario_video(bm, burn_map = True, out_filename = "test_burn_map")
-
-# display the burn map
-bm = load_scenario_npy(custom_initialization_parameters["burnmap_filename"])
-create_scenario_video(bm, burn_map = True, out_filename = "test_burn_map")
+# # display the burn map
+# bm = load_scenario_npy(custom_initialization_parameters["burnmap_filename"])
+# create_scenario_video(bm, burn_map = True, out_filename = "test_burn_map")
