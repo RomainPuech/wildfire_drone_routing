@@ -239,7 +239,7 @@ def create_video_from_images(image_dir="images", output_filename="simulation.mp4
 
 
 
-def create_scenario_video(scenario_or_filename, drone_locations_history = None, burn_map = False, out_filename = "simulation", starting_time = 0, ground_sensor_locations = [], charging_stations_locations = [], substeps_per_timestep = 1):
+def create_scenario_video(scenario_or_filename, drone_locations_history = None, burn_map = False, out_filename = "simulation", starting_time = 0, ground_sensor_locations = [], charging_stations_locations = [], substeps_per_timestep = 1, coverage_cell_width = 3, maxframes = np.inf):
     """
     Create a video visualization of a saved scenario or burn_map
     
@@ -251,7 +251,11 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
         starting_time: Initial timestep
         ground_sensor_locations: List of ground sensor coordinates
         charging_stations_locations: List of charging station coordinates
+        substeps_per_timestep: Number of substeps per timestep
+        coverage_cell_width: Width of the coverage cell
     """
+    substeps_per_timestep = 266 #TODO remove
+    coverage_cell_width = 10
     # Remove .txt extension if present
     scenario = None
     if isinstance(scenario_or_filename, str):  # Using isinstance instead of type()
@@ -300,7 +304,7 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
             print("substeps_per_timestep = ", substeps_per_timestep)
             print("T = ", T)
             
-            for t in range(total_substeps):
+            for t in range(min(total_substeps, maxframes)):
                 scenario_index = min(t // substeps_per_timestep, T - 1)  
                 save_grid_image(
                     grid=scenario[scenario_index],
@@ -310,10 +314,11 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
                     ground_sensors_locations=ground_sensor_locations,
                     charging_stations_locations=charging_stations_locations,
                     timestep=t,
-                    output_dir=output_dir
+                    output_dir=output_dir,
+                    coverage_cell_width=coverage_cell_width
                 )
         else:
-            for t in range(T):
+            for t in range(min(T, maxframes)):
                 save_grid_image(
                     grid=scenario[t],
                     smoke_grid=smoke_grid,
@@ -322,11 +327,12 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
                     ground_sensors_locations=ground_sensor_locations,
                     charging_stations_locations=charging_stations_locations,
                     timestep=t,
-                    output_dir=output_dir
+                    output_dir=output_dir,
+                    coverage_cell_width=coverage_cell_width
                 )
     else:
         # Create images for each time step
-        for t in range(T):
+        for t in range(min(T, maxframes)):
             save_ignition_map_image(
                 ignition_map=scenario[t],
                 timestep=t,

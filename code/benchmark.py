@@ -11,6 +11,7 @@ from dataset import load_scenario_npy, load_scenario_jpg, listdir_limited, load_
 from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
 from new_clustering import get_wrapped_clustering_strategy
 from Strategy import SensorPlacementStrategy, DroneRoutingStrategy
+from displays import create_scenario_video
 
 def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
     """
@@ -545,14 +546,14 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # features_per_timestep = concat_len // num_timesteps
 
     fire_detected = False   # Flag to indicate fire detection
-    print("SCENARIO LENGTH" , len(scenario))
+    #print("SCENARIO LENGTH" , len(scenario))
     for time_step in range(-starting_time,len(scenario)):
         if time_step >= 0: # The fire has started.
             # 1. Check if a fire is detected
             grid = scenario[time_step]
-            print("grid")
-            print(grid)
-            print(f"grid shape: {grid.shape}")
+            #print("grid")
+            #print(grid)
+            #print(f"grid shape: {grid.shape}")
             
             if ground_sensor_locations_data_scale:
                 if (grid[rows_ground_data_scale,cols_ground_data_scale]==1).any():
@@ -602,7 +603,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                     else:
                         converted = (coverage_width_cells*coords_opt_scale[0], coverage_width_cells*coords_opt_scale[1])
 
-                    print(f"[DEBUG]: [{action_type.upper()}] Converted: {converted}")
+                    #print(f"[DEBUG]: [{action_type.upper()}] Converted: {converted}")
                     actions_data_scale.append((action_type, converted))
                 else:
                     actions_data_scale.append(action) #TODO check that for charging mode
@@ -743,6 +744,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     else:
         custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
     
+    count =0
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
         #print(f"Processing scenario {file}")
         scenario = load_scenario_fn(file)
@@ -757,7 +759,8 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
             custom_step_parameters_function,
             starting_time=starting_time,
             input_dir=input_dir,
-            simulation_parameters=simulation_parameters
+            simulation_parameters=simulation_parameters,
+            return_history= count == 0
         )
 
         delta_t = results["delta_t"]
@@ -769,6 +772,11 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
 
         delta_ts += delta_t
         devices[device] += 1
+        if count == 0:
+            (position_history, ground, charging) = _
+            create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0, out_filename=f'test_simulation_{layout_name}', ground_sensor_locations = ground, charging_stations_locations = charging, maxframes=3)
+            print(f"Saved video to test_simulation_{layout_name}.mp4")
+        count += 1
 
         total_execution_times.append(results["avg_execution_time"])
         total_fire_sizes.append(results["fire_size_cells"])
@@ -886,7 +894,7 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
     Returns:
         dict: Dictionary mapping layout names to their respective metric dictionaries.
     """
-    print("simulation_parameters: ", simulation_parameters)
+    # print("simulation_parameters: ", simulation_parameters)
 
     if not dataset_folder_name.endswith('/'):
         dataset_folder_name += '/'
