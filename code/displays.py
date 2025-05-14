@@ -54,7 +54,7 @@ def display_grid(grid, smoke_grid, drones, display):
     print()
 
 # deprecated? uses smoke_grid, which is not used anymore
-def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="images", ground_sensors_locations = [], charging_stations_locations = []):
+def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="images", ground_sensors_locations = [], charging_stations_locations = [], coverage_cell_width = 3):
     """
     Save a PNG image of the grid with overlays for fire, smoke, and drones, including a smoke scale.
 
@@ -111,17 +111,32 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
             if x >= 0 and x < N and y >= 0 and y < M:
                 transformed_y = y
                 ax.scatter(x, transformed_y, c="black", s=5, marker="D", label="Drone")
+                for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2):
+                    for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2):
+                        if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
+                                transformed_y = y_cov
+                                ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
 
     # add ground sensors and charging stations
     for (y,x) in ground_sensors_locations:
         if x >= 0 and x < N and y >= 0 and y < M:
             transformed_y = y
             ax.scatter(x, transformed_y, c="green", s=10, marker="s", label="Ground Sensor")
+            for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2):
+                for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2):
+                    if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
+                        transformed_y = y_cov
+                        ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
     
     for (y,x) in charging_stations_locations:
         if x >= 0 and x < N and y >= 0 and y < M:
             transformed_y = y
             ax.scatter(x, transformed_y, c="blue", s=10, marker="*", label="Charging Station")
+            for x_cov in range(x-coverage_cell_width//2, x+coverage_cell_width//2):
+                for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2):
+                    if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
+                        transformed_y = y_cov
+                        ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
 
     # Add smoke colorbar only if smoke is displayed
     if 'smoke' in display:
@@ -183,42 +198,6 @@ def save_ignition_map_image(ignition_map, timestep, output_dir="images", burn_ma
     plt.savefig(image_path, bbox_inches="tight")
     plt.close()
 
-def display_ignition_map_image(ignition_map, timestep, burn_map=False):
-    
-    import matplotlib.pyplot as plt
-    
-    N = ignition_map.shape[0]
-    
-    # Create figure and axis
-    plt.figure(figsize=(10, 8))
-    
-    # Create custom colormap from white to yellow to red
-    from matplotlib.colors import LinearSegmentedColormap
-    colors = [(1, 1, 1), (1, 1, 0), (1, 0, 0)]  # White to yellow to red
-    n_bins = 100  # Number of color gradients
-    cmap = LinearSegmentedColormap.from_list("custom", colors, N=n_bins)
-    
-    # Plot the heatmap
-    im = plt.imshow(ignition_map, cmap=cmap, vmin=0, vmax=np.max(ignition_map))
-    
-    # Add colorbar with formatted labels
-    label = 'Ignition Probability' if not burn_map else f"Burn Probability"
-    cbar = plt.colorbar(im, label=label)
-    max_val = np.max(ignition_map)
-    tick_count = 5
-    ticks = np.linspace(0, max_val, tick_count)
-    cbar.set_ticks(ticks)
-    cbar.set_ticklabels([f'{v:.4f}' for v in ticks])
-    
-    # Add title and labels
-    image_title = label = 'Ignition Probability Map' if not burn_map else f"Burn Probability Map at t={timestep}"
-    plt.title(image_title)
-    plt.xlabel('Y coordinate')
-    plt.ylabel('X coordinate')
-    
-    
-
-    plt.show()
 
 
 def create_video_from_images(image_dir="images", output_filename="simulation.mp4", frames_per_image=1):
@@ -277,7 +256,7 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     scenario = None
     if isinstance(scenario_or_filename, str):  # Using isinstance instead of type()
         # the input is a file name
-        base_filename = "_".join(scenario_or_filename.replace('.npy', '').split('/'))  # Fixed variable name
+        base_filename = scenario_or_filename.replace('.txt', '')  # Fixed variable name
         filename = scenario_or_filename  # Fixed variable name
     else:
         base_filename = out_filename
@@ -305,7 +284,7 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     
     # Load the scenario
     if scenario is None:
-        scenario = load_scenario(filename)
+        scenario, starting_time = load_scenario(filename)
     T, height, width = scenario.shape  # Using height and width instead of N
     # print("scenario.shape = ", scenario.shape)
     
