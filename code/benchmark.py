@@ -206,7 +206,7 @@ def operational_space_to_dataspace_coordinates(coordinate, coverage, datacell_si
     return (new_x, newy)
 
 
-def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}):
+def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy"):
     """
     Run a drone routing strategy to create a logfile.
     """
@@ -866,19 +866,23 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     N_SCENARII = max_n_scenarii if max_n_scenarii else len(os.listdir(input_dir))
     # find the longest scenario to be used as canonical scenario
     max_scenario_length = 0
+    canonical_scenario = None
     for file in iterable:
         scenario = load_scenario_fn(file)
         if scenario.shape[0] > max_scenario_length:
             max_scenario_length = scenario.shape[0]
             canonical_scenario = scenario
+    if canonical_scenario is None:
+        print(f"No scenario found in {input_dir}")
+        return {}
     
     # precompute the sensor placement and drone routing strategy on canonical scenario
     #print("Precomputing sensor placement and drone routing strategy on canonical scenario...")
-    run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters) 
+    run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format) 
     #print("running on all scenarios...")
     return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters)
 
-def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[]):
+def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[], file_format="npy"):
     """
     Run benchmarks on a simulation-to-real-world dataset structure.
 
@@ -912,16 +916,18 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
         if layout_folder in skip_folder_names:
             print(f"Skipping layout {layout_folder} because it is in the skip_folder_names list")
             continue
-            
+        
+        scenarios_folder = "/scenarii/" if file_format == "npy" else "/Satellite_Images_Mask/"
         metrics = run_benchmark_scenarii_sequential_precompute(
-            layout_folder + "/scenarii/",
+            layout_folder + scenarios_folder,
             ground_placement_strategy, 
             drone_routing_strategy, 
             custom_initialization_parameters_function, 
             custom_step_parameters_function, 
             starting_time=starting_time, 
             max_n_scenarii=max_n_scenarii,
-            simulation_parameters=simulation_parameters
+            simulation_parameters=simulation_parameters,
+            file_format=file_format
         )
         
         all_metrics[layout_name] = metrics

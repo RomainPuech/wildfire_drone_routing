@@ -60,7 +60,7 @@ def custom_initialization_parameters_function(input_dir:str):
     return {"burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/static_risk.npy", "reevaluation_step": 5, "optimization_horizon":5}
 
 dataset_folder_name = "WideDataset/"
-benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=100, starting_time=0, max_n_layouts=2, simulation_parameters = simulation_parameters)
+benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=100, starting_time=0, max_n_layouts=3, simulation_parameters = simulation_parameters, file_format="jpg")
 
 #run_benchmark_scenarii_sequential_precompute(layout_folder, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, file_format="npy", simulation_parameters=simulation_parameters)
 
