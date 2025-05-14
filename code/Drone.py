@@ -91,7 +91,7 @@ class Drone():
             raise ValueError(f"Invalid action: {action}")
 
     def _check_battery(self):
-        if self.distance_battery <= 0 or self.time_battery <= 0:
+        if self.time_battery <= 0:
             self.alive = False
             return False
         return True

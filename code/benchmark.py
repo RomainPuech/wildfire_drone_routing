@@ -131,10 +131,11 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
     return max(1, round(drone_distance_operational_cells_per_timestep))
 
 
-def detect_fire_within_coverage(fire_grid, drone_pos, coverage_radius_cells):
+def detect_fire_within_coverage(fire_grid, drone_pos, coverage_width_cells):
     """
     Returns True if any cell within the drone's square coverage area is on fire.
     """
+    coverage_radius_cells = coverage_width_cells // 2
     x, y = drone_pos
     N, M = fire_grid.shape
     for dx in range(-coverage_radius_cells, coverage_radius_cells + 1):
@@ -417,16 +418,16 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     coverage_radius_m = automatic_initialization_parameters.get("coverage_radius_m", 45)
 
     operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
-    coverage_radius_cells = round(coverage_radius_m*2 / cell_size_m)
+    coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)
     print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
-    print(f"[DEBUG] Coverage radius cells: {coverage_radius_cells}")
+    print(f"[DEBUG] Coverage radius cells: {coverage_width_cells}")
 
-    rescaled_N = automatic_initialization_parameters["N"] // coverage_radius_cells
-    rescaled_M = automatic_initialization_parameters["M"] // coverage_radius_cells
+    rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
+    rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
     # pool burnmap
     
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
-    rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_radius_cells)
+    rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
     #save the pooled burnmap
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
@@ -447,8 +448,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     print(f"charging_stations_locations in opt scale: {charging_stations_locations_opt_scale}")
 
 
-    ground_sensor_locations_data_scale = [(x*coverage_radius_cells+coverage_radius_cells//2, y*coverage_radius_cells+coverage_radius_cells//2) for x,y in ground_sensor_locations_opt_scale]
-    charging_stations_locations_data_scale = [(x*coverage_radius_cells+coverage_radius_cells//2, y*coverage_radius_cells+coverage_radius_cells//2) for x,y in charging_stations_locations_opt_scale]
+    ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
+    charging_stations_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in charging_stations_locations_opt_scale]
     rows_ground_data_scale, cols_ground_data_scale = zip(*ground_sensor_locations_data_scale) if ground_sensor_locations_data_scale else ((),())
     rows_charging_data_scale, cols_charging_data_scale = zip(*charging_stations_locations_data_scale) if charging_stations_locations_data_scale else ((),())
 
@@ -470,7 +471,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     print(f"rescaled_automatic_initialization_parameters: {rescaled_automatic_initialization_parameters}")
     # Print initial drone locations
     initial_drone_locations_and_state_opt_scale = Routing_Strat.get_initial_drone_locations()
-    drones = [Drone(x*coverage_radius_cells+coverage_radius_cells//2,y*coverage_radius_cells+coverage_radius_cells//2,state,charging_stations_locations_data_scale,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in initial_drone_locations_and_state_opt_scale]
+    drones = [Drone(x*coverage_width_cells+coverage_width_cells//2,y*coverage_width_cells+coverage_width_cells//2,state,charging_stations_locations_data_scale,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in initial_drone_locations_and_state_opt_scale]
     
     drone_locations_data_scale = [drone.get_position() for drone in drones]
     drone_locations_opt_scale = [(coord[0], coord[1]) for (status,coord) in initial_drone_locations_and_state_opt_scale]
@@ -558,16 +559,19 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
                 if action_type in ['move', 'fly']:
                     print(f"[{action_type.upper()}] Original: {coords_opt_scale}")
-                    converted = operational_space_to_dataspace_coordinates(
-                        coords_opt_scale,
-                        coverage=coverage_radius_m,
-                        datacell_size_m=cell_size_m,
-                        # is_delta=(action_type == 'move')  # Use delta mode only for 'move'
-                    )
+                    if action_type == 'fly':
+                        converted = operational_space_to_dataspace_coordinates( 
+                            coords_opt_scale,
+                            coverage=coverage_radius_m,
+                            datacell_size_m=cell_size_m,
+                        )
+                    else:
+                        converted = (coverage_width_cells*coords_opt_scale[0], coverage_width_cells*coords_opt_scale[1])
+
                     print(f"[DEBUG]: [{action_type.upper()}] Converted: {converted}")
                     actions_data_scale.append((action_type, converted))
                 else:
-                    actions_data_scale.append(action)
+                    actions_data_scale.append(action) #TODO check that for charging mode
             
             execution_times.append(time.time() - start_time)
 
@@ -578,8 +582,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 old_x_data_scale, old_y_data_scale = drone_locations_data_scale[drone_index]
                 new_x_data_scale, new_y_data_scale, new_distance_battery, new_time_battery, new_state = drone.route(action)
 
-                new_x_opt_scale = (new_x_data_scale-coverage_radius_cells//2)//coverage_radius_cells
-                new_y_opt_scale = (new_y_data_scale-coverage_radius_cells//2)//coverage_radius_cells
+                new_x_opt_scale = (new_x_data_scale-coverage_width_cells//2)//coverage_width_cells
+                new_y_opt_scale = (new_y_data_scale-coverage_width_cells//2)//coverage_width_cells
 
                 drone_locations_data_scale[drone_index] = (new_x_data_scale, new_y_data_scale)
                 drone_locations_opt_scale[drone_index] = (new_x_opt_scale, new_y_opt_scale)
@@ -598,7 +602,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             # === Drone fire detection ===
             for drone_pos in drone_locations_data_scale:
                 # print("drone_pos", drone_pos)
-                if detect_fire_within_coverage(grid, drone_pos, coverage_radius_cells):
+                if detect_fire_within_coverage(grid, drone_pos, coverage_width_cells):
                     device = 'drone'
                     fire_detected = True
                     fire_size_cells = np.sum(grid == 1)
@@ -1004,7 +1008,7 @@ if __name__ == "__main__":
                                                                                                                   return_history=True)
     print(results)
     print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
-    create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0, out_filename='test_simulation', ground_sensor_locations = ground, charging_stations_locations = charging)
+    create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0, out_filename='test_simulation', ground_sensor_locations = ground, charging_stations_locations = charging, substeps_per_timestep=6)
 
 
 
