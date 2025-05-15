@@ -115,7 +115,7 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
                     for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2+1):
                         if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
                                 transformed_y = y_cov
-                                ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
+                                ax.scatter(x_cov, M-1-transformed_y, c="gray", alpha=0.3, s=5, marker="s")
 
     # add ground sensors and charging stations
     for (y,x) in ground_sensors_locations:
@@ -126,7 +126,7 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
                 for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2+1):
                     if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
                         transformed_y = y_cov
-                        ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
+                        ax.scatter(x_cov, M-1-transformed_y, c="gray", alpha=0.3, s=5, marker="s")
     
     for (y,x) in charging_stations_locations:
         if x >= 0 and x < N and y >= 0 and y < M:
@@ -136,7 +136,7 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
                 for y_cov in range(y-coverage_cell_width//2, y+coverage_cell_width//2+1):
                     if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
                         transformed_y = y_cov
-                        ax.scatter(x_cov, transformed_y, c="gray", alpha=0.3, s=5, marker="s")
+                        ax.scatter(x_cov, M-1-transformed_y, c="gray", alpha=0.3, s=5, marker="s")
 
     # Add smoke colorbar only if smoke is displayed
     if 'smoke' in display:
@@ -254,8 +254,8 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
         substeps_per_timestep: Number of substeps per timestep
         coverage_cell_width: Width of the coverage cell
     """
-    substeps_per_timestep = 266 #TODO remove
-    coverage_cell_width = 10
+    substeps_per_timestep = 66 #TODO remove
+    coverage_cell_width = 20
     # Remove .txt extension if present
     scenario = None
     if isinstance(scenario_or_filename, str):  # Using isinstance instead of type()

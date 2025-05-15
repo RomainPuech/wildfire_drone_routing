@@ -11,6 +11,7 @@ import os
 from PIL import Image
 import re
 import rasterio
+import pandas as pd
 
 def convert_tif_to_npy(input_folder, output_folder):
     """
@@ -482,3 +483,83 @@ def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout =
     sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts)
     print("Computing burn maps...")
     compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
+
+
+def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results.csv"):
+    """
+    Combines all per-layout benchmark CSVs from Satellite_Images_Mask folders into one file.
+    Preserves layout/scenario formatting (e.g., 0001, 00002).
+
+    Args:
+        dataset_folder (str): Root folder containing layout subfolders.
+        output_filename (str): Name of the combined CSV file to write.
+
+    Returns:
+        pd.DataFrame: Combined DataFrame of all results.
+    """
+    if not dataset_folder.endswith('/'):
+        dataset_folder += '/'
+
+    all_dfs = []
+
+    for layout in os.listdir(dataset_folder):
+        layout_path = os.path.join(dataset_folder, layout)
+        if not os.path.isdir(layout_path):
+            continue
+
+        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout}_benchmark_results.csv")
+        if os.path.exists(csv_path):
+            print(f"✔ Found: {csv_path}")
+            df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
+            all_dfs.append(df)
+        else:
+            print(f"⚠ No benchmark CSV found at: {csv_path}")
+
+    if not all_dfs:
+        print("❌ No CSV files found. Nothing to combine.")
+        return None
+
+    combined_df = pd.concat(all_dfs, ignore_index=True)
+    combined_path = os.path.join(dataset_folder, output_filename)
+    combined_df.to_csv(combined_path, index=False)
+    print(f"\n✅ Combined results saved to: {combined_path}")
+
+    return combined_df
+
+
+def clean_layout_folders(root_folder):
+    """
+    Cleans each layout folder inside the root_folder by keeping only specified files and folders.
+    If 'Satellite_Image_Mask' is present instead of 'Satellite_Images_Mask', it is renamed.
+    """
+    # Set of allowed names
+    allowed_items = {
+        "Fuel_Map",
+        "Satellite_Images_Mask",
+        "satellite_image.png",
+        "static_risk.npy",
+        "Topography_Map",
+        "Vegetation_Map",
+        "Weather_Data"
+    }
+
+    for layout_name in os.listdir(root_folder):
+        layout_path = os.path.join(root_folder, layout_name)
+        if not os.path.isdir(layout_path):
+            continue  # Skip non-directories
+
+        # Handle renaming if needed
+        mask_path = os.path.join(layout_path, "Satellite_Image_Mask")
+        if os.path.exists(mask_path) and not os.path.exists(os.path.join(layout_path, "Satellite_Images_Mask")):
+            os.rename(mask_path, os.path.join(layout_path, "Satellite_Images_Mask"))
+
+        # Remove any file/folder that isn't in the allowed list
+        for item in os.listdir(layout_path):
+            item_path = os.path.join(layout_path, item)
+            if item not in allowed_items:
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+
+        print(f"Cleaned: {layout_name}")

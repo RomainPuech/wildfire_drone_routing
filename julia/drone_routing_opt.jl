@@ -299,7 +299,7 @@ function NEW_ROUTING_STRATEGY_NEXTMOVE(risk_pertime_file,n_drones,ChargingStatio
         end
     end
     #All drones start with battery level as given in input
-    @constraint(model, [s in 1:n_drones], b[1,s] == battery_level[s][2]) #First run. [1] because battery_level is a list of tuples (distance_battery,time_battery) We use time here. #TODO use distance as well
+    @constraint(model, [s in 1:n_drones], b[1,s] == battery_level[s]) #First run. [1] because battery_level is a list of tuples (distance_battery,time_battery) We use time here. #TODO use distance as well
 
     @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones) + 0.0001*sum(b[t,s] for t in 1:T, s in 1:n_drones))
     optimize!(model)
@@ -410,7 +410,7 @@ function NEW_ROUTING_STRATEGY_NEXTMOVE_INTEGER_BATTERY(risk_pertime_file,n_drone
         end
     end
     #All drones start with battery level as given in input
-    @constraint(model, [s in 1:n_drones], b[1,s] == Int(battery_level[s][2])) 
+    @constraint(model, [s in 1:n_drones], b[1,s] == Int(battery_level[s])) 
     ########## End of constraints specific to the the next move problem
 
     # @objective(model, Max, sum(sum(risk_pertime[t,k...]*a[k,t,s] for k in GridpointsDrones, t in 1:T) for s in 1:n_drones))
@@ -692,7 +692,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
     
     # Set starting battery levels
     for s in 1:n_drones
-        push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == Int(battery_level[s][2])))
+        push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == Int(battery_level[s])))
     end
     
     # Optimize
@@ -700,7 +700,7 @@ function solve_next_move_routing(routing_model::RoutingModel, reevaluation_step,
     optimize!(model)
     t3 = time_ns() / 1e9
     # println("Creating next_move constraints took ", t2 - t1, " seconds")
-    println("Optimizing model took ", t3 - t2, " seconds")
+    # println("Optimizing model took ", t3 - t2, " seconds")
     
     # Extract results
     # println("Solver Status: ", termination_status(model))
@@ -751,11 +751,23 @@ struct IndexRoutingModel
 end
 
 function create_index_routing_model(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time)
+    println("Creating index routing model")
     t1 = time_ns() / 1e9
     risk_pertime = load_burn_map(risk_pertime_file)
-    _, N, M = size(risk_pertime)
+    println("risk_pertime: ", risk_pertime[1,1,1])
+    H, N, M = size(risk_pertime)
     T = optimization_horizon
-    
+    println("N: ", N)
+    println("M: ", M)
+    println("T: ", T)
+    if H == 1 # we duplicate the risk per time for 100 time steps
+        println("Duplicating risk per time for 100 time steps")
+        risk_pertime = repeat(risk_pertime, 100, 1, 1)
+        H = 100
+    end
+    for (x,y) in ChargingStations
+        println("risk_pertime[1,x,y]: ", risk_pertime[1,x,y])
+    end
     # Convert Python lists of tuples to Julia Vector of tuples if needed
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
@@ -769,8 +781,11 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
     GridpointsDrones = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDrones_set))
     GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
+    GridpointsDronesDetecting_set = setdiff(GridpointsDronesDetecting_set, GroundStations)
+    #TODO change in regularized
     GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set))
-    
+    GroundStationsFeasible = intersect(GridpointsDrones_set,GroundStationSet)
+    GroundStationsFeasible_vector = convert(Vector{Tuple{Int,Int}}, collect(GroundStationsFeasible))
     # println("GridpointsDrones[1:5]: ", GridpointsDrones[1:min(5, length(GridpointsDrones))])
 
     # precomputing the closest distance to a charging station for each gridpoint
@@ -847,16 +862,26 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
                 b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
 
     # Create objective variables with integer indices
-    theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
-    @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
-    @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
-    @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
+    theta = @variable(model, [t=1:T, k=1:length(GridpointsDronesDetecting)], Bin)    
+    # @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting), s=1:n_drones], theta[t,k] >= a[k,t,s])
+    # @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
 
-    phi = @variable(model, [i = 1:length(GridpointsDrones), t=1:T])
-    @constraint(model, [i in 1:length(GridpointsDrones)], sum(phi[i,t] for t in 1:T) <= 1)
-    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] <= theta[t,i])
-    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] + sum(theta[tau,i] for tau = 1:(t-1)) <= 1)
+    #1111 constrs
+    @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting), s=1:n_drones], theta[t,k] >= a[k,t,s])
+    @constraint(model, [k=1:length(GridpointsDronesDetecting)], theta[1,k] <= sum(a[k,1,s] for s=1:n_drones))
+    @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones) + theta[t-1,k])
+    @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) # 1111111 constraint
+    #11111
+    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
 
+# # PHI
+# #####
+#     phi = @variable(model, [i = 1:length(GridpointsDronesDetecting), t=1:T], Bin)
+#     @constraint(model, [i in 1:length(GridpointsDronesDetecting)], sum(phi[i,t] for t in 1:T) <= 1)
+#     @constraint(model, [i in 1:length(GridpointsDronesDetecting), t in 1:T], phi[i,t] <= theta[t,i])
+#     @constraint(model, [i in 1:length(GridpointsDronesDetecting), t in 1:T], phi[i,t] + sum(theta[tau,i] for tau = 1:(t-1)) <= 1)
+# #####
+# #PHI
 
     # tau = 1
     # for delta = 1:tau
@@ -886,25 +911,25 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
    #MAKES IT VERY SLOW
     # tau = 2
     # @constraint(model, [k in 1:length(GridpointsDrones), t in 1:T-tau, delta in 1:tau], theta[t+delta,k] <= 1 - sum(a[k,t,s] for s in 1:n_drones))
-    
-    #Risk objective with integer indices
-    risk_idx = zeros(T, length(GridpointsDrones))
-    for t in 1:T
-        for (k, point) in enumerate(GridpointsDrones)
-            # if k in charging_idx
-            #     risk_idx[t, k] = 0.0  # no reward for drone coverage
-            # else
-            risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
-            # end
-        end
-    end
-
+#  #####   
+#     #Risk objective with integer indices
+#     risk_idx = zeros(T, length(GridpointsDrones))
+#     for t in 1:T
+#         for (k, point) in enumerate(GridpointsDrones)
+#             # if k in charging_idx
+#             #     risk_idx[t, k] = 0.0  # no reward for drone coverage
+#             # else
+#             risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+#             # end
+#         end
+#     end
+# #####
     # #capacity constraint on charging stations
     # @constraint(model, [i in 1:length(ChargingStations), t in 1:T], sum(c[i,t,s] for s in 1:n_drones) <= 2)
     
-
-    @objective(model, Max, sum(risk_idx[t,k]*phi[k,t] for k=1:length(GridpointsDrones), t=1:T))
-    
+#####  
+    # @objective(model, Max, sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*phi[k,t] for k=1:length(GridpointsDronesDetecting), t=1:T))
+######
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
     next_move_constraints = ConstraintRef[]
@@ -917,6 +942,8 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
 end
 
 function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation_step)
+    # println("Solving index init routing")
+    # println("Reevaluation step: ", reevaluation_step)
     model = routing_model.model
     a = routing_model.a
     c = routing_model.c
@@ -973,8 +1000,21 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     t2 = time_ns() / 1e9
     optimize!(model)
     t3 = time_ns() / 1e9
+    # check if the model has a solution
+    if termination_status(model) != MOI.OPTIMAL
+        println("No solution found")
+        println("Termination status: ", termination_status(model))
+        # print the input parameters
+        println("Input parameters:")
+        println("Charging Stations: ", ChargingStations)
+        println("T: ", T)
+        println("n_drones: ", n_drones)
+        println("max_battery_time: ", max_battery_time)
+        
+        return
+    end
     # println("Creating init constraints took ", t2 - t1, " seconds")
-    println("Optimizing model took ", t3 - t2, " seconds")
+    # println("Optimizing model took ", t3 - t2, " seconds")
 
     for s in 1:n_drones
         for i in 1:length(ChargingStations)
@@ -999,23 +1039,32 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         for s in 1:n_drones
             # Check fly actions
             for i in 1:length(GridpointsDrones)
-                if value(a[i,t,s]) >= 0.9 1
+                if value(a[i,t,s]) >= 0.9
                     movement_plan[t][s] = ("fly", GridpointsDrones[i])
                 end
             end
             # Check charge actions
             for i in 1:length(ChargingStations)
-                if value(c[i,t,s]) >= 0.9 1
+                if value(c[i,t,s]) >= 0.9
                     movement_plan[t][s] = ("charge", ChargingStations[i])
                 end
             end
         end
     end
     # println("movement_plan: ", movement_plan)
+    #println("movement_plan: ", movement_plan[1:reevaluation_step])
+    #print objective value
+    println("Objective value: ", objective_value(model))
+    # because: (print the objective value)
     return movement_plan[1:reevaluation_step]
 end
 
 function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevaluation_step, drone_locations, drone_states, battery_level)
+    # println("Solving index next move routing")
+    # println("Reevaluation step: ", reevaluation_step)
+    # println("Drone locations: ", drone_locations)
+    # println("Drone states: ", drone_states)
+    # println("Battery level: ", battery_level)
     model = routing_model.model
     a = routing_model.a
     c = routing_model.c
@@ -1068,7 +1117,11 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
     
     # Set starting battery levels
     for s in 1:n_drones
-        push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == Int(battery_level[s][2])))
+        if drone_states[s] != "charge"
+            push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == Int(battery_level[s]))) # or full if you are currently charging
+        else
+            push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == routing_model.max_battery_time))
+        end
     end
     
     # Optimize
@@ -1076,7 +1129,7 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
     optimize!(model)
     t3 = time_ns() / 1e9
     # println("Creating next_move constraints took ", t2 - t1, " seconds")
-    println("Optimizing model took ", t3 - t2, " seconds")
+    #println("Optimizing model took ", t3 - t2, " seconds")
     
     # Extract results
     # println("Solver Status: ", termination_status(model))
@@ -1103,6 +1156,9 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
         end
     end
     # println("movement_plan: ", movement_plan)
+    # print the battery variable
+    #println("Battery variable: ", value.(b))
+    #println("movement_plan: ", movement_plan[1:reevaluation_step])
     return movement_plan[1:reevaluation_step]
 end
 
@@ -1276,10 +1332,18 @@ struct RegularizedIndexRoutingModel
 end
 
 function create_regularized_index_routing_model(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time, regularization_param)
+    println("Creating regularized index routing model")
     t1 = time_ns() / 1e9
     risk_pertime = load_burn_map(risk_pertime_file)
-    _, N, M = size(risk_pertime)
+    H, N, M = size(risk_pertime)
     T = optimization_horizon
+    println("N: ", N)
+    println("M: ", M)
+    println("T: ", T)
+    if H == 1 # we duplicate the risk per time for 100 time steps
+        risk_pertime = repeat(risk_pertime, 100, 1, 1)
+        H = 100
+    end
     
     # Convert Python lists of tuples to Julia Vector of tuples if needed
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
@@ -1294,6 +1358,7 @@ function create_regularized_index_routing_model(risk_pertime_file, n_drones, Cha
     GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
     GridpointsDrones = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDrones_set))
     GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
+    GridpointsDronesDetecting_set = setdiff(GridpointsDronesDetecting_set, GroundStations)
     GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set))
     
     # println("GridpointsDrones[1:5]: ", GridpointsDrones[1:min(5, length(GridpointsDrones))])
@@ -1462,30 +1527,38 @@ function create_regularized_index_routing_model(risk_pertime_file, n_drones, Cha
                 b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
 
     # Create objective variables with integer indices
-    theta = @variable(model, [t=1:T, k=1:length(GridpointsDrones)])
-    @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
-    @constraint(model, [t=1:T, k=1:length(GridpointsDrones)], 0 <= theta[t,k] <= 1)
-    @constraint(model, [t=1:T, k=1:length(ChargingStations)], theta[t,grid_to_idx[ChargingStations[k]]]==0)
+    # Create objective variables with integer indices
+    theta = @variable(model, [t=1:T, k=1:length(GridpointsDronesDetecting)], Bin)    
+    # @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting), s=1:n_drones], theta[t,k] >= a[k,t,s])
+    # @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones))
 
-    phi = @variable(model, [i = 1:length(GridpointsDrones), t=1:T])
-    @constraint(model, [i in 1:length(GridpointsDrones)], sum(phi[i,t] for t in 1:T) <= 1)
-    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] <= theta[t,i])
-    @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] + sum(theta[tau,i] for tau = 1:(t-1)) <= 1)
+    #1111 constrs
+    @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting), s=1:n_drones], theta[t,k] >= a[k,t,s])
+    @constraint(model, [k=1:length(GridpointsDronesDetecting)], theta[1,k] <= sum(a[k,1,s] for s=1:n_drones))
+    @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones) + theta[t-1,k])
+    @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) # 1111111 constraint
+    #11111
+    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting)) + regularization_param*total_linf_dist ) # plain max coverage
+    
+    # phi = @variable(model, [i = 1:length(GridpointsDrones), t=1:T])
+    # @constraint(model, [i in 1:length(GridpointsDrones)], sum(phi[i,t] for t in 1:T) <= 1)
+    # @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] <= theta[t,i])
+    # @constraint(model, [i in 1:length(GridpointsDrones), t in 1:T], phi[i,t] + sum(theta[tau,i] for tau = 1:(t-1)) <= 1)
 
-    #Risk objective with integer indices
-    risk_idx = zeros(T, length(GridpointsDrones))
-    for t in 1:T
-        for (k, point) in enumerate(GridpointsDrones)
-            # if k in charging_idx
-            #     risk_idx[t, k] = 0.0  # no reward for drone coverage
-            # else
-            risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
-            # end
-        end
-    end
+    # #Risk objective with integer indices
+    # risk_idx = zeros(T, length(GridpointsDrones))
+    # for t in 1:T
+    #     for (k, point) in enumerate(GridpointsDrones)
+    #         # if k in charging_idx
+    #         #     risk_idx[t, k] = 0.0  # no reward for drone coverage
+    #         # else
+    #         risk_idx[t, k] = risk_pertime[t, point[1], point[2]]
+    #         # end
+    #     end
+    # end
 
 
-    @objective(model, Max, sum(risk_idx[t,k]*phi[k,t] for t=1:T, k=1:length(GridpointsDrones)) + regularization_param*total_linf_dist)
+    # @objective(model, Max, sum(risk_idx[t,k]*phi[k,t] for t=1:T, k=1:length(GridpointsDrones)) + regularization_param*total_linf_dist)
     
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
@@ -1558,7 +1631,7 @@ function solve_regularized_index_init_routing(routing_model::RegularizedIndexRou
     optimize!(model)
     t3 = time_ns() / 1e9
     # println("Creating init constraints took ", t2 - t1, " seconds")
-    println("Optimizing model took ", t3 - t2, " seconds")
+    # println("Optimizing model took ", t3 - t2, " seconds")
 
     for s in 1:n_drones
         for i in 1:length(ChargingStations)
@@ -1652,7 +1725,7 @@ function solve_regularized_index_next_move_routing(routing_model::RegularizedInd
     
     # Set starting battery levels
     for s in 1:n_drones
-        push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == Int(battery_level[s][2])))
+        push!(routing_model.next_move_constraints, @constraint(model, b[1,s] == Int(battery_level[s])))
     end
     
     # Optimize
@@ -1660,7 +1733,7 @@ function solve_regularized_index_next_move_routing(routing_model::RegularizedInd
     optimize!(model)
     t3 = time_ns() / 1e9
     # println("Creating next_move constraints took ", t2 - t1, " seconds")
-    println("Optimizing model took ", t3 - t2, " seconds")
+    # println("Optimizing model took ", t3 - t2, " seconds")
     
     # Extract results
     # println("Solver Status: ", termination_status(model))

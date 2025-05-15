@@ -129,6 +129,11 @@ def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_s
             seasonal_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_seasonal.txt"))
             historical_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_historical.txt"))
             scenarios_folder = os.path.join(layout_path, "Satellite_Images_Mask")
+            if not os.path.exists(scenarios_folder):
+                scenarios_folder = os.path.join(layout_path, "Satellite_Image_Mask")
+                if not os.path.exists(scenarios_folder):
+                    print(f"No scenarios folder found in {layout_path}, skipping...")
+                    continue
 
             for scenario_folder_name in os.listdir(scenarios_folder):
                 if scenario_folder_name not in selected_ids:
