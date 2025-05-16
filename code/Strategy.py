@@ -262,7 +262,7 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
         print("calling julia optimization model")
         x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_3(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         print("optimization finished")
-        print("Charging Station Locations from Julia Optimization Model: ", self.charging_station_locations)
+        
 
 
         

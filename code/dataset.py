@@ -485,7 +485,7 @@ def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout =
     compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
 
 
-def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results.csv"):
+def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results.csv", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic"):
     """
     Combines all per-layout benchmark CSVs from Satellite_Images_Mask folders into one file.
     Preserves layout/scenario formatting (e.g., 0001, 00002).
@@ -507,7 +507,9 @@ def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "c
         if not os.path.isdir(layout_path):
             continue
 
-        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout}_benchmark_results.csv")
+        layout_shortened_name = layout.split("_")[0]
+
+        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
         if os.path.exists(csv_path):
             print(f"✔ Found: {csv_path}")
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
@@ -520,7 +522,7 @@ def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "c
         return None
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    combined_path = os.path.join(dataset_folder, output_filename)
+    combined_path = os.path.join(dataset_folder, output_filename+suffix)
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 
@@ -563,3 +565,9 @@ def clean_layout_folders(root_folder):
                     os.remove(item_path)
 
         print(f"Cleaned: {layout_name}")
+
+if __name__ == "__main__":
+    combine_all_benchmark_results("WideDataset/", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic")
+
+    #0058_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic
+    #WideDataset/0058_03866/Satellite_Images_Mask/0058_03866_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic.csv

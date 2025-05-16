@@ -186,6 +186,10 @@ function NEW_SENSOR_STRATEGY_3(risk_pertime_file, N_grounds, N_charging)
 
     risk_pertime = load_burn_map(risk_pertime_file)
     T, N, M = size(risk_pertime)
+    println("risk_pertime_file=", risk_pertime_file)
+    println("T=", T)
+    println("N=", N)
+    println("M=", M)
 
     I = [(x, y) for x in 1:N for y in 1:M]
 
@@ -196,8 +200,8 @@ function NEW_SENSOR_STRATEGY_3(risk_pertime_file, N_grounds, N_charging)
     end
 
     # prerfilter: keep only cells with risk > 90% of other cells
-    first_quartile_risk = quantile(vec(avg_risk), 0.9)
-    I_prime = [(i, j) for i in 1:N, j in 1:M if avg_risk[i,j] > first_quartile_risk]
+    #first_quartile_risk = quantile(vec(avg_risk), 0.0)
+    I_prime = [(i, j) for i in 1:N, j in 1:M if avg_risk[i,j] > 0.0] # >first_quartile_risk
     I_second = I_prime
 
     # prrint how many cells are discarded
@@ -234,6 +238,9 @@ function NEW_SENSOR_STRATEGY_3(risk_pertime_file, N_grounds, N_charging)
 
     selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(x[i]) > 0.5]
     selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(y[i]) > 0.5]
+
+    println("selected_x_indices=", selected_x_indices)
+    println("selected_y_indices=", selected_y_indices)
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds total")
     

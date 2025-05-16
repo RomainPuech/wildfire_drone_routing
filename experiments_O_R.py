@@ -44,7 +44,7 @@ custom_initialization_parameters = {
      } #"regularization_param": 0.0001}
 
 layout_folder = "WideDataset/"
-sensor_strategy = wrap_log_sensor_strategy(OptimizedSensorPlacementStrategy)
+sensor_strategy = wrap_log_sensor_strategy(SensorPlacementOptimization)
 drone_strategy =  RandomDroneRoutingStrategy#DroneRoutingRegularizedMaxCoverageResetStatic#wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
 
 def my_automatic_layout_parameters(scenario:np.ndarray,b,c):

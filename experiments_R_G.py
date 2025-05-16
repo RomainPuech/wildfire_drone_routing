@@ -40,12 +40,12 @@ custom_initialization_parameters = {
      "load_from_logfile": False, 
      "reevaluation_step": 2, 
      "optimization_horizon":2,
-     "regularization_param": 1e5
+     "regularization_param": 0
      } #"regularization_param": 0.0001}
 
 layout_folder = "WideDataset/"
 sensor_strategy = wrap_log_sensor_strategy(RandomSensorPlacementStrategy)
-drone_strategy =  wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingMaxCoverageResetStaticGreedy))#DroneRoutingRegularizedMaxCoverageResetStatic#wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
+drone_strategy =  wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy))#DroneRoutingRegularizedMaxCoverageResetStatic#wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
 
 def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
     simulation_parameters["N"] = scenario.shape[1]
