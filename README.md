@@ -89,7 +89,7 @@ If you use this library in your research, please cite it using the following Bib
 
 ```bibtex
 @misc{wildfire_drone_routing,
-  author = {Romain Puech},
+  author = {Romain Puech, Joseph Ye, Danique De Moor, Ana Trisovic},
   title = {Wildfire Drone Routing},
   year = {2025},
   howpublished = {\url{https://github.com/RomainPuech/wildfire_drone_routing}},
