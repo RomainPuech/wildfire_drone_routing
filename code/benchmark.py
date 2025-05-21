@@ -233,8 +233,8 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
 
     operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
     coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)
-    print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
-    print(f"[DEBUG] Coverage radius cells: {coverage_width_cells}")
+    #print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
+    #print(f"[DEBUG] Coverage radius cells: {coverage_width_cells}")
 
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
@@ -582,7 +582,7 @@ def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_s
     
     def process_scenario(infile):
         start = GroundPlacementOptimization(10,10,100,"burn_maps/burn_map_1")
-        print(start.get_locations())
+        #print(start.get_locations())
         return 0,'undetected'
         # scenario, start_time = load_scenario(infile)
         # delta_t, device, _ = run_benchmark_scenario(scenario, start_time, ground_placement_strategy, 
@@ -630,7 +630,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
-    print("starting time: ", starting_time)
+    #print("starting time: ", starting_time)
     # o. Get layout parameters
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
@@ -688,8 +688,8 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     #print(f"ground_sensor_locations in opt scale: {ground_sensor_locations_opt_scale}")
     #print(f"charging_stations_locations in opt scale: {charging_stations_locations_opt_scale}")
 
-    print(f"{ground_sensor_locations_opt_scale=}")
-    print(f"{charging_stations_locations_opt_scale=}")
+    #print(f"{ground_sensor_locations_opt_scale=}")
+    #print(f"{charging_stations_locations_opt_scale=}")
 
     ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
     charging_stations_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in charging_stations_locations_opt_scale]
