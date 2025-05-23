@@ -257,11 +257,8 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
      
         # Call the Julia optimization function
         print("calling julia optimization model")
-        x_vars, y_vars = jl.NEW_SENSOR_STRATEGY_3(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        x_vars, y_vars = jl.NEW_SENSOR_STRATEGY(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
         print("optimization finished")
-        
-
-
         
         self.ground_sensor_locations = list(x_vars)
         self.charging_station_locations = list(y_vars)
@@ -277,6 +274,7 @@ class FixedPlacementStrategy(SensorPlacementStrategy):
         self.charging_station_locations = [(35,14), (30,42)]
         self.ground_sensor_locations = []
 
+<<<<<<< HEAD
 class DroneRoutingOptimizationSlow(DroneRoutingStrategy):
     strategy_name = "DroneRoutingOptimizationSlow"
     # remember to use julia indexing!
@@ -524,6 +522,8 @@ class DroneRoutingOptimizationModelReuse(DroneRoutingStrategy):
         self.call_counter += 1
         return self.current_solution[self.call_counter]
 
+=======
+>>>>>>> a743fbdf72ff5fb7ce93a70f1460d095221c8ef8
 class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
     strategy_name = "DroneRoutingOptimizationModelReuseIndex"
 
@@ -574,7 +574,6 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         # Convert to Julia indexing (Python 0-based → Julia 1-based)
         self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
         self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
-
         
     def get_initial_drone_locations(self):
         """
@@ -621,10 +620,7 @@ class DroneRoutingOptimizationModelReuseIndex(DroneRoutingStrategy):
         print("Initial optimization finished")
         print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
 
-
         return initial_positions
-
-        
         
     def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
         """
@@ -793,9 +789,6 @@ class LoggedOptimizationSensorPlacementStrategy(SensorPlacementStrategy):
                 json.dump([list(x_vars), list(y_vars)], f)
             self.ground_sensor_locations = list(x_vars)
             self.charging_station_locations = list(y_vars)
-
-
-
 
 class LoggedSensorPlacementStrategy(SensorPlacementStrategy):
         def __init__(self, automatic_initialization_parameters: dict, custom_initialization_parameters: dict):
@@ -1880,6 +1873,7 @@ class DroneRoutingUniformMaxCoverageResetStatic(DroneRoutingStrategy):
         return self.current_solution[idx]
 
 
+<<<<<<< HEAD
 
 
 ######
@@ -1891,3 +1885,5 @@ class DroneRoutingMaxCoverageResetStaticGreedy(DroneRoutingMaxCoverageResetStati
     strategy_name = "DroneRoutingMaxCoverageResetStaticGreedy"
 
 
+=======
+>>>>>>> a743fbdf72ff5fb7ce93a70f1460d095221c8ef8

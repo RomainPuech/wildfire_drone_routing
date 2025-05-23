@@ -6,3 +6,4 @@ juliacall
 shapely
 pandas
 scipy
+geopandas

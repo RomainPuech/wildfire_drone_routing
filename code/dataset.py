@@ -497,20 +497,7 @@ def clean_layout_folders(root_folder):
 
         print(f"Cleaned: {layout_name}")
 
-
-def export_logs(root_folder):
-    for layout_name in os.listdir(root_folder):
-        layout_path = os.path.join(root_folder, layout_name)
-        if not os.path.isdir(layout_path):
-            continue  # Skip non-directories
-
-        # identify the logs
-        if os.path.exists(layout_path + "/logs/"):
-            # find the SensorPlacementOptimization log
-            for file in os.listdir(layout_path + "/logs/"):
-                if "SensorPlacementOptimization" in file:
-                    print(file)
-
-
 if __name__ == "__main__":
-    combine_all_benchmark_results("WideDataset/", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic")
+    combine_all_benchmark_results("WideDataset/", suffix = "SensorPlacementOptimization_DroneRoutingMaxCoverageResetStaticGreedy")
+    #0058_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic
+    #WideDataset/0058_03866/Satellite_Images_Mask/0058_03866_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic.csv

@@ -207,6 +207,11 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
 
     operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
     coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)
+<<<<<<< HEAD
+=======
+    #print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
+    #print(f"[DEBUG] Coverage radius cells: {coverage_width_cells}")
+>>>>>>> a743fbdf72ff5fb7ce93a70f1460d095221c8ef8
 
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
@@ -475,9 +480,20 @@ def listdir_folder_limited(input_dir, max_n_scenarii=None):
 
 #     M = len(os.listdir(input_dir)) if max_n_scenarii is None else max_n_scenarii
     
+<<<<<<< HEAD
 #     def process_scenario(infile):
 #         start = GroundPlacementOptimization(10,10,100,"burn_maps/burn_map_1")
 #         return 0,'undetected'
+=======
+    def process_scenario(infile):
+        start = GroundPlacementOptimization(10,10,100,"burn_maps/burn_map_1")
+        #print(start.get_locations())
+        return 0,'undetected'
+        # scenario, start_time = load_scenario(infile)
+        # delta_t, device, _ = run_benchmark_scenario(scenario, start_time, ground_placement_strategy, 
+        #                                           drone_routing_strategy, ground_parameters, routing_parameters)
+        # return delta_t, device
+>>>>>>> a743fbdf72ff5fb7ce93a70f1460d095221c8ef8
 
 #     # Initialize counters
 #     delta_ts = 0
@@ -520,7 +536,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
+<<<<<<< HEAD
     # 0. Get layout parameters
+=======
+    #print("starting time: ", starting_time)
+    # o. Get layout parameters
+>>>>>>> a743fbdf72ff5fb7ce93a70f1460d095221c8ef8
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
     else:
@@ -559,6 +580,16 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 2. Get ground sensor locations and convert them back to the original size
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
+<<<<<<< HEAD
+=======
+    #print("rescaled_automatic_initialization_parameters: ", rescaled_automatic_initialization_parameters)
+    #print("custom_initialization_parameters: ", rescaled_custom_initialization_parameters)
+    #print(f"ground_sensor_locations in opt scale: {ground_sensor_locations_opt_scale}")
+    #print(f"charging_stations_locations in opt scale: {charging_stations_locations_opt_scale}")
+
+    #print(f"{ground_sensor_locations_opt_scale=}")
+    #print(f"{charging_stations_locations_opt_scale=}")
+>>>>>>> a743fbdf72ff5fb7ce93a70f1460d095221c8ef8
 
     ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
     charging_stations_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in charging_stations_locations_opt_scale]
