@@ -60,8 +60,25 @@ class SensorPlacementStrategy():
 class DroneRoutingStrategy():
     """
     Base class for drone routing strategies.
+    
+    This class defines the interface that all drone routing strategies must implement.
+    A drone routing strategy determines how drones move around the grid to detect fires
+    while managing their battery levels and charging requirements.
+    
+    Args:
+        automatic_initialization_parameters (dict): Parameters automatically provided by the system:
+            - N (int): Grid height
+            - M (int): Grid width
+            - max_battery_distance (int): Maximum distance a drone can travel before recharging
+            - max_battery_time (int): Maximum time a drone can fly before recharging
+            - n_drones (int): Number of drones to control
+            - n_ground_stations (int): Number of ground sensor stations
+            - n_charging_stations (int): Number of charging stations
+            - ground_sensor_locations (list): List of (x,y) tuples for ground sensors
+            - charging_stations_locations (list): List of (x,y) tuples for charging stations
+        custom_initialization_parameters (dict): Strategy-specific parameters
     """
-    def __init__(self,automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
         """
         automatic_initialization_parameters: dict with keys:
             "N": Grid height
@@ -85,7 +102,13 @@ class DroneRoutingStrategy():
 
     def get_initial_drone_locations(self):
         """
-        Returns the initial locations of the drones
+        Returns the initial locations and states for all drones.
+        
+        Returns:
+            list: List of tuples (state, (x,y)) where:
+                - state is either 'charge' or 'fly'
+                - (x,y) are the initial coordinates
+                All drones must start at charging stations (state='charge')
         """
         raise NotImplementedError("get_initial_drone_locations is an abstract method and should be implemented by subclasses.")
         
@@ -104,9 +127,10 @@ class DroneRoutingStrategy():
             "t": int
         custom_step_parameters: dict
         Returns:
-            actions: list of tuples (action_type, action_parameters)
+            list: List of tuples (action_type, action_parameters) where:
+                - action_type is one of: 'move', 'fly', 'charge'
+                - action_parameters are the coordinates or movement deltas
         """
-        # suggest actions
         raise NotImplementedError("next_actions is an abstract method and should be implemented by subclasses.")
 
 

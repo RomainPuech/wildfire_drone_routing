@@ -185,7 +185,36 @@ def operational_space_to_dataspace_coordinates(coordinate, coverage, datacell_si
 
 def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy", starting_time:int=12):
     """
-    Run a drone routing strategy to create a logfile.
+    Runs a drone routing strategy on a wildfire scenario and collects performance metrics.
+    
+    This function:
+    1. Initializes the scenario and strategies
+    2. Places sensors and charging stations
+    3. Routes drones according to the strategy
+    4. Collects metrics about fire detection and drone performance
+    
+    Args:
+        drone_routing_strategy (DroneRoutingStrategy): Strategy for drone movement
+        sensor_placement_strategy (SensorPlacementStrategy): Strategy for sensor placement
+        T (int): Number of time steps to simulate
+        canonical_scenario (np.ndarray): The wildfire scenario to simulate
+        automatic_initialization_parameters_function (callable): Function to get system parameters
+        custom_initialization_parameters_function (callable): Function to get strategy parameters
+        custom_step_parameters_function (callable): Function to get step-specific parameters
+        input_dir (str, optional): Directory containing scenario data
+        simulation_parameters (dict, optional): Additional simulation parameters
+        file_format (str, optional): Format of scenario files ('npy' or 'jpg')
+        starting_time (int, optional): Time step to start simulation
+        
+    Returns:
+        float: Total execution time in seconds
+        
+    Notes:
+        The function handles:
+        - Rescaling of coordinates and battery levels
+        - Drone movement and charging
+        - Fire detection by drones and sensors
+        - Collection of performance metrics
     """
     print(f"[DEBUG] Running drone routing strategy")
     
