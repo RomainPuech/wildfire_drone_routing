@@ -6,11 +6,6 @@
 
 A comprehensive benchmarking library for evaluating sensor placement and drone routing strategies in wildfire detection scenarios. This library provides tools for testing, visualizing, and comparing different strategies using the "sim2real" dataset.
 
-## 🎥 Video Tutorial
-<p align="center">
-https://www.loom.com/share/fe6ef53b6c6140fd8c25043bbb0feb0c?sid=73db9697-35a1-4592-b457-27540cf64bd1 
-</p>
-
 ## 🚀 Features
 
 - **Strategy Development**: Implement and test custom sensor placement and drone routing strategies
