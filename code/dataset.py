@@ -83,71 +83,7 @@ def delete_logs_folder(folder_path):
 
 
 
-####### Functions to load data #######
-
-# DEPRECATED
-# def load_ignition_map(filename):
-#     """
-#     Load an ignition map from a text file.
-    
-#     Args:
-#         filename (str): Name of the file to load (with or without .txt extension)
-    
-#     Returns:
-#         numpy.ndarray: NxN array of probabilities loaded from the file
-#     """
-#     # Add .txt extension if not present
-#     if not filename.endswith('.txt'):
-#         filename += '.txt'
-    
-#     try:
-#         # Load the map using numpy's loadtxt function with comma delimiter
-#         ignition_map = np.loadtxt(filename, delimiter=',')
-        
-#         # Verify the map is square
-#         if ignition_map.shape[0] != ignition_map.shape[1]:
-#             raise ValueError("Loaded ignition map is not square")
-            
-#         # print(f"Successfully loaded ignition map from {filename}")
-#         return ignition_map
-        
-#     except FileNotFoundError:
-#         raise FileNotFoundError(f"Could not find file: {filename}")
-#     except Exception as e:
-#         raise Exception(f"Error loading ignition map: {str(e)}")
-#     
-# DEPRECATED
-# def load_scenario(filename):
-#     """
-#     Load a scenario and its starting time from a text file.
-    
-#     Args:
-#         filename (str): Name of the file to load (with or without .txt extension)
-    
-#     Returns:
-#         tuple: (scenario, starting_time) where scenario is a TxNxN array and starting_time is an integer
-#     """
-#     if not filename.endswith('.txt'):
-#         filename += '.txt'
-    
-#     try:
-#         # Read the first two lines separately for metadata
-#         with open(filename, 'r') as f:
-#             starting_time = int(f.readline().strip())
-#             T, N, M = map(int, f.readline().strip().split(','))
-        
-#         # Use numpy's faster mmap_mode to load the data
-#         # Skip the first two lines (header) and reshape directly
-#         data = np.loadtxt(filename, delimiter=',', skiprows=2, dtype=np.float32)
-#         data = data.reshape(T, N, M)
-        
-#         return data, starting_time
-    
-#     except FileNotFoundError:
-#         raise FileNotFoundError(f"Could not find file: {filename}")
-#     except Exception as e:
-#         raise Exception(f"Error loading scenario: {str(e)}")
-    
+####### Functions to load data #######   
 
 def load_scenario_jpg(folder_path, binary=True, first_frame_only=False):
     """
@@ -247,23 +183,6 @@ def load_scenario_npy(filename):
 
     
 ####### Functions to save data #######
-
-# DEPRECATED
-# def save_ignition_map(ignition_map, filename):
-#     """
-#     Save the ignition map to a text file.
-    
-#     Args:
-#         ignition_map (numpy.ndarray): NxN array of probabilities
-#         filename (str): Name of the file to save (with .txt extension)
-#     """
-#     # Add .txt extension if not present
-#     if not filename.endswith('.txt'):
-#         filename += '.txt'
-    
-#     # Save with high precision (8 decimal places) and scientific notation
-#     np.savetxt(filename, ignition_map, fmt='%.8e', delimiter=',')
-    
 
 def save_scenario_npy(scenario, out_filename="scenario"):
     """
@@ -485,7 +404,7 @@ def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout =
     compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
 
 
-def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results.csv", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic"):
+def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic"):
     """
     Combines all per-layout benchmark CSVs from Satellite_Images_Mask folders into one file.
     Preserves layout/scenario formatting (e.g., 0001, 00002).
@@ -515,14 +434,26 @@ def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "c
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
             all_dfs.append(df)
         else:
-            print(f"⚠ No benchmark CSV found at: {csv_path}")
+            csv_path = os.path.join(layout_path, "Satellite_Image_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
+            if os.path.exists(csv_path):
+                print(f"✔ Found: {csv_path}")
+                df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
+                all_dfs.append(df)
+            else:
+                csv_path = os.path.join(layout_path, "Satellite_lmage_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
+                if os.path.exists(csv_path):
+                    print(f"✔ Found: {csv_path}")
+                    df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
+                    all_dfs.append(df)
+                else:
+                    print(f"⚠ No benchmark CSV found at: {csv_path}")
 
     if not all_dfs:
         print("❌ No CSV files found. Nothing to combine.")
         return None
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    combined_path = os.path.join(dataset_folder, output_filename+suffix)
+    combined_path = os.path.join(dataset_folder, output_filename+suffix+".csv")
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 
@@ -566,8 +497,20 @@ def clean_layout_folders(root_folder):
 
         print(f"Cleaned: {layout_name}")
 
+
+def export_logs(root_folder):
+    for layout_name in os.listdir(root_folder):
+        layout_path = os.path.join(root_folder, layout_name)
+        if not os.path.isdir(layout_path):
+            continue  # Skip non-directories
+
+        # identify the logs
+        if os.path.exists(layout_path + "/logs/"):
+            # find the SensorPlacementOptimization log
+            for file in os.listdir(layout_path + "/logs/"):
+                if "SensorPlacementOptimization" in file:
+                    print(file)
+
+
 if __name__ == "__main__":
     combine_all_benchmark_results("WideDataset/", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic")
-
-    #0058_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic
-    #WideDataset/0058_03866/Satellite_Images_Mask/0058_03866_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic.csv

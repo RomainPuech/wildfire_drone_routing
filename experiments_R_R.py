@@ -61,7 +61,7 @@ def custom_initialization_parameters_function(input_dir:str):
 
 dataset_folder_name = "WideDataset/"
 time_start = time.time()
-benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=None, max_n_layouts=None, simulation_parameters = simulation_parameters, file_format="jpg", config_file="config_s2r.json")
+benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=None, max_n_layouts=10, simulation_parameters = simulation_parameters, file_format="jpg", config_file="config_s2r.json", skip_folder_names=["WideDataset/0069_03539"])
 print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
 
 # burn_map = load_scenario_npy("WideDataset/0004_01191/static_risk.npy")

@@ -12,7 +12,7 @@ from dataset import load_scenario
 
 def display_grid(grid, smoke_grid, drones, display):
     """
-    Print the grid displaying fire, smoke, and/or drones.
+    Print the grid displaying fire, and/or drones.
 
     Parameters:
         grid: NxN numpy array for wildfire states (0: not burning, 1: burning, 2: burnt).
@@ -34,12 +34,6 @@ def display_grid(grid, smoke_grid, drones, display):
                 elif grid[i, j] == 0 and display_char[i][j] == " ":
                     display_char[i][j] = "."  # Not burning
 
-    # Smoke display (if enabled)
-    if 'smoke' in display:
-        for i in range(N):
-            for j in range(N):
-                if smoke_grid[i, j] > 0:
-                    display_char[i][j] = str(max(round(smoke_grid[i, j]),9))  # Simplified smoke concentration
 
     # Drones display
     if 'drones' in display:
@@ -79,19 +73,6 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
     # Base grid: Smoke color or white background
     base_grid = np.ones((M, N, 3))  # Initialize as white background (R=1, G=1, B=1)
     
-    if 'smoke' in display:
-        # Cap smoke values at 10
-        capped_smoke_grid = np.clip(smoke_grid, 0, 10)
-
-        # Map smoke values to grayscale (custom colormap)
-        custom_cmap = mcolors.LinearSegmentedColormap.from_list(
-            "custom_greyscale", [(0, "white"), (1, "black")], N=256
-        )
-        norm = mcolors.Normalize(vmin=0, vmax=10)
-        
-        # Convert smoke values to RGB using the custom colormap
-        smoke_rgb = custom_cmap(norm(capped_smoke_grid))[:, :, :3]
-        base_grid = smoke_rgb  # Default to smoke grid colors
     
     # Fire Overlay supersedes smoke if both are displayed
     if 'fire' in display:
@@ -138,14 +119,6 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
                         transformed_y = y_cov
                         ax.scatter(x_cov, M-1-transformed_y, c="gray", alpha=0.3, s=5, marker="s")
 
-    # Add smoke colorbar only if smoke is displayed
-    if 'smoke' in display:
-        # Add color bar for smoke concentration
-        sm = plt.cm.ScalarMappable(cmap=custom_cmap, norm=norm)
-        cbar = plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label("Smoke Concentration")
-        cbar.set_ticks([0, 2, 4, 6, 8, 10])
-        cbar.set_ticklabels(["0", "2", "4", "6", "8", "10+"])
 
     # Finalize and save the plot
     ax.axis("off")
@@ -347,47 +320,3 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
         frames_per_image=3
     )
     
-    # print(f"Video saved as {base_filename}.mp4")
-if __name__ == "__main__":
-    # Example usage
-    from benchmark import run_benchmark_scenario
-    from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, SensorPlacementOptimization, RandomSensorPlacementStrategy, LoggedOptimizationSensorPlacementStrategy,DroneRoutingOptimizationSlow, DroneRoutingOptimizationModelReuse, DroneRoutingOptimizationModelReuseIndex, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingOptimizationModelReuseIndexRegularized
-    # change values here to change benchmarking parameters
-    from dataset import load_scenario_npy
-    from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
-    from new_clustering import get_wrapped_clustering_strategy
-
-    
-    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00058.npy")
-    def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
-        return {
-            "N": scenario.shape[1],
-            "M": scenario.shape[2],
-            "max_battery_distance": -1,
-            "max_battery_time": 20,
-            "n_drones": 10,
-            "n_ground_stations": 12,
-            "n_charging_stations": 10,
-            "speed_m_per_min": 10,
-            "coverage_radius_m": 10,
-            "cell_size_m": 40,
-            "transmission_range": 100,
-    }
-    results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, wrap_log_sensor_strategy(SensorPlacementOptimization), 
-                                                                            wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingOptimizationModelReuseIndex)), 
-                                                                            custom_initialization_parameters = {"burnmap_filename": "./MinimalDataset/0001/burn_map.npy", 
-                                                                                                                "load_from_logfile": False, "reevaluation_step": 6, 
-                                                                                                                "optimization_horizon":6, "regularization_param": 0.0001}, 
-                                                                                                                custom_step_parameters_function = return_no_custom_parameters, 
-                                                                                                                automatic_initialization_parameters_function=my_automatic_layout_parameters, 
-                                                                                                                return_history=True)
-    # print("POSITION HISTORY", position_history, len(position_history))
-    print("RESULTS", results)
-    print("Ground sensors", ground)
-    print("Charging stations", charging)
-    
-    create_scenario_video(scenario[:len(position_history)],
-                          drone_locations_history=position_history,starting_time=0,
-                          out_filename='test_simulation', ground_sensor_locations = ground, 
-                          charging_stations_locations = charging, 
-                          substeps_per_timestep= results["substeps_per_timestep"])

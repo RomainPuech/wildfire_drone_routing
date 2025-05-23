@@ -15,6 +15,16 @@ from displays import create_scenario_video
 import tqdm
 import math
 import pandas as pd
+
+def generate_coverage_area(coverage_radius_m, cell_size_m, x_center, y_center, N, M):
+    coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)//2
+    covered_cells = set()
+    for x_cov in range(x_center-coverage_width_cells//2, x_center+coverage_width_cells//2+1):
+        for y_cov in range(y_center-coverage_width_cells//2, y_center+coverage_width_cells//2+1):
+            if x_cov >= 0 and x_cov < N and y_cov >= 0 and y_cov < M:
+                covered_cells.add((x_cov, y_cov))
+    return covered_cells
+
 def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
     """
     Dynamically loads a strategy class from a file.
@@ -58,21 +68,7 @@ def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simula
 def return_no_custom_parameters():
     return {}
 
-# should not be used
-# DEFAULT_SIMULATION_PARAMETERS = {
-#     "call_every_n_steps": 5,
-#     "optimization_horizon": 5,
-#     "reevaluation_step": 5,
-#     "max_battery_distance": 100000,
-#     "max_battery_time": 100000,
-#     "n_drones": 1,
-#     "n_ground_stations": 0,
-#     "n_charging_stations": 0,
-#     "drone_speed_m_per_min": 1200,
-#     "coverage_radius_m": 150,
-#     "cell_size_m": 30,
-#     "transmission_range": 50000,
-# }
+# update if you want default parameters for all the layouts
 DEFAULT_SIMULATION_PARAMETERS = {
     "call_every_n_steps": -1,
     "optimization_horizon": -1,
@@ -115,22 +111,7 @@ def get_burnmap_parameters(input_dir: str):
     return {
         "burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy"
     }
-
-# def compute_entropy(locations, grid_size):
-#     N, M = grid_size
-#     count_grid = np.zeros((N, M))
-#     for x, y in locations:
-#         count_grid[x, y] += 1
-
-#     prob_grid = count_grid.flatten()
-#     prob_grid = prob_grid / np.sum(prob_grid)
-#     prob_grid = prob_grid[prob_grid > 0]
-
-#     if len(prob_grid) == 0:
-#         return 0.0
-
-#     return scipy_entropy(prob_grid)
-   
+ 
 
 def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, coverage_radius_m):
     """
@@ -148,9 +129,7 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
     Returns:
         int: Number of drone movement substeps per data timestep
     """
-    #print("data_cell_size_m", data_cell_size_m)
-    #print("drone_speed_m_per_min", drone_speed_m_per_min)
-    #print("coverage_radius_m", coverage_radius_m)
+
     coverage_width_m = 2 * coverage_radius_m
     coverage_width_cells = coverage_width_m / data_cell_size_m
     coverage_width_cells = max(1, round(coverage_width_cells))  # Ensure it's at least 1 and rounded
@@ -159,10 +138,8 @@ def compute_operational_substeps(data_cell_size_m, drone_speed_m_per_min, covera
         coverage_width_cells -= 1
     
     drone_distance_m = 60 * drone_speed_m_per_min
-    #print("drone distance", drone_distance_m)
     drone_distance_operational_cells_per_timestep = drone_distance_m // (coverage_width_cells*data_cell_size_m)
-    #assert drone_distance_operational_cells_per_timestep == round(drone_distance_m/(coverage_width_cells*data_cell_size_m)), f"drone_distance_operational_cells_per_timestep: {drone_distance_operational_cells_per_timestep} != {round(drone_distance_m/(coverage_width_cells*data_cell_size_m))}"
-    #print(f"Drone distance in operational cells per timestep: {drone_distance_operational_cells_per_timestep}")
+    
     return max(1, round(drone_distance_operational_cells_per_timestep))
 
 
@@ -195,7 +172,6 @@ def operational_space_to_dataspace_coordinates(coordinate, coverage, datacell_si
         tuple: Converted coordinates into middle of operational_cell in data space.
     """
     n_data_cells_in_coverage_area = 2 * coverage // datacell_size_m
-    #print("n_cells_in_coverage_area", n_data_cells_in_coverage_area)
     n_data_cells_in_coverage_area = max(1, round(n_data_cells_in_coverage_area))  # Ensure it's at least 1 and rounded
     
     if n_data_cells_in_coverage_area % 2 == 0:  # If even, make it odd
@@ -207,14 +183,14 @@ def operational_space_to_dataspace_coordinates(coordinate, coverage, datacell_si
     new_x , newy = x * n_data_cells_in_coverage_area + half_coverage * sign(x), y * n_data_cells_in_coverage_area + half_coverage * sign(y)
     return (new_x, newy)
 
-# def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}):
 def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy", starting_time:int=12):
     """
     Run a drone routing strategy to create a logfile.
     """
     print(f"[DEBUG] Running drone routing strategy")
-        # o. Get layout parameters
+    
     time_start = time.time()
+    # 0. get layout parameters
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir, simulation_parameters)
     else:
@@ -223,8 +199,6 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
 
-    # print(f"custom_initialization_parameters: {custom_initialization_parameters}")
-    # print(f"automatic_initialization_parameters: {automatic_initialization_parameters}")
 
     # 1. compute the rescaling factors
     cell_size_m = automatic_initialization_parameters.get("cell_size_m", 30)
@@ -233,22 +207,14 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
 
     operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
     coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)
-    print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
-    print(f"[DEBUG] Coverage radius cells: {coverage_width_cells}")
 
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
     rescaled_max_battery_time = automatic_initialization_parameters["max_battery_time"] * operational_substeps
-    # print(f"original N: {automatic_initialization_parameters['N']}")
-    # print(f"original M: {automatic_initialization_parameters['M']}")
-    # print(f"rescaled_N: {rescaled_N}")
-    # print(f"rescaled_M: {rescaled_M}")
-    # pool burnmap
     
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
-    # print(f"burnmap shape: {rescaled_burnmap.shape}")
     rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
-    # print(f"rescaled burnmap shape: {rescaled_burnmap.shape}")
+    
     #save the pooled burnmap
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
@@ -264,22 +230,11 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
 
     # 2. Get ground sensor locations and convert them back to the original size
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
-    #print("rescaled_automatic_initialization_parameters: ", rescaled_automatic_initialization_parameters)
-    #print("custom_initialization_parameters: ", rescaled_custom_initialization_parameters)
-    #print(f"ground_sensor_locations in opt scale: {ground_sensor_locations_opt_scale}")
-    #print(f"charging_stations_locations in opt scale: {charging_stations_locations_opt_scale}")
-
 
     ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
     charging_stations_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in charging_stations_locations_opt_scale]
     rows_ground_data_scale, cols_ground_data_scale = zip(*ground_sensor_locations_data_scale) if ground_sensor_locations_data_scale else ((),())
     rows_charging_data_scale, cols_charging_data_scale = zip(*charging_stations_locations_data_scale) if charging_stations_locations_data_scale else ((),())
-
-    # charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
-
-  
-    # print(f"ground_sensor_locations: {ground_sensor_locations}")
-    # print(f"charging_stations_locations: {charging_stations_locations}")
 
     # add computed positions to initialization parameters
     automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations_data_scale
@@ -290,8 +245,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     # 3. Initialize drones
 
     Routing_Strat = drone_routing_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters)
-    #print(f"rescaled_automatic_initialization_parameters: {rescaled_automatic_initialization_parameters}")
-    # Print initial drone locations
+
     initial_drone_locations_and_state_opt_scale = Routing_Strat.get_initial_drone_locations()
     drones = [Drone(x*coverage_width_cells+coverage_width_cells//2,y*coverage_width_cells+coverage_width_cells//2,state,charging_stations_locations_data_scale,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in initial_drone_locations_and_state_opt_scale]
     
@@ -306,8 +260,6 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     execution_times = []
     drone_visited_cells = set(drone_locations_data_scale)
     total_distance_traveled = 0
-    # drone_entropy_per_timestep = []
-    # sensor_entropy = compute_entropy(ground_sensor_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"]))
 
     fire_size_cells = 0
     fire_size_percentage = 0
@@ -316,7 +268,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     t_found = 0
     device = 'undetected'
 
-    # # 4. Load the burn map model
+    # 4. OPTIONNAL: Load a custom DL burn map model
     # # Load trained burn map model (once)
     # burn_predictor = BurnMapPredictor(
     # model_path=custom_initialization_parameters["model_path"],     # You must add this param when calling this function
@@ -331,38 +283,9 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     # concat_len = burn_predictor.concat_len
     # features_per_timestep = concat_len // num_timesteps
 
-    fire_detected = False   # Flag to indicate fire detection
-    #print("SCENARIO LENGTH" , len(scenario))
+    fire_detected = False
     for time_step in tqdm.tqdm(range(-starting_time,len(canonical_scenario))):
-        #if time_step >= 0: # The fire has started.
-            # 1. Check if a fire is detected
-            # grid = scenario[time_step]
-            #print("grid")
-            #print(grid)
-            #print(f"grid shape: {grid.shape}")
-            
-            # if ground_sensor_locations_data_scale:
-            #     if (grid[rows_ground_data_scale,cols_ground_data_scale]==1).any():
-            #         fire_detected = True
-            #         device = 'ground sensor'
-            #         fire_size_cells = np.sum(grid == 1)
-            #         fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
-            #         break
-
-            # if charging_stations_locations_data_scale:
-            #     if (grid[rows_charging_data_scale,cols_charging_data_scale]==1).any():
-            #         fire_detected = True
-            #         device = 'charging station'
-            #         fire_size_cells = np.sum(grid == 1)
-            #         fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
-            #         break
-            
-
-        # 🔁 Drone updates happen more frequently
-
         for substep in range(operational_substeps):
-            # print(f"[DEBUG] Substep {substep+1}/{operational_substeps} at t={time_step}")
-
             # === Routing & movement ===
             custom_step_parameters = custom_step_parameters_function()
             automatic_step_parameters_opt_scale = {
@@ -371,7 +294,6 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
                 "drone_states": drone_states,
                 "t": t_found
             }
-            #print("automatic_step_parameters_opt_scale: ", automatic_step_parameters_opt_scale)
             start_time = time.time()
             actions_opt_scale = Routing_Strat.next_actions(automatic_step_parameters_opt_scale, custom_step_parameters)
             new_position_opt_scale = [] # THIS IS TEMPORARY! WE NEED TO PROPERLY RESCALE BACK FROM DRONE.ROUTE BUT FOR THE INTEREST OF TIME WE FEED BACK THE OUTPUT /!\ TODO
@@ -380,13 +302,13 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
                     new_position_opt_scale.append(action[1])
                 elif action[0] in ['move']:
                     new_position_opt_scale.append((max(0, min(automatic_initialization_parameters["N"]-1, drone_locations_opt_scale[drone_index][0] + action[1][0])), max(0, min(automatic_initialization_parameters["M"]-1, drone_locations_opt_scale[drone_index][1] + action[1][1]))))
-            #print(f"[DEBUG]: Actions: {actions_opt_scale}")
+            
             actions_data_scale = []
             for action in actions_opt_scale:
                 action_type, coords_opt_scale = action
 
                 if action_type in ['move', 'fly']:
-                    #print(f"[{action_type.upper()}] Original: {coords_opt_scale}")
+                    
                     if action_type == 'fly':
                         converted = operational_space_to_dataspace_coordinates( 
                             coords_opt_scale,
@@ -396,7 +318,6 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
                     else:
                         converted = (coverage_width_cells*coords_opt_scale[0], coverage_width_cells*coords_opt_scale[1])
 
-                    #print(f"[DEBUG]: [{action_type.upper()}] Converted: {converted}")
                     actions_data_scale.append((action_type, converted))
                 else:
                     action_type, coords_opt_scale = action
@@ -408,13 +329,12 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
             # === Move drones and check detection ===
             for drone_index, (drone, action) in enumerate(zip(drones, actions_data_scale)):
                 if not drone.is_alive():
-                    #print(f"Drone {drone_index} is dead")
                     # continue  # Skip dead drones #TODO figure out battery rescaling for dead drones
                     pass
 
                 old_x_data_scale, old_y_data_scale = drone_locations_data_scale[drone_index]
                 new_x_data_scale, new_y_data_scale, new_distance_battery, new_time_battery, new_state = drone.route(action)
-
+                
                 # new_x_opt_scale = math.ceil((new_x_data_scale-coverage_width_cells//2)/coverage_width_cells)
                 # new_y_opt_scale = math.ceil((new_y_data_scale-coverage_width_cells//2)/coverage_width_cells)
                 # ABOVE IS WHAT WE SHOULD USE BUT WE DONT. SEE COMMENTS ABOVE /!\ TODO
@@ -429,33 +349,8 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
                 drone_batteries[drone_index] = (new_distance_battery, new_time_battery)
                 drone_states[drone_index] = new_state
                 total_distance_traveled += abs(new_x_data_scale - old_x_data_scale) + abs(new_y_data_scale - old_y_data_scale)
-                drone_visited_cells.add((new_x_data_scale, new_y_data_scale))
-            #print(f"{drone_batteries_opt_scale=}")
-            #print(f"{drone_locations_opt_scale=}")
-                
-
-            # drone_entropy_per_timestep.append(compute_entropy(drone_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"])))
-
-            # === Drone fire detection ===
-            # for drone_pos in drone_locations_data_scale:
-            #     # print("drone_pos", drone_pos)
-            #     if detect_fire_within_coverage(grid, drone_pos, coverage_width_cells):
-            #         device = 'drone'
-            #         fire_detected = True
-            #         fire_size_cells = np.sum(grid == 1)
-            #         fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
-            #         break
-       
-            # if fire_detected:
-            #     break
-        
-        # if fire_detected:
-        #     break
-            
+                drone_visited_cells.update(generate_coverage_area(coverage_radius_m, cell_size_m, new_x_data_scale, new_y_data_scale, automatic_initialization_parameters["N"], automatic_initialization_parameters["M"]))
         t_found += 1
-
-        
-
 
     return time.time() - time_start
 
@@ -556,60 +451,55 @@ def listdir_folder_limited(input_dir, max_n_scenarii=None):
                     break
 
 
-def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
-    """
-    Run parallel benchmarks on multiple scenarios using thread pooling.
+# def run_benchmark_scenarii(input_dir, ground_placement_strategy, drone_routing_strategy, ground_parameters, routing_parameters, max_n_scenarii=None):
+#     """
+#     Run parallel benchmarks on multiple scenarios using thread pooling.
 
-    Args:
-        input_dir (str): Directory containing scenario files.
-        ground_placement_strategy (function): Strategy for placing ground sensors and charging stations.
-        drone_routing_strategy (function): Strategy for controlling drone movements.
-        ground_parameters (tuple): Parameters for ground placement strategy.
-        routing_parameters (tuple): Parameters for routing strategy.
-        max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
+#     Args:
+#         input_dir (str): Directory containing scenario files.
+#         ground_placement_strategy (function): Strategy for placing ground sensors and charging stations.
+#         drone_routing_strategy (function): Strategy for controlling drone movements.
+#         ground_parameters (tuple): Parameters for ground placement strategy.
+#         routing_parameters (tuple): Parameters for routing strategy.
+#         max_n_scenarii (int, optional): Maximum number of scenarios to process. If None, processes all scenarios.
 
-    Prints:
-        Average time steps to fire detection and detection statistics by device type.
-    """
-    # TODO: add starting time
-    raise NotImplementedError("Starting time is not implemented yet")
-    if not input_dir.endswith('/'):
-        input_dir += '/'
+#     Prints:
+#         Average time steps to fire detection and detection statistics by device type.
+#     """
+#     # TODO: add starting time
+#     raise NotImplementedError("Starting time is not implemented yet")
+#     if not input_dir.endswith('/'):
+#         input_dir += '/'
 
-    iterable = listdir_txt_limited(input_dir, max_n_scenarii)
+#     iterable = listdir_txt_limited(input_dir, max_n_scenarii)
 
-    M = len(os.listdir(input_dir)) if max_n_scenarii is None else max_n_scenarii
+#     M = len(os.listdir(input_dir)) if max_n_scenarii is None else max_n_scenarii
     
-    def process_scenario(infile):
-        start = GroundPlacementOptimization(10,10,100,"burn_maps/burn_map_1")
-        print(start.get_locations())
-        return 0,'undetected'
-        # scenario, start_time = load_scenario(infile)
-        # delta_t, device, _ = run_benchmark_scenario(scenario, start_time, ground_placement_strategy, 
-        #                                           drone_routing_strategy, ground_parameters, routing_parameters)
-        # return delta_t, device
+#     def process_scenario(infile):
+#         start = GroundPlacementOptimization(10,10,100,"burn_maps/burn_map_1")
+#         return 0,'undetected'
 
-    # Initialize counters
-    delta_ts = 0
-    fails = 0
-    devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
+#     # Initialize counters
+#     delta_ts = 0
+#     fails = 0
+#     devices = {'ground sensor': 0, "charging station": 0, "drone": 0, 'undetected': 0}
     
-    # Use ThreadPoolExecutor to parallelize scenario processing
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        # Use tqdm to show progress bar for parallel execution
-        results = list(tqdm.tqdm(executor.map(process_scenario, iterable), total=M))
+#     # Use ThreadPoolExecutor to parallelize scenario processing
+#     with ThreadPoolExecutor(max_workers=1) as executor:
+#         # Use tqdm to show progress bar for parallel execution
+#         results = list(tqdm.tqdm(executor.map(process_scenario, iterable), total=M))
         
-    # Process results
-    for delta_t, device in results:
-        if delta_t == -1:
-            fails += 1
-            delta_t = 0
-        delta_ts += delta_t
-        devices[device] += 1
+#     # Process results
+#     for delta_t, device in results:
+#         if delta_t == -1:
+#             fails += 1
+#             delta_t = 0
+#         delta_ts += delta_t
+#         devices[device] += 1
     
-    print(f"This strategy took on average {delta_ts/max(1,(M-fails))} time steps to find the fire.")
-    for device in devices.keys():
-        print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
+#     print(f"This strategy took on average {delta_ts/max(1,(M-fails))} time steps to find the fire.")
+#     for device in devices.keys():
+#         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
 def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}):
     """
@@ -630,8 +520,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
             - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
     """
-    print("starting time: ", starting_time)
-    # o. Get layout parameters
+    # 0. Get layout parameters
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
     else:
@@ -640,9 +529,6 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
 
-    # print(f"custom_initialization_parameters: {custom_initialization_parameters}")
-    # print(f"automatic_initialization_parameters: {automatic_initialization_parameters}")
-
     # 1. compute the rescaling factors
     cell_size_m = automatic_initialization_parameters.get("cell_size_m", 30)
     speed_m_per_min = automatic_initialization_parameters.get("speed_m_per_min", 9)
@@ -650,25 +536,15 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
     coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)
-    #print(f"[DEBUG] Operational substeps per data timestep: {operational_substeps}")
-    #print(f"[DEBUG] Coverage radius cells: {coverage_width_cells}")
 
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
     rescaled_max_battery_time = automatic_initialization_parameters["max_battery_time"] * operational_substeps
     
-    # print(f"original N: {automatic_initialization_parameters['N']}")
-    # print(f"original M: {automatic_initialization_parameters['M']}")
-    # print(f"rescaled_N: {rescaled_N}")
-    # print(f"rescaled_M: {rescaled_M}")
-    # pool burnmap
-    
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
-    # print(f"burnmap shape: {rescaled_burnmap.shape}")
+    
     rescaled_burnmap = pool_burnmap_mean(rescaled_burnmap, coverage_width_cells)
-    #rescaled_burnmap = np.ones_like(rescaled_burnmap)
-    # print(f"rescaled burnmap shape: {rescaled_burnmap.shape}")
-    #save the pooled burnmap
+
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
 
@@ -683,24 +559,11 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 2. Get ground sensor locations and convert them back to the original size
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
-    #print("rescaled_automatic_initialization_parameters: ", rescaled_automatic_initialization_parameters)
-    #print("custom_initialization_parameters: ", rescaled_custom_initialization_parameters)
-    #print(f"ground_sensor_locations in opt scale: {ground_sensor_locations_opt_scale}")
-    #print(f"charging_stations_locations in opt scale: {charging_stations_locations_opt_scale}")
-
-    print(f"{ground_sensor_locations_opt_scale=}")
-    print(f"{charging_stations_locations_opt_scale=}")
 
     ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
     charging_stations_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in charging_stations_locations_opt_scale]
     rows_ground_data_scale, cols_ground_data_scale = zip(*ground_sensor_locations_data_scale) if ground_sensor_locations_data_scale else ((),())
     rows_charging_data_scale, cols_charging_data_scale = zip(*charging_stations_locations_data_scale) if charging_stations_locations_data_scale else ((),())
-
-    # charging_stations_locations = {tuple(station) for station in charging_stations_locations}  # Convert to set of tuples
-
-  
-    # print(f"ground_sensor_locations: {ground_sensor_locations}")
-    # print(f"charging_stations_locations: {charging_stations_locations}")
 
     # add computed positions to initialization parameters
     automatic_initialization_parameters["ground_sensor_locations"] = ground_sensor_locations_data_scale
@@ -711,8 +574,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # 3. Initialize drones
 
     Routing_Strat = drone_routing_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters)
-    #print(f"rescaled_automatic_initialization_parameters: {rescaled_automatic_initialization_parameters}")
-    # Print initial drone locations
+    
     initial_drone_locations_and_state_opt_scale = Routing_Strat.get_initial_drone_locations()
     drones = [Drone(x*coverage_width_cells+coverage_width_cells//2,y*coverage_width_cells+coverage_width_cells//2,state,charging_stations_locations_data_scale,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in initial_drone_locations_and_state_opt_scale]
     
@@ -731,9 +593,6 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     execution_times = []
     drone_visited_cells = set(drone_locations_data_scale)
     total_distance_traveled = 0
-    # drone_entropy_per_timestep = []
-    # sensor_entropy = compute_entropy(ground_sensor_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"]))
-
     fire_size_cells = 0
     fire_size_percentage = 0
     # ========================
@@ -756,21 +615,16 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # concat_len = burn_predictor.concat_len
     # features_per_timestep = concat_len // num_timesteps
 
-    fire_detected = False   # Flag to indicate fire detection
-    #print("SCENARIO LENGTH" , len(scenario))
+    fire_detected = False
     for time_step in tqdm.tqdm(range(-starting_time,len(scenario))):
         if time_step >= 0: # The fire has started.
-            # 1. Check if a fire is detected
             grid = scenario[time_step]
-            #print("grid")
-            #print(grid)
-            #print(f"grid shape: {grid.shape}")
             
             if ground_sensor_locations_data_scale:
                 if (grid[rows_ground_data_scale,cols_ground_data_scale]==1).any():
                     fire_detected = True
                     device = 'ground sensor'
-                    fire_size_cells = np.sum(grid == 1)
+                    fire_size_cells = np.sum(grid > 0.5)
                     fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
 
@@ -778,14 +632,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 if (grid[rows_charging_data_scale,cols_charging_data_scale]==1).any():
                     fire_detected = True
                     device = 'charging station'
-                    fire_size_cells = np.sum(grid == 1)
+                    fire_size_cells = np.sum(grid > 0.5)
                     fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
 
-        # 🔁 Drone updates happen more frequently
 
         for substep in range(operational_substeps):
-            # print(f"[DEBUG] Substep {substep+1}/{operational_substeps} at t={time_step}")
 
             # === Routing & movement ===
             custom_step_parameters = custom_step_parameters_function()
@@ -795,7 +647,6 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 "drone_states": drone_states,
                 "t": t_found
             }
-            #print("automatic_step_parameters_opt_scale: ", automatic_step_parameters_opt_scale)
             start_time = time.time()
             actions_opt_scale = Routing_Strat.next_actions(automatic_step_parameters_opt_scale, custom_step_parameters)
             new_position_opt_scale = [] # THIS IS TEMPORARY! WE NEED TO PROPERLY RESCALE BACK FROM DRONE.ROUTE BUT FOR THE INTEREST OF TIME WE FEED BACK THE OUTPUT /!\ TODO
@@ -804,14 +655,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                     new_position_opt_scale.append(action[1])
                 elif action[0] in ['move']:
                     new_position_opt_scale.append((max(0, min(automatic_initialization_parameters["N"]-1, drone_locations_opt_scale[drone_index][0] + action[1][0])), max(0, min(automatic_initialization_parameters["M"]-1, drone_locations_opt_scale[drone_index][1] + action[1][1]))))
-            #print(f"[DEBUG]: Actions: {actions_opt_scale}")
             
             actions_data_scale = []
             for action in actions_opt_scale:
                 action_type, coords_opt_scale = action
 
                 if action_type in ['move', 'fly']:
-                    #print(f"[{action_type.upper()}] Original: {coords_opt_scale}")
                     if action_type == 'fly':
                         converted = operational_space_to_dataspace_coordinates( 
                             coords_opt_scale,
@@ -821,7 +670,6 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                     else:
                         converted = (coverage_width_cells*coords_opt_scale[0], coverage_width_cells*coords_opt_scale[1])
 
-                    #print(f"[DEBUG]: [{action_type.upper()}] Converted: {converted}")
                     actions_data_scale.append((action_type, converted))
                 else:
                     action_type, coords_opt_scale = action
@@ -855,23 +703,17 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 drone_states[drone_index] = new_state
                 total_distance_traveled += abs(new_x_data_scale - old_x_data_scale) + abs(new_y_data_scale - old_y_data_scale)
                 drone_visited_cells.add((new_x_data_scale, new_y_data_scale))
-            # print(f"{drone_locations_opt_scale=}")
-            # print("time step: ", time_step, "substep: ", substep)
-            # print(f"{drone_batteries_opt_scale=}")
-            # print(f"{drone_states=}")
             
             if return_history:
                 drone_locations_history.append(tuple(drone_locations_data_scale))
 
-            # drone_entropy_per_timestep.append(compute_entropy(drone_locations, (automatic_initialization_parameters["N"], automatic_initialization_parameters["M"])))
-
+            
             # === Drone fire detection ===
             for drone_pos in drone_locations_data_scale:
-                # print("drone_pos", drone_pos)
                 if time_step >= 0 and detect_fire_within_coverage(grid, drone_pos, coverage_width_cells):
                     device = 'drone'
                     fire_detected = True
-                    fire_size_cells = np.sum(grid == 1)
+                    fire_size_cells = np.sum(grid > 0.5)
                     fire_size_percentage = fire_size_cells / (grid.shape[0] * grid.shape[1]) * 100
                     break
        
@@ -887,14 +729,12 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     delta_t = t_found - starting_time
     avg_execution_time = np.mean(execution_times)
-    # avg_drone_entropy = np.mean(drone_entropy_per_timestep)
     percentage_map_explored = len(drone_visited_cells) / (automatic_initialization_parameters["N"] * automatic_initialization_parameters["M"]) * 100
 
     if device == 'undetected':
         delta_t = len(scenario)
-        # print("Fire was not detected by any device.")
         final_grid = scenario[-1]
-        fire_size_cells = np.sum(final_grid == 1)
+        fire_size_cells = np.sum(final_grid > 0.5)
         fire_size_percentage = fire_size_cells / (final_grid.shape[0] * final_grid.shape[1]) * 100
 
     results = {
@@ -906,11 +746,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         "fire_size_percentage": fire_size_percentage,
         "percentage_map_explored": percentage_map_explored,
         "total_distance_traveled": total_distance_traveled,
-        # "avg_drone_entropy": avg_drone_entropy,
-        # "sensor_entropy": sensor_entropy
     }
-    #print("\n\n\n\n")
-    #print("history: ", drone_locations_history)
     return results, (drone_locations_history, ground_sensor_locations_data_scale, charging_stations_locations_data_scale) if return_history else ()
 
 def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}, config:dict={}, precomputing_time:float=0):
@@ -979,7 +815,6 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     count =0
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
         starting_time = config.get(f"offset_{file}", 0)
-        #print(f"Processing scenario {file}")
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
@@ -1029,16 +864,11 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
             "fire_percentage": results["fire_size_percentage"],
             "map_explored": results["percentage_map_explored"],
             "total_distance": results["total_distance_traveled"],
-            # Add if needed:
-            # "drone_entropy": results.get("avg_drone_entropy"),
-            # "sensor_entropy": results.get("sensor_entropy")
         })
         total_fire_sizes.append(results["fire_size_cells"])
         total_fire_percentages.append(results["fire_size_percentage"])
         map_explored.append(results["percentage_map_explored"])
         total_distances.append(results["total_distance_traveled"])
-        # drone_entropies.append(results["avg_drone_entropy"])
-        # sensor_entropies.append(results["sensor_entropy"])
    
     csv_output_path = os.path.join(input_dir, f"{layout_name}_benchmark_results{sensor_strategy_name}_{drone_strategy_name}.csv")
     df = pd.DataFrame(per_scenario_results)
@@ -1053,8 +883,6 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     avg_fire_percentage = np.mean(total_fire_percentages)
     avg_map_explored = np.mean(map_explored)
     avg_distance = np.mean(total_distances)
-    # avg_drone_entropy = np.mean(drone_entropies)
-    # avg_sensor_entropy = np.mean(sensor_entropies)
     
     # Create metrics dictionary
     metrics = {
@@ -1065,28 +893,12 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         "avg_fire_percentage": avg_fire_percentage,
         "avg_map_explored": avg_map_explored,
         "avg_distance": avg_distance,
-        # "avg_drone_entropy": avg_drone_entropy,
-        # "avg_sensor_entropy": avg_sensor_entropy,
         "raw_execution_times": total_execution_times,
         "raw_fire_sizes": total_fire_sizes,
         "raw_fire_percentages": total_fire_percentages,
         "raw_map_explored": map_explored,
         "raw_distances": total_distances,
-        "raw_drone_entropies": drone_entropies,
-        "raw_sensor_entropies": sensor_entropies
     }
-    
-    # Still print the results for console feedback
-    # print(f"Avg time steps to fire detection: {avg_time_to_detection}")
-    # for device, percentage in device_percentages.items():
-    #     print(f"Fire found {percentage}% of the time by {device}")
-    # print(f"Avg routing execution time: {avg_execution_time:.4f} sec")
-    # print(f"Avg fire size at detection (cells): {avg_fire_size:.2f}")
-    # print(f"Avg fire size at detection (% of map): {avg_fire_percentage:.2f}%")
-    # print(f"Avg percentage of map explored by drones: {avg_map_explored:.2f}%")
-    # print(f"Avg total distance traveled by drones: {avg_distance:.2f} units")
-    # print(f"Avg drone entropy per timestep: {avg_drone_entropy:.4f}")
-    # print(f"Avg sensor placement entropy: {avg_sensor_entropy:.4f}")
     
     return metrics
 
@@ -1134,10 +946,7 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
         print(f"No scenario found in {input_dir}")
         return {}
     
-    # precompute the sensor placement and drone routing strategy on canonical scenario
-    #print("Precomputing sensor placement and drone routing strategy on canonical scenario...")
     precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format) 
-    #print("running on all scenarios...")
     return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters, config, precomputing_time)
 
 def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[], file_format="npy", config_file:str=''):
@@ -1156,7 +965,6 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
     Returns:
         dict: Dictionary mapping layout names to their respective metric dictionaries.
     """
-    # print("simulation_parameters: ", simulation_parameters)
     if config_file:
         with open(config_file, 'r') as f:
             config = json.load(f)
@@ -1288,74 +1096,3 @@ def run_benchmark_for_strategy(input_dir: str,
     )
     
     return metrics
-
-if __name__ == "__main__":
-    from displays import create_scenario_video
-    # Example usage
-    # print(compute_operational_timesteps(30, 10, 45))
-    from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, SensorPlacementOptimization, RandomSensorPlacementStrategy, LoggedOptimizationSensorPlacementStrategy,DroneRoutingOptimizationSlow, DroneRoutingOptimizationModelReuse, DroneRoutingOptimizationModelReuseIndex, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingOptimizationModelReuseIndexRegularized
-    from new_clustering import get_wrapped_clustering_strategy
-    from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
-    # change values here to change benchmarking parameters
-    
-    def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
-        return {
-            "N": scenario.shape[1],
-            "M": scenario.shape[2],
-            "max_battery_distance": -1,
-            "max_battery_time": 1000,
-            "n_drones": 3,
-            "n_ground_stations": 3,
-            "n_charging_stations": 3, 
-            "speed_m_per_min": 9,
-            "coverage_radius_m": 45,
-            "cell_size_m": 30,
-            "transmission_range": 100,
-    }
-    op = compute_operational_substeps(30, 9, 45)
-    # print("--------------------------------")
-    # print("operational substeps: ", op)
-    # print("--------------------------------")
-    # That's very fast to run!
-    #print("starting benchmark")
-    time_start = time.time()
-    scenario = load_scenario_npy("MinimalDataset/0001/scenarii/0001_00034.npy")
-    results, (position_history, ground, charging)  = run_benchmark_scenario(scenario, RandomSensorPlacementStrategy, 
-                                                                            RandomDroneRoutingStrategy,
-                                                                              custom_initialization_parameters = {"burnmap_filename": "./MinimalDataset/0001/burn_map.npy", 
-                                                                                                                  "load_from_logfile": False, "reevaluation_step": 6, 
-                                                                                                                  "optimization_horizon":6, "regularization_param": 0.0001}, 
-                                                                                                                  custom_step_parameters_function = return_no_custom_parameters, 
-                                                                                                                  automatic_initialization_parameters_function=my_automatic_layout_parameters, 
-                                                                                                                  return_history=True)
-    #print(results)
-    print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
-    create_scenario_video(scenario[:len(position_history)],drone_locations_history=position_history,starting_time=0, out_filename='test_simulation', ground_sensor_locations = ground, charging_stations_locations = charging, substeps_per_timestep=6)
-
-
-
-
-    # input_dir = "MinimalDataset/0001/scenarii"  # Replace with your actual dataset path
-    # strategy_folder = "code/strategy"            # Path to your strategies
-    # sensor_strategy_file = "sensor_placement_optimization.py"
-    # sensor_class_name = "SensorPlacementOptimization"
-    # drone_strategy_file = "reuse_index_drone_routing.py"
-    # drone_class_name = "DroneRoutingOptimizationModelReuseIndex"
-
-    # max_n_scenarii = 5
-    # starting_time = 0
-    # file_format = "npy"  # or "jpg" if you're working with jpg scenarios
-
-    # run_benchmark_for_strategy(
-    #     input_dir=input_dir,
-    #     strategy_folder=strategy_folder,
-    #     sensor_strategy_file=sensor_strategy_file,
-    #     sensor_class_name=sensor_class_name,
-    #     drone_strategy_file=drone_strategy_file,
-    #     drone_class_name=drone_class_name,
-    #     max_n_scenarii=max_n_scenarii,
-    #     starting_time=starting_time,
-    #     file_format=file_format,
-    #     custom_init_params_fn= build_custom_init_params,
-    #     custom_step_params_fn= return_no_custom_parameters
-    # )

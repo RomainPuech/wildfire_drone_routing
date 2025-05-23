@@ -1,6 +1,6 @@
 import random
 import os
-from my_julia_caller import jl # DEACTIVATE IT TO RUN THINGS IN PARALLEL 
+from my_julia_caller import jl
 import json
 import numpy as np
 from dataset import load_scenario, save_burn_map
@@ -40,8 +40,8 @@ class SensorPlacementStrategy():
             charging_station_locations: list of tuples (x,y)
         """
         raise NotImplementedError("SensorPlacementStrategy is an abstract class and should not be instantiated directly.")
-        # Generate random positions using list comprehensions
         # YOUR CODE HERE
+        # Generate random positions
         self.ground_sensor_locations = [(random.randint(0, automatic_initialization_parameters["N"]-1), 
                                        random.randint(0, automatic_initialization_parameters["M"]-1)) 
                                       for _ in range(automatic_initialization_parameters["n_ground_stations"])]
@@ -61,7 +61,6 @@ class DroneRoutingStrategy():
     """
     Base class for drone routing strategies.
     """
-    #def __init__(self,ground_sensor_locations,charging_stations_locations,n_drones=None, max_battery_distance = 100, max_battery_time = 100):
     def __init__(self,automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
         """
         automatic_initialization_parameters: dict with keys:
@@ -161,8 +160,6 @@ class RandomDroneRoutingStrategy(DroneRoutingStrategy):
     """
     Drone routing strategy that moves drones randomly.
     """
-
-    #def __init__(self,ground_sensor_locations,charging_stations_locations,n_drones=None, max_battery_distance = 100, max_battery_time = 100):
     def __init__(self,automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
         """
         automatic_initialization_parameters: dict with keys:
@@ -322,15 +319,6 @@ class DroneRoutingOptimizationSlow(DroneRoutingStrategy):
         """
         Returns the initial locations of the drones
         """
-        # Uniform allocation of drones across charging stations (you can change this)
-        
-        # n = len(self.automatic_initialization_parameters["charging_stations_locations"])
-        # q = self.automatic_initialization_parameters["n_drones"] // n
-        # r = self.automatic_initialization_parameters["n_drones"] % n
-        
-        # # By default drones are spread uniformly aross charging stations
-        # return self.automatic_initialization_parameters["charging_stations_locations"]*q + self.automatic_initialization_parameters["charging_stations_locations"][:r]
-        
         
         # use julia indexing 
         self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
@@ -1901,8 +1889,5 @@ class DroneRoutingUniformMaxCoverageResetStatic(DroneRoutingStrategy):
 
 class DroneRoutingMaxCoverageResetStaticGreedy(DroneRoutingMaxCoverageResetStatic):
     strategy_name = "DroneRoutingMaxCoverageResetStaticGreedy"
-
-    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
-        super().__init__(automatic_initialization_parameters, custom_initialization_parameters)
 
 
