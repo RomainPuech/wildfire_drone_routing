@@ -221,11 +221,6 @@ ClusteredDroneStrategy = get_wrapped_clustering_strategy(MyDroneStrategy)
 drone_strategy = ClusteredDroneStrategy(...)
 ```
 
-Benefits:
-- **Scalability**: Handles large maps by partitioning into regions
-- **Parallelization**: Enables independent operation in each region
-- **Hierarchical Control**: Supports different strategies per region
-
 The clustering wrapper:
 1. Divides the environment into manageable clusters
 2. Assigns drones to specific clusters
