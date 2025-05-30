@@ -183,7 +183,7 @@ def operational_space_to_dataspace_coordinates(coordinate, coverage, datacell_si
     new_x , newy = x * n_data_cells_in_coverage_area + half_coverage * sign(x), y * n_data_cells_in_coverage_area + half_coverage * sign(y)
     return (new_x, newy)
 
-def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy", starting_time:int=12):
+def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy", starting_time:int=1):
     """
     Runs a drone routing strategy on a wildfire scenario and collects performance metrics.
     
@@ -216,7 +216,6 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
         - Fire detection by drones and sensors
         - Collection of performance metrics
     """
-    print(f"[DEBUG] Running drone routing strategy")
     
     time_start = time.time()
     # 0. get layout parameters
@@ -243,9 +242,11 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
     rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
+    # duplicate the burn map for the operationnal time scale: each grid is duplicated operational_substeps times
+    rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
     
     #save the pooled burnmap
-    rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}.npy")
+    rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
 
     rescaled_automatic_initialization_parameters = automatic_initialization_parameters.copy()
@@ -530,7 +531,7 @@ def listdir_folder_limited(input_dir, max_n_scenarii=None):
 #     for device in devices.keys():
 #         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
-def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}):
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, return_history_scale:str='data', custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}, progress_bar:bool=False):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
@@ -542,13 +543,17 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         time_step_parameters_function (function): Function called at each time step. Returns a dict of custom_parameters given to the strategy.
         starting_time (int, optional): Time steps before the wildfire starts. Defaults to 0.
         return_history (bool, optional): If True, returns the history of drone positions. Defaults to False.
+        return_history_scale (str, optional): Scale of the returned history. Must be either 'data' or 'operational' (or 'opt'). Defaults to 'data'.
 
     Returns:
         tuple: Contains:
             - delta_t (int): Time steps taken to detect fire, or -1 if undetected
             - device (str): Which device detected the fire ('ground sensor', 'charging station', 'drone', or 'undetected')
-            - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations)
+            - history (tuple): If return_history=True, returns (drone_locations_history, ground_sensor_locations, charging_stations_locations) at the specified scale
     """
+    if return_history and return_history_scale not in ['data', 'operational', 'opt']:
+        raise ValueError("return_history_scale must be either 'data' or 'operational' (or 'opt')")
+
     # 0. Get layout parameters
     if automatic_initialization_parameters_function is None:
         automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
@@ -573,8 +578,10 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
     
     rescaled_burnmap = pool_burnmap_mean(rescaled_burnmap, coverage_width_cells)
+    rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
+    #rescaled_burnmap = rescaled_burnmap.astype(np.float32)
 
-    rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}.npy")
+    rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_substeps_{operational_substeps}.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
 
     rescaled_automatic_initialization_parameters = automatic_initialization_parameters.copy()
@@ -614,8 +621,10 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     drone_batteries_opt_scale = [rescaled_max_battery_time for drone in drones]
     drone_states = [drone.get_state() for drone in drones]
     drone_locations_history = None
+    drone_locations_history_opt = None
     if return_history:
         drone_locations_history = [list(drone_locations_data_scale)]
+        drone_locations_history_opt = [list(drone_locations_opt_scale)]
 
 
     # Initialize metrics
@@ -645,7 +654,11 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # features_per_timestep = concat_len // num_timesteps
 
     fire_detected = False
-    for time_step in tqdm.tqdm(range(-starting_time,len(scenario))):
+    if progress_bar:
+        tqdm_iter = tqdm.tqdm(range(-starting_time,len(scenario)))
+    else:
+        tqdm_iter = range(-starting_time,len(scenario))
+    for time_step in tqdm_iter:
         if time_step >= 0: # The fire has started.
             grid = scenario[time_step]
             
@@ -735,6 +748,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             
             if return_history:
                 drone_locations_history.append(tuple(drone_locations_data_scale))
+                drone_locations_history_opt.append(tuple(drone_locations_opt_scale))
 
             
             # === Drone fire detection ===
@@ -776,7 +790,13 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
         "percentage_map_explored": percentage_map_explored,
         "total_distance_traveled": total_distance_traveled,
     }
-    return results, (drone_locations_history, ground_sensor_locations_data_scale, charging_stations_locations_data_scale) if return_history else ()
+    
+    if return_history:
+        if return_history_scale == 'data':
+            return results, (drone_locations_history, ground_sensor_locations_data_scale, charging_stations_locations_data_scale)
+        else:  # operational scale
+            return results, (drone_locations_history_opt, ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale)
+    return results, ()
 
 def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}, config:dict={}, precomputing_time:float=0):
     """
@@ -843,7 +863,8 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     per_scenario_results = []
     count =0
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
-        starting_time = config.get(f"offset_{file}", 0)
+        starting_time = config.get(f"offset_{file.split('/')[-1]}", 0)
+        #print(f"Starting time: {starting_time}, file: {file.split('/')[-1]}")
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
@@ -964,18 +985,22 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
 
     N_SCENARII = max_n_scenarii if max_n_scenarii else len(os.listdir(input_dir))
     # find the longest scenario to be used as canonical scenario
-    max_scenario_length = 0
+    max_scenario_plus_offset_length = 0
     canonical_scenario = None
+    canonical_offset = 0
     for file in iterable:
         scenario = load_scenario_fn(file)
-        if scenario.shape[0] > max_scenario_length:
-            max_scenario_length = scenario.shape[0]
+        offset = config.get(f"offset_{file.split('/')[-1]}", 0)
+        if scenario.shape[0] + offset > max_scenario_plus_offset_length:
+            max_scenario_plus_offset_length = scenario.shape[0] + offset
             canonical_scenario = scenario
+            canonical_offset = offset
     if canonical_scenario is None:
         print(f"No scenario found in {input_dir}")
         return {}
-    
-    precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format) 
+    # find the biggest offset in config
+    print(f"Canonical offset: {canonical_offset}")
+    precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_plus_offset_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format, starting_time = canonical_offset) 
     return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters, config, precomputing_time)
 
 def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[], file_format="npy", config_file:str=''):
