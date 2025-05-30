@@ -36,3 +36,6 @@ IP_Dataset/*
 WData/*
 trash/*
 tmp*
+experiments.ipynb
+experiments_2.ipynb
+experiments.py
