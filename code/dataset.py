@@ -447,7 +447,7 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layou
         n_layout += 1
 
 
-def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic"):
+def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic", nickname = None, experiment_name = ""):
     """
     Combines all per-layout benchmark CSVs from Satellite_Images_Mask folders into one file.
     Preserves layout/scenario formatting (e.g., 0001, 00002).
@@ -467,23 +467,23 @@ def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "c
     for layout in os.listdir(dataset_folder):
         layout_path = os.path.join(dataset_folder, layout)
         if not os.path.isdir(layout_path):
-            continue
+            continue    
 
         layout_shortened_name = layout.split("_")[0]
 
-        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
+        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
         if os.path.exists(csv_path):
             print(f"✔ Found: {csv_path}")
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
             all_dfs.append(df)
         else:
-            csv_path = os.path.join(layout_path, "Satellite_Image_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
+            csv_path = os.path.join(layout_path, "Satellite_Image_Mask", f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
             if os.path.exists(csv_path):
                 print(f"✔ Found: {csv_path}")
                 df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
                 all_dfs.append(df)
             else:
-                csv_path = os.path.join(layout_path, "Satellite_lmage_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
+                csv_path = os.path.join(layout_path, "Satellite_lmage_Mask", f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
                 if os.path.exists(csv_path):
                     print(f"✔ Found: {csv_path}")
                     df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
@@ -496,7 +496,9 @@ def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "c
         return None
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    combined_path = os.path.join(dataset_folder, output_filename+suffix+".csv")
+    if nickname is None:
+        nickname = strategy_name
+    combined_path = os.path.join(dataset_folder, "combined_benchmark_results"+experiment_name+nickname+".csv")
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 

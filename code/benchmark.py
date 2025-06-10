@@ -47,7 +47,7 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
 
 
 
-def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simulation_parameters: dict):
+def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simulation_parameters: dict, scenario_name: str = ""):
     #print("simulation_parameters", simulation_parameters)
     return {
         "N": scenario.shape[1],
@@ -62,6 +62,7 @@ def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simula
         "cell_size_m": simulation_parameters.get("cell_size_m", DEFAULT_SIMULATION_PARAMETERS["cell_size_m"]),
         "input_dir": input_dir,
         "transmission_range": simulation_parameters.get("transmission_range", DEFAULT_SIMULATION_PARAMETERS["transmission_range"]),
+        "scenario_name": scenario_name or simulation_parameters.get("scenario_name", DEFAULT_SIMULATION_PARAMETERS["scenario_name"]),
     }
 
 
@@ -82,6 +83,7 @@ DEFAULT_SIMULATION_PARAMETERS = {
     "coverage_radius_m": -1,
     "cell_size_m": -1,
     "transmission_range": -1,
+    "scenario_name": "",
 }
 
 def build_custom_init_params(input_dir, layout_name):
@@ -183,7 +185,7 @@ def operational_space_to_dataspace_coordinates(coordinate, coverage, datacell_si
     new_x , newy = x * n_data_cells_in_coverage_area + half_coverage * sign(x), y * n_data_cells_in_coverage_area + half_coverage * sign(y)
     return (new_x, newy)
 
-def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy", starting_time:int=1):
+def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sensor_placement_strategy:SensorPlacementStrategy, T:int, canonical_scenario:np.ndarray, automatic_initialization_parameters_function:callable, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, input_dir:str='', simulation_parameters:dict={}, file_format:str="npy", starting_time:int=1, scenario_name:str=""):
     """
     Runs a drone routing strategy on a wildfire scenario and collects performance metrics.
     
@@ -220,9 +222,9 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     time_start = time.time()
     # 0. get layout parameters
     if automatic_initialization_parameters_function is None:
-        automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir, simulation_parameters)
+        automatic_initialization_parameters = get_automatic_layout_parameters(canonical_scenario, input_dir, simulation_parameters, scenario_name)
     else:
-        automatic_initialization_parameters = automatic_initialization_parameters_function(canonical_scenario, input_dir, simulation_parameters)
+        automatic_initialization_parameters = automatic_initialization_parameters_function(canonical_scenario, input_dir, simulation_parameters, scenario_name)
     
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
@@ -532,7 +534,7 @@ def listdir_folder_limited(input_dir, max_n_scenarii=None):
 #     for device in devices.keys():
 #         print(f"Fire found {round(devices[device]/M*100,2)}% of the time by {device}")
 
-def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, return_history_scale:str='data', custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}, progress_bar:bool=False):
+def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters:dict, custom_step_parameters_function:callable, starting_time:int=0, return_history:bool=False, return_history_scale:str='data', custom_initialization_parameters_function:callable=None, automatic_initialization_parameters_function:callable=None, input_dir:str='', simulation_parameters:dict={}, progress_bar:bool=False, scenario_name:str=""):
     """
     Benchmark a routing and placement strategy on a single fire detection scenario.
 
@@ -557,9 +559,9 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     # 0. Get layout parameters
     if automatic_initialization_parameters_function is None:
-        automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
+        automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters, scenario_name)
     else:
-        automatic_initialization_parameters = automatic_initialization_parameters_function(scenario, input_dir, simulation_parameters)
+        automatic_initialization_parameters = automatic_initialization_parameters_function(scenario, input_dir, simulation_parameters, scenario_name)
     
     if custom_initialization_parameters_function is not None:
         custom_initialization_parameters = custom_initialization_parameters_function(input_dir)
@@ -799,7 +801,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
             return results, (drone_locations_history_opt, ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale)
     return results, ()
 
-def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}, config:dict={}, precomputing_time:float=0):
+def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}, config:dict={}, precomputing_time:float=0, experiment_name:str=''):
     """
     Run sequential benchmarks on multiple scenarios.
 
@@ -864,12 +866,13 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     per_scenario_results = []
     count =0
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
-        starting_time = config.get(f"offset_{file.split('/')[-1]}", 0)
-        #print(f"Starting time: {starting_time}, file: {file.split('/')[-1]}")
+        scenario_name = file.split('/')[-1]
+        starting_time = config.get(f"offset_{scenario_name}", 0)
+        #print(f"Starting time: {starting_time}, file: {scenario_name}")
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
-            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters) #TODO compute them once only per layout rather than per scenario..
+            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters, scenario_name) #TODO compute them once only per layout rather than per scenario..
         results, _ = run_benchmark_scenario(
             scenario,
             sensor_placement_strategy,
@@ -880,6 +883,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
             input_dir=input_dir,
             simulation_parameters=simulation_parameters,
             return_history= count == 0,
+            scenario_name=scenario_name,
         )
 
         delta_t = results["delta_t"]
@@ -921,7 +925,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         map_explored.append(results["percentage_map_explored"])
         total_distances.append(results["total_distance_traveled"])
    
-    csv_output_path = os.path.join(input_dir, f"{layout_name}_benchmark_results{sensor_strategy_name}_{drone_strategy_name}.csv")
+    csv_output_path = os.path.join(input_dir, f"{layout_name}_benchmark_results{experiment_name}_{sensor_strategy_name}_{drone_strategy_name}.csv")
     df = pd.DataFrame(per_scenario_results)
     df.to_csv(csv_output_path, index=False)
     print(f"Saved per-scenario results to {csv_output_path}")
@@ -953,7 +957,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     
     return metrics
 
-def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}, config:dict={}):
+def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_strategy:SensorPlacementStrategy, drone_routing_strategy:DroneRoutingStrategy, custom_initialization_parameters_function:callable, custom_step_parameters_function:callable, starting_time:int=0, max_n_scenarii:int=None, file_format="npy", simulation_parameters:dict={}, config:dict={}, experiment_name:str=''):
     """
     Run benchmarks on multiple scenarios sequentially, precomputing the sensor placement and drone routing strategy.
 
@@ -989,24 +993,28 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     max_scenario_plus_offset_length = 0
     canonical_scenario = None
     canonical_offset = 0
+    canonical_scenario_name = ""
     print("finding the longest scenario")
-    for file in tqdm.tqdm(iterable, total = N_SCENARII):
+    for file in iterable:
+        scenario_name = file.split('/')[-1]
         scenario = load_scenario_fn(file)
-        offset = config.get(f"offset_{file.split('/')[-1]}", 0)
+        offset = config.get(f"offset_{scenario_name}", 0)
         if scenario.shape[0] + offset > max_scenario_plus_offset_length:
             max_scenario_plus_offset_length = scenario.shape[0] + offset
             canonical_scenario = scenario
             canonical_offset = offset
+            canonical_scenario_name = scenario_name
     if canonical_scenario is None:
         print(f"No scenario found in {input_dir}")
         return {}
     # find the biggest offset in config
     print(f"Canonical offset: {canonical_offset}")
     print("precomputing")
-    precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_plus_offset_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format, starting_time = canonical_offset) 
-    return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters, config, precomputing_time)
+    
+    precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_plus_offset_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format, starting_time = canonical_offset, scenario_name=canonical_scenario_name)
+    return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters, config, precomputing_time, experiment_name)
 
-def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[], file_format="npy", config_file:str=''):
+def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, max_n_scenarii=None, starting_time=0, max_n_layouts=None, simulation_parameters:dict={}, skip_folder_names:list=[], file_format="npy", config_file:str='', experiment_name:str=''):
     """
     Run benchmarks on a simulation-to-real-world dataset structure.
 
@@ -1063,23 +1071,24 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
             print(f"Skipping layout {layout_folder} because it has more than 10% failed scenarios: {failed_percentage}")
             continue
         print("running benchmark")
-        #try:
-        metrics = run_benchmark_scenarii_sequential_precompute(
-            layout_folder + scenarios_folder,
-            ground_placement_strategy, 
-            drone_routing_strategy, 
-            custom_initialization_parameters_function, 
-            custom_step_parameters_function, 
-        starting_time=starting_time, 
-        max_n_scenarii=max_n_scenarii,
-        simulation_parameters=simulation_parameters,
-        file_format=file_format,
-        config=config,
-        )
-        all_metrics[layout_name] = metrics
-        # except Exception as e:
-        #     print(f"Error running benchmark on layout {layout_folder}: {e}")
-        #     continue
+        try:
+            metrics = run_benchmark_scenarii_sequential_precompute(
+                layout_folder + scenarios_folder,
+                ground_placement_strategy, 
+                drone_routing_strategy, 
+                custom_initialization_parameters_function, 
+                custom_step_parameters_function, 
+            starting_time=starting_time, 
+            max_n_scenarii=max_n_scenarii,
+            simulation_parameters=simulation_parameters,
+            file_format=file_format,
+            config=config,
+            experiment_name=experiment_name,
+            )
+            all_metrics[layout_name] = metrics
+        except Exception as e:
+            print(f"Error running benchmark on layout {layout_folder}: {e}")
+            continue
         
     
     return all_metrics
@@ -1130,8 +1139,9 @@ def run_benchmark_for_strategy(input_dir: str,
         return
 
     # load the first scenario to get automatic parameters
+    first_scenario_name = first_file.split('/')[-1]
     scenario = load_scenario_fn(first_file)
-    automatic_init_params = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters)
+    automatic_init_params = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters, first_scenario_name)
 
     # === Create sensor placement strategy ===
     print("[run_benchmark_for_strategy] Running sensor placement strategy...")
@@ -1163,7 +1173,7 @@ def run_benchmark_for_strategy(input_dir: str,
         file_format=file_format,
         simulation_parameters=simulation_parameters,
         config=config,
-        precomputing_time=precomputing_time
+        precomputing_time=0
     )
     
     return metrics
