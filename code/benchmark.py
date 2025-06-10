@@ -239,12 +239,12 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
     rescaled_max_battery_time = automatic_initialization_parameters["max_battery_time"] * operational_substeps
-    
+    print("loading and preparing burnmap")
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
     rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
     # duplicate the burn map for the operationnal time scale: each grid is duplicated operational_substeps times
     rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
-    
+    print("saving the pooled burnmap")
     #save the pooled burnmap
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
@@ -259,6 +259,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_custom_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
 
     # 2. Get ground sensor locations and convert them back to the original size
+    print("getting sensor locations")
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
 
     ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
@@ -273,9 +274,9 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_automatic_initialization_parameters["charging_stations_locations"] = charging_stations_locations_opt_scale
     
     # 3. Initialize drones
-
+    print("initializing drones")
     Routing_Strat = drone_routing_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters)
-
+    print("getting initial drone locations")
     initial_drone_locations_and_state_opt_scale = Routing_Strat.get_initial_drone_locations()
     drones = [Drone(x*coverage_width_cells+coverage_width_cells//2,y*coverage_width_cells+coverage_width_cells//2,state,charging_stations_locations_data_scale,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in initial_drone_locations_and_state_opt_scale]
     
@@ -988,7 +989,8 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     max_scenario_plus_offset_length = 0
     canonical_scenario = None
     canonical_offset = 0
-    for file in iterable:
+    print("finding the longest scenario")
+    for file in tqdm.tqdm(iterable, total = N_SCENARII):
         scenario = load_scenario_fn(file)
         offset = config.get(f"offset_{file.split('/')[-1]}", 0)
         if scenario.shape[0] + offset > max_scenario_plus_offset_length:
@@ -1000,6 +1002,7 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
         return {}
     # find the biggest offset in config
     print(f"Canonical offset: {canonical_offset}")
+    print("precomputing")
     precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_plus_offset_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format, starting_time = canonical_offset) 
     return run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy, drone_routing_strategy, custom_initialization_parameters_function, custom_step_parameters_function, starting_time, max_n_scenarii, file_format, simulation_parameters, config, precomputing_time)
 
@@ -1045,24 +1048,38 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
         if layout_folder in skip_folder_names:
             print(f"Skipping layout {layout_folder} because it is in the skip_folder_names list")
             continue
-        
-        try:
-            metrics = run_benchmark_scenarii_sequential_precompute(
-                layout_folder + scenarios_folder,
-                ground_placement_strategy, 
-                drone_routing_strategy, 
-                custom_initialization_parameters_function, 
-                custom_step_parameters_function, 
-            starting_time=starting_time, 
-            max_n_scenarii=max_n_scenarii,
-            simulation_parameters=simulation_parameters,
-            file_format=file_format,
-            config=config,
-            )
-            all_metrics[layout_name] = metrics
-        except Exception as e:
-            print(f"Error running benchmark on layout {layout_folder}: {e}")
+
+        # check if there is not too many discarded scenarios
+
+        # load the selected_scenarios.txt file and check the failed percentage
+        print("checking if there is not too many discarded scenarios")
+        failed_percentage = 1
+        selected_scenarios_file = layout_folder + "/selected_scenarios.txt"
+        if os.path.exists(selected_scenarios_file):
+            with open(selected_scenarios_file, "r") as f:
+                lines = f.readlines()
+            failed_percentage = float(lines[-1].split(" ")[-1])
+        if failed_percentage > 0.2:
+            print(f"Skipping layout {layout_folder} because it has more than 10% failed scenarios: {failed_percentage}")
             continue
+        print("running benchmark")
+        #try:
+        metrics = run_benchmark_scenarii_sequential_precompute(
+            layout_folder + scenarios_folder,
+            ground_placement_strategy, 
+            drone_routing_strategy, 
+            custom_initialization_parameters_function, 
+            custom_step_parameters_function, 
+        starting_time=starting_time, 
+        max_n_scenarii=max_n_scenarii,
+        simulation_parameters=simulation_parameters,
+        file_format=file_format,
+        config=config,
+        )
+        all_metrics[layout_name] = metrics
+        # except Exception as e:
+        #     print(f"Error running benchmark on layout {layout_folder}: {e}")
+        #     continue
         
     
     return all_metrics
