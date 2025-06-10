@@ -212,3 +212,52 @@ Yes, use the `n_max_scenarii_per_layout` or `n_max_layouts` parameters, or direc
 You can log the computed solution for routing / placement by wraping your strategy in a logger using `wrap_log_sensor_strategy` and `wrap_log_drone_strategy`.
 
 Write a first version of the documentation in the readme file. Be as thorough as possible. Then Ask as many questions as necessary to be sure that you understand every single detail of the library
+
+
+. Strategy Implementation:
+- For the next_actions method in DroneRoutingStrategy, what should the return format be? Is it a list of tuples (action_type, coordinates)?
+Yes, a list of tuples (action_type, coordinates). action is in 'fly', 'move', and 'charge'.
+
+- For the get_locations method in SensorPlacementStrategy, what should the return format be? Is it two lists of (x,y) coordinates?
+Yes, two lists of (x,y) coordinates, one for sensors and one for charging stations.
+
+2. Benchmarking Parameters:
+- What are the required parameters for custom_initialization_parameters?
+None, these are free to use if you want to add parameters to your custom strategies. custom_initialization_parameters are given once at the creation of the strategy object.
+
+- What are the required parameters for custom_step_parameters?
+None, these are free to use if you want to add parameters to your custom strategies. custom_step_parameters are given at each step to the next_actions function.
+
+
+3. Visualization Details:
+- What's the format of the drone_locations_history parameter?
+You can get this history by turning `return_history=True` in the function `run_benchmark_scenario`
+
+4. Error Handling:
+- What happens if a strategy returns invalid actions?
+It will be flagged by the benchmarking functions
+
+- Are there any validation checks for sensor placement?
+No
+
+- How are errors logged during benchmarking?
+raised as exceptions
+
+6. Integration Details:
+- What's the exact format of the weather data files?
+as in the sim2real dataset
+
+- How are the weather conditions used in the strategies?
+Not used in our current strategies. They can be given as input to a ML burn map model.
+
+9. Dataset Management:
+- How can users add their own scenarios to the dataset?
+They can use any data that has the same format as sim2real.
+
+10. Documentation:
+- Are there any additional resources (papers, tutorials) that users should reference?
+See our paper 'WFDroneBench: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection'.
+
+Thank you for the additional details. Let me update the README to include this information and make it more precise:
+ 
+.

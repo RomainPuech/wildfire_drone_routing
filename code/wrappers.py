@@ -29,6 +29,7 @@ def wrap_log_sensor_strategy(input_strat_cls):
                     Expected keys:
                         - log_file: Path to the log file
                         - burnmap_filename: Path to the burn map used by the Julia optimizer
+                        - recompute_logfile: If True, the log file will be recomputed
             """
 
             n_ground = automatic_initialization_parameters.get("n_ground_stations", 0)
@@ -47,7 +48,7 @@ def wrap_log_sensor_strategy(input_strat_cls):
             self.ground_sensor_locations = []
             self.charging_station_locations = []
 
-            if os.path.exists(log_path):
+            if os.path.exists(log_path) and not custom_initialization_parameters.get("recompute_logfile", False):
                 # print(f"[wrap_log_strategy] Loading placement from: {log_path}")
                 with open(log_path, "r") as log_file:
                     data = json.load(log_file)
