@@ -41,7 +41,7 @@ def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, 
             strategy_name = input_strat_cls.__name__
 
             # Save logs next to burnmap in "logs" directory
-            log_id = str(log_id)
+            log_id_str = str(log_id)
             if scenario_level_log:
                 log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs", "scenario_level")
             else:
@@ -49,9 +49,9 @@ def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, 
             os.makedirs(log_dir, exist_ok=True)
 
             if scenario_level_log:
-                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters["scenario_name"]}_{custom_initialization_parameters["burnmap_filename"]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id}.json")
+                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters['scenario_name']}_{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
             else:
-                log_path = os.path.join(log_dir, f"{custom_initialization_parameters["burnmap_filename"]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id}.json")
+                log_path = os.path.join(log_dir, f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
 
 
             self.ground_sensor_locations = []
@@ -163,7 +163,7 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
             # Build full filename
             if scenario_level_log:
                 log_name = f"{automatic_initialization_parameters['scenario_name']}_" + \
-                        f"{custom_initialization_parameters['burnmap_filename']}_" + \
+                        f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_" + \
                         f"{input_drone_cls.strategy_name}_" + \
                         f"{automatic_initialization_parameters['n_drones']}_drones_" + \
                         f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \
@@ -175,7 +175,7 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
                         f"{log_id_str}" + \
                         "logged_drone_routing.json"
             else:
-                log_name = f"{custom_initialization_parameters['burnmap_filename']}_" + \
+                log_name = f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_" + \
                         f"{input_drone_cls.strategy_name}_" + \
                         f"{automatic_initialization_parameters['n_drones']}_drones_" + \
                         f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \

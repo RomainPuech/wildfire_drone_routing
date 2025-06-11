@@ -75,9 +75,9 @@ def run_all_drone_strategies(sensor_strategy):
 
 
     run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, "KR")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, "KMC")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformMaxCoverageResetStatic)), custom_initialization_parameters_function, "KU")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
+    #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, "KMC")
+    #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformMaxCoverageResetStatic)), custom_initialization_parameters_function, "KU")
+    #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
     
     
 

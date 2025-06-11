@@ -498,7 +498,7 @@ def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSe
     combined_df = pd.concat(all_dfs, ignore_index=True)
     if nickname is None:
         nickname = strategy_name
-    combined_path = os.path.join(dataset_folder, "combined_benchmark_results"+experiment_name+nickname+".csv")
+    combined_path = os.path.join("results", "combined_benchmark_results"+experiment_name+nickname+".csv")
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 
