@@ -447,7 +447,7 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layou
         n_layout += 1
 
 
-def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic", nickname = None, experiment_name = ""):
+def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic", experiment_name = ""):
     """
     Combines all per-layout benchmark CSVs from Satellite_Images_Mask folders into one file.
     Preserves layout/scenario formatting (e.g., 0001, 00002).
@@ -471,34 +471,22 @@ def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSe
 
         layout_shortened_name = layout.split("_")[0]
 
-        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
+        csv_path = os.path.join(layout_path, f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
         if os.path.exists(csv_path):
             print(f"✔ Found: {csv_path}")
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
             all_dfs.append(df)
         else:
-            csv_path = os.path.join(layout_path, "Satellite_Image_Mask", f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
-            if os.path.exists(csv_path):
-                print(f"✔ Found: {csv_path}")
-                df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
-                all_dfs.append(df)
-            else:
-                csv_path = os.path.join(layout_path, "Satellite_lmage_Mask", f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
-                if os.path.exists(csv_path):
-                    print(f"✔ Found: {csv_path}")
-                    df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
-                    all_dfs.append(df)
-                else:
-                    print(f"⚠ No benchmark CSV found at: {csv_path}")
+            print(f"⚠ No benchmark CSV found at: {csv_path}")
 
     if not all_dfs:
         print("❌ No CSV files found. Nothing to combine.")
         return None
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    if nickname is None:
-        nickname = strategy_name
-    combined_path = os.path.join("results", "combined_benchmark_results"+experiment_name+nickname+".csv")
+    if experiment_name is None:
+        experiment_name = strategy_name
+    combined_path = os.path.join("results", "combined_benchmark_results"+experiment_name+".csv")
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 
@@ -542,7 +530,24 @@ def clean_layout_folders(root_folder):
 
         print(f"Cleaned: {layout_name}")
 
+def clean_logs_folder(root_folder):
+    """
+    Cleans the logs folder inside the root_folder by keeping only the files that are in the allowed list.
+    """
+    for layout_name in os.listdir(root_folder):
+        layout_path = os.path.join(root_folder, layout_name)
+        if not os.path.isdir(layout_path):
+            continue
+        logs_path = os.path.join(layout_path, "logs")
+        if not os.path.exists(logs_path):
+            continue
+        for file in os.listdir(logs_path):
+            #print(f"Removing: {os.path.join(logs_path, file)}")
+            os.remove(os.path.join(logs_path, file))
+        
+
 if __name__ == "__main__":
-    combine_all_benchmark_results("WideDataset/", suffix = "SensorPlacementOptimization_DroneRoutingMaxCoverageResetStaticGreedy")
+    clean_logs_folder("WideDataset/")
+    # combine_all_benchmark_results("WideDataset/", suffix = "SensorPlacementOptimization_DroneRoutingMaxCoverageResetStaticGreedy")
     #0058_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic
     #WideDataset/0058_03866/Satellite_Images_Mask/0058_03866_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic.csv

@@ -925,7 +925,8 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         map_explored.append(results["percentage_map_explored"])
         total_distances.append(results["total_distance_traveled"])
    
-    csv_output_path = os.path.join(input_dir, f"{layout_name}_benchmark_results{experiment_name}_{sensor_strategy_name}_{drone_strategy_name}.csv")
+    layout_dir ="/".join(input_dir.split('/')[:-2])
+    csv_output_path = os.path.join(layout_dir, f"{layout_name}_benchmark_results{experiment_name}_{sensor_strategy_name}_{drone_strategy_name}.csv")
     df = pd.DataFrame(per_scenario_results)
     df.to_csv(csv_output_path, index=False)
     print(f"Saved per-scenario results to {csv_output_path}")
@@ -1068,7 +1069,7 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
                 lines = f.readlines()
             failed_percentage = float(lines[-1].split(" ")[-1])
         if failed_percentage > 0.2:
-            print(f"Skipping layout {layout_folder} because it has more than 10% failed scenarios: {failed_percentage}")
+            print(f"Skipping layout {layout_folder} because it has more than 20% failed scenarios: {failed_percentage}")
             continue
         print("running benchmark")
         try:
