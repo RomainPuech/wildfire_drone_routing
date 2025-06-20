@@ -6,6 +6,7 @@ from PIL import Image
 import re
 import geopandas as gpd
 from datetime import datetime
+
 def find_earliest_latest_dates(layout_path):
     """
     Find the earliest and latest dates in a layout folder.
