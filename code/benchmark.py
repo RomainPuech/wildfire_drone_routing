@@ -995,11 +995,13 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     canonical_scenario = None
     canonical_offset = 0
     canonical_scenario_name = ""
-    print("finding the longest scenario")
+    print(f"finding the longest scenario in {input_dir}")
     for file in iterable:
-        scenario_name = file.split('/')[-1]
+        scenario_name = file.split('/')[-1].split('.')[0]
+        print(f"checking scenario {scenario_name}")
         scenario = load_scenario_fn(file)
         offset = config.get(f"offset_{scenario_name}", 0)
+        print(f"scenario {scenario_name} has length {scenario.shape[0]} + offset {offset} = {scenario.shape[0] + offset}")
         if scenario.shape[0] + offset > max_scenario_plus_offset_length:
             max_scenario_plus_offset_length = scenario.shape[0] + offset
             canonical_scenario = scenario

@@ -265,13 +265,14 @@ def jpg_scenario_to_npy(jpg_folder_name, npy_folder_name = None, npy_filename = 
     scenario = load_scenario_jpg(jpg_folder_name)
     save_scenario_npy(scenario, npy_folder_name + npy_filename + ".npy")
 
-def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False, n_max_layouts = None):
+def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False, n_max_layouts = None, mismatch_threshold = None):
     """
     Convert all JPG scenarios in the sim2real dataset to NPY files for faster processing.
     Args:
         dataset_folder_name (str): Path to the dataset folder
         npy_folder_name (str): Path to the folder to save the NPY files
         n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
+        mismatch_threshold (float): Threshold for percentage of historical fires that could not be martched with the dataset's scenarios. If the percentage is higher than the threshold, the layout is not converted.
     """
     print(f"Converting JPG scenarios to NPY for {dataset_folder_name}")
     if npy_folder_name is None:
@@ -286,12 +287,29 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
         print(layout_folder)
         if n_max_layouts is not None and n_layout >= n_max_layouts:
             break
+
+        if mismatch_threshold is not None:
+            # check the percentage of failed matches
+            if not os.path.exists(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt")):
+                print(f"Skipping folder: {layout_folder} because it does not contain selected_scenarios.txt")
+                continue
+            with open(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt"), "r") as f:
+                lines = f.readlines()
+                failed_percentage = float(lines[-1].split(" ")[-1])
+                if failed_percentage > mismatch_threshold:
+                    print(f"Skipping folder: {layout_folder} because it has a mismatch percentage of {failed_percentage}")
+                    continue
+            
         n_layout += 1
         if verbose: print(f"Converting JPG scenarios to NPY for {dataset_folder_name + layout_folder}")
-        if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
+        #if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/") :os.makedirs(dataset_folder_name + layout_folder + "/scenarii/", exist_ok=True)
         for scenario_folder in tqdm.tqdm(listdir_limited(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/", n_max_scenarii_per_layout)):
+            # has this scenario already been converted?
+            if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/" + scenario_folder.strip("/") + ".npy"):
+                print(f"Scenario {scenario_folder} already converted")
+                continue
             try:
                 jpg_scenario_to_npy(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder, npy_folder_name + layout_folder + "/scenarii/", scenario_folder.strip("/"))
             except Exception as e:
@@ -406,18 +424,18 @@ def load_burn_map(filename, extension = ".npy"):
 #         burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
 #         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
 #         n_layout += 1
-def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None):
+def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None, mismatch_threshold = None):
     """
     Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
     Args:
         dataset_folder_name (str): Path to the dataset folder
         n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
     """
-    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts)
+    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold)
     print("Computing burn maps...")
-    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
+    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold)
 
-def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = None, extension = ".npy", noncumulative = False, config=None):
+def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = None, extension = ".npy", noncumulative = False, config=None, mismatch_threshold = None):
     """
     Compute the burn maps for all scenarios in the sim2real dataset.
     Args:
@@ -438,6 +456,16 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layou
             extension_folder = "/Satellite_Image_Mask/"
         if extension != ".npy" and not os.path.exists(dataset_folder_name + layout_folder + extension_folder):
             continue
+        if mismatch_threshold is not None:
+            if not os.path.exists(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt")):
+                print(f"Skipping folder: {layout_folder} because it does not contain selected_scenarios.txt")
+                continue
+            with open(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt"), "r") as f:
+                lines = f.readlines()
+                failed_percentage = float(lines[-1].split(" ")[-1])
+                if failed_percentage > mismatch_threshold:
+                    print(f"Skipping folder: {layout_folder} because it has a mismatch percentage of {failed_percentage}")
+                    continue
         try:
             bm = compute_burn_map(dataset_folder_name + layout_folder + extension_folder, extension, noncumulative, config=config)
             ns = "_noncumulative" if noncumulative else ""
