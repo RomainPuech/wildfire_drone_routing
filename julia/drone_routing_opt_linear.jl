@@ -9,12 +9,13 @@ include("helper_functions.jl")
 # Index-based implementation for model reuse
 # -----------------------------------------
 
-struct IndexRoutingModel
+if !isdefined(Main, :IndexRoutingModel)
+  struct IndexRoutingModel
     model::Model
     a::Array{VariableRef, 3}
     c::Array{VariableRef, 3}
     b::Array{VariableRef, 2}
-    theta::Array{VariableRef, 2}
+    θ::Array{VariableRef, 2}
     init_constraints::Vector{ConstraintRef}
     next_move_constraints::Vector{ConstraintRef}
     GridpointsDrones::Vector{Tuple{Int,Int}}
@@ -25,6 +26,7 @@ struct IndexRoutingModel
     grid_to_idx::Dict{Tuple{Int,Int}, Int}
     charging_map::Dict{Int, Int}
     max_battery_time::Int
+  end
 end
 
 function create_index_routing_model_linear(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time, objective_type="max_coverage") #min_cumulative_prob 
