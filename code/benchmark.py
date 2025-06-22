@@ -241,12 +241,12 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
     rescaled_max_battery_time = automatic_initialization_parameters["max_battery_time"] * operational_substeps
-    print("loading and preparing burnmap")
+    # print("loading and preparing burnmap")
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
     rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
     # duplicate the burn map for the operationnal time scale: each grid is duplicated operational_substeps times
     rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
-    print("saving the pooled burnmap")
+    # print("saving the pooled burnmap")
     #save the pooled burnmap
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
@@ -261,7 +261,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_custom_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
 
     # 2. Get ground sensor locations and convert them back to the original size
-    print("getting sensor locations")
+    # print("getting sensor locations")
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
 
     ground_sensor_locations_data_scale = [(x*coverage_width_cells+coverage_width_cells//2, y*coverage_width_cells+coverage_width_cells//2) for x,y in ground_sensor_locations_opt_scale]
@@ -276,9 +276,9 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_automatic_initialization_parameters["charging_stations_locations"] = charging_stations_locations_opt_scale
     
     # 3. Initialize drones
-    print("initializing drones")
+    # print("initializing drones")
     Routing_Strat = drone_routing_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters)
-    print("getting initial drone locations")
+    # print("getting initial drone locations")
     initial_drone_locations_and_state_opt_scale = Routing_Strat.get_initial_drone_locations()
     drones = [Drone(x*coverage_width_cells+coverage_width_cells//2,y*coverage_width_cells+coverage_width_cells//2,state,charging_stations_locations_data_scale,automatic_initialization_parameters["N"],automatic_initialization_parameters["M"], automatic_initialization_parameters["max_battery_distance"], automatic_initialization_parameters["max_battery_time"],automatic_initialization_parameters["max_battery_distance"]-1*(state=='fly'), automatic_initialization_parameters["max_battery_time"]-1*(state=='fly')) for (state,(x,y)) in initial_drone_locations_and_state_opt_scale]
     
@@ -583,8 +583,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rescaled_burnmap = pool_burnmap_mean(rescaled_burnmap, coverage_width_cells)
     rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
     #rescaled_burnmap = rescaled_burnmap.astype(np.float32)
-
-    rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_substeps_{operational_substeps}.npy")
+    rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
 
     rescaled_automatic_initialization_parameters = automatic_initialization_parameters.copy()
@@ -693,6 +692,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
                 "t": t_found
             }
             start_time = time.time()
+            # print(f"substep {substep}, time_step {time_step}")
             actions_opt_scale = Routing_Strat.next_actions(automatic_step_parameters_opt_scale, custom_step_parameters)
             new_position_opt_scale = [] # THIS IS TEMPORARY! WE NEED TO PROPERLY RESCALE BACK FROM DRONE.ROUTE BUT FOR THE INTEREST OF TIME WE FEED BACK THE OUTPUT /!\ TODO
             for drone_index, action in enumerate(actions_opt_scale):
@@ -868,6 +868,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     for file in tqdm.tqdm(iterable, total = N_SCENARII):
         scenario_name = file.split('/')[-1]
         starting_time = config.get(f"offset_{scenario_name}", 0)
+        # print(f"Starting time: {starting_time}, file: {scenario_name}")
         #print(f"Starting time: {starting_time}, file: {scenario_name}")
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
@@ -929,7 +930,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
     csv_output_path = os.path.join(layout_dir, f"{layout_name}_benchmark_results{experiment_name}_{sensor_strategy_name}_{drone_strategy_name}.csv")
     df = pd.DataFrame(per_scenario_results)
     df.to_csv(csv_output_path, index=False)
-    print(f"Saved per-scenario results to {csv_output_path}")
+    # print(f"Saved per-scenario results to {csv_output_path}")
     
     # Calculate metrics
     avg_time_to_detection = delta_ts / max(1, (N_SCENARII - fails))
@@ -995,13 +996,13 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
     canonical_scenario = None
     canonical_offset = 0
     canonical_scenario_name = ""
-    print(f"finding the longest scenario in {input_dir}")
+    # print(f"finding the longest scenario in {input_dir}")
     for file in iterable:
         scenario_name = file.split('/')[-1].split('.')[0]
-        print(f"checking scenario {scenario_name}")
+        # print(f"checking scenario {scenario_name}")
         scenario = load_scenario_fn(file)
         offset = config.get(f"offset_{scenario_name}", 0)
-        print(f"scenario {scenario_name} has length {scenario.shape[0]} + offset {offset} = {scenario.shape[0] + offset}")
+        # print(f"scenario {scenario_name} has length {scenario.shape[0]} + offset {offset} = {scenario.shape[0] + offset}")
         if scenario.shape[0] + offset > max_scenario_plus_offset_length:
             max_scenario_plus_offset_length = scenario.shape[0] + offset
             canonical_scenario = scenario
@@ -1011,7 +1012,7 @@ def run_benchmark_scenarii_sequential_precompute(input_dir, sensor_placement_str
         print(f"No scenario found in {input_dir}")
         return {}
     # find the biggest offset in config
-    print(f"Canonical offset: {canonical_offset}")
+    # print(f"Canonical offset: {canonical_offset}")
     print("precomputing")
     
     precomputing_time = run_drone_routing_strategy(drone_routing_strategy, sensor_placement_strategy, max_scenario_plus_offset_length, canonical_scenario, get_automatic_layout_parameters, custom_initialization_parameters_function, custom_step_parameters_function, input_dir, simulation_parameters, file_format, starting_time = canonical_offset, scenario_name=canonical_scenario_name)
@@ -1074,24 +1075,24 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
             print(f"Skipping layout {layout_folder} because it has more than 20% failed scenarios: {failed_percentage}")
             continue
         print("running benchmark")
-        try:
-            metrics = run_benchmark_scenarii_sequential_precompute(
-                layout_folder + scenarios_folder,
-                ground_placement_strategy, 
-                drone_routing_strategy, 
-                custom_initialization_parameters_function, 
-                custom_step_parameters_function, 
-            starting_time=starting_time, 
-            max_n_scenarii=max_n_scenarii,
-            simulation_parameters=simulation_parameters,
-            file_format=file_format,
-            config=config,
-            experiment_name=experiment_name,
-            )
-            all_metrics[layout_name] = metrics
-        except Exception as e:
-            print(f"Error running benchmark on layout {layout_folder}: {e}")
-            continue
+        # try:
+        metrics = run_benchmark_scenarii_sequential_precompute(
+            layout_folder + scenarios_folder,
+            ground_placement_strategy, 
+            drone_routing_strategy, 
+            custom_initialization_parameters_function, 
+            custom_step_parameters_function, 
+        starting_time=starting_time, 
+        max_n_scenarii=max_n_scenarii,
+        simulation_parameters=simulation_parameters,
+        file_format=file_format,
+        config=config,
+        experiment_name=experiment_name,
+        )
+        all_metrics[layout_name] = metrics
+        # except Exception as e:
+        #     print(f"Error running benchmark on layout {layout_folder}: {e}")
+        #     continue
         
     
     return all_metrics

@@ -14,7 +14,7 @@ if module_path not in sys.path:
 from dataset import preprocess_sim2real_dataset, load_scenario_npy, compute_and_save_burn_maps_sim2real_dataset, load_scenario, combine_all_benchmark_results
 from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
 from new_clustering import get_wrapped_clustering_strategy
-from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingUniformMaxCoverageResetStatic, FixedPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingMaxCoverageResetStatic, DroneRoutingMaxCoverageResetStaticGreedy
+from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageGrowingStatic, DroneRoutingMaxCoverageGrowingStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, DroneRoutingUniformCoverageResetStatic
 from benchmark import run_benchmark_scenario,run_benchmark_scenarii_sequential, get_burnmap_parameters,run_benchmark_scenarii_sequential_precompute, benchmark_on_sim2real_dataset_precompute
 from displays import create_scenario_video
 
@@ -55,7 +55,7 @@ def run_one_drone_strategy(sensor_strategy, drone_strategy, custom_initializatio
     print(f"-- Starting {experiment_name} --")
 
     time_start = time.time()
-    benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=None, max_n_layouts=None, simulation_parameters = simulation_parameters, file_format="jpg", config_file="config_s2r.json", experiment_name = experiment_name)
+    benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=None, max_n_layouts=None, simulation_parameters = simulation_parameters, file_format="npy", config_file="config_s2r.json", experiment_name = experiment_name)
     print(f"Time taken to run benchmark {experiment_name}: {time.time() - time_start} seconds")
     combine_all_benchmark_results("WideDataset/", strategy_name = strategy_name, experiment_name = experiment_name)   
     
@@ -80,8 +80,8 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
 
 
     run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}MC{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformMaxCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}U{bm_prefix}")
+    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}MCg{bm_prefix}")
+    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}Ug{bm_prefix}")
     # run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
     
     

@@ -10,9 +10,9 @@ module load julia
 module load mpi/openmpi-5.0.5
 module load gurobi
 
-# LLsub runRbm.sh
+LLsub runRbm.sh
 LLsub runRbp.sh
 LLsub runRwhp.sh
-# LLsub runKbm.sh
+LLsub runKbm.sh
 LLsub runKbp.sh
 LLsub runKwhp.sh
