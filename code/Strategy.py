@@ -1510,7 +1510,7 @@ class DroneRoutingUniformCoverageResetStatic(DroneRoutingStrategy):
         self.current_burnmap = self.initial_burnmap.copy()
         
         # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
-        self.current_burnmap = np.ones((5000, self.initial_burnmap.shape[1], self.initial_burnmap.shape[2]))
+        self.current_burnmap = np.ones((6000, self.initial_burnmap.shape[1], self.initial_burnmap.shape[2]))
         self.len_burnmap = self.initial_burnmap.shape[0]
         self.current_burnmap_filename = "./tmp_burnmaps/tmp_burnmap_" + str(self.call_ID) + ".npy"
         # create the tmp_burnmaps folder if it doesn't exist
