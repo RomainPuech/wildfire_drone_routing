@@ -4,7 +4,6 @@ import os
 import tqdm
 import shutil
 import numpy as np
-import numpy as np
 import random
 import time
 import os
@@ -12,6 +11,7 @@ from PIL import Image
 import re
 import rasterio
 import pandas as pd
+import json
 
 def convert_tif_to_npy(input_folder, output_folder):
     """
@@ -357,6 +357,14 @@ def compute_burn_map(folder_name, extension = ".npy", noncumulative = False, con
             # Initialize arrays on first file
             if burn_map is None:
                 N, M = curr_N, curr_M
+                if config is not None:
+                    starting_time = config.get(f"offset_{filename.split('/')[-1].split('.')[0]}", 0)
+                    print(f"Starting time: {starting_time}, file: {filename.split('/')[-1].split('.')[0]}")
+                    if starting_time > 0:
+                        #print(f"Starting time: {starting_time}, file: {filename.split('/')[-1]}")
+                        # prepend empty grids to the scenario
+                        scenario = np.concatenate([np.zeros((starting_time, N, M)), scenario], axis=0)
+                T = scenario.shape[0]
                 burn_map = np.zeros((T, N, M))
                 counts = np.zeros(T, dtype=int)
             else:
@@ -365,7 +373,8 @@ def compute_burn_map(folder_name, extension = ".npy", noncumulative = False, con
                     raise ValueError(f"Inconsistent grid dimensions in {filename}")
 
                 if config is not None:
-                    starting_time = config.get(f"offset_{filename.split('/')[-1]}", 0)
+                    starting_time = config.get(f"offset_{filename.split('/')[-1].split('.')[0]}", 0)
+                    print(f"Starting time: {starting_time}, file: {filename.split('/')[-1].split('.')[0]}")
                     if starting_time > 0:
                         #print(f"Starting time: {starting_time}, file: {filename.split('/')[-1]}")
                         # prepend empty grids to the scenario
@@ -424,7 +433,7 @@ def load_burn_map(filename, extension = ".npy"):
 #         burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
 #         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
 #         n_layout += 1
-def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None, mismatch_threshold = None):
+def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None, mismatch_threshold = None, config_file = None):
     """
     Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
     Args:
@@ -433,7 +442,8 @@ def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout =
     """
     sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold)
     print("Computing burn maps...")
-    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold)
+    config = json.load(open(config_file)) if config_file is not None else None
+    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold, config = config)
 
 def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = None, extension = ".npy", noncumulative = False, config=None, mismatch_threshold = None):
     """

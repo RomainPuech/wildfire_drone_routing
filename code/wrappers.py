@@ -4,14 +4,14 @@ import tqdm
 import json
 
 ### For SensorPlacement Strategies
-def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, log_id=""):
+def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, log_id="", use_burnmap_in_log_filename: bool = True):
     """
     Wraps a SensorPlacementStrategy to log and reuse previous placements.
 
     Args:
         input_strat_cls (SensorPlacementStrategy): The input sensor placement strategy class.
         bool: scenario_level_log: If True, the log file will be saved at the scenario level, otherwise it will be saved at the layout level
-
+        bool: use_burnmap_in_log_filename: If True, the burnmap filename will be used in the log filename
     Returns:
         WrappedStrategy (SensorPlacementStrategy): A wrapped version that logs and reuses results.
     """
@@ -31,7 +31,7 @@ def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, 
                     Expected keys:
                         - log_file: Path to the log file
                         - burnmap_filename: Path to the burn map used by the Julia optimizer
-                        - recompute_logfile: If True, the log file will be recomputed
+                        - recompute_logfile_sensor: If True, the log file will be recomputed
             """
 
             n_ground = automatic_initialization_parameters.get("n_ground_stations", 0)
@@ -48,16 +48,17 @@ def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, 
                 log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
             os.makedirs(log_dir, exist_ok=True)
 
+            bm_string = custom_initialization_parameters['burnmap_filename'].split('/')[-1] + '_' if 'burnmap_filename' in custom_initialization_parameters and use_burnmap_in_log_filename else ""
             if scenario_level_log:
-                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters['scenario_name']}_{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
+                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters['scenario_name']}_{bm_string}{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
             else:
-                log_path = os.path.join(log_dir, f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
+                log_path = os.path.join(log_dir, f"{bm_string}{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
 
 
             self.ground_sensor_locations = []
             self.charging_station_locations = []
 
-            if os.path.exists(log_path) and not custom_initialization_parameters.get("recompute_logfile", False):
+            if os.path.exists(log_path) and not custom_initialization_parameters.get("recompute_logfile_sensor", False):
                 # print(f"[wrap_log_strategy] Loading placement from: {log_path}")
                 with open(log_path, "r") as log_file:
                     data = json.load(log_file)
@@ -193,7 +194,7 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
 
             # If user wants to force recomputation, we skip loading
             # Otherwise we try to load from self.log_file
-            if not custom_initialization_parameters.get("recompute_logfile", False):
+            if not custom_initialization_parameters.get("recompute_logfile_drone", False):
                 # print(f"\033[91m WE TRY TO LOAD FROM LOGFILE \033[0m")
                 if os.path.exists(self.log_file):
                     # print(f"[wrap_log_drone_strategy] ✅ Log found at {self.log_file}, loading from disk.")
@@ -204,8 +205,8 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
                     # print(f"[wrap_log_drone_strategy] Loaded {len(self.log_data.get('actions_history', []))} steps of actions.")
                 # else:
                     # print(f"[wrap_log_drone_strategy] 🚫 No log file found at {self.log_file}. Logging will be enabled.")
-            # else:
-                # print(f"[wrap_log_drone_strategy] 🔄 Forcing recomputation. Will overwrite {self.log_file}.")
+            else:
+                print(f"[wrap_log_drone_strategy] 🔄 Forcing recomputation. Will overwrite {self.log_file}.")
 
 
             # We'll keep a step counter for next_actions

@@ -1075,24 +1075,24 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
             print(f"Skipping layout {layout_folder} because it has more than 20% failed scenarios: {failed_percentage}")
             continue
         print("running benchmark")
-        try:
-            metrics = run_benchmark_scenarii_sequential_precompute(
-                layout_folder + scenarios_folder,
-                ground_placement_strategy, 
-                drone_routing_strategy, 
-                custom_initialization_parameters_function, 
-                custom_step_parameters_function, 
-            starting_time=starting_time, 
-            max_n_scenarii=max_n_scenarii,
-            simulation_parameters=simulation_parameters,
-            file_format=file_format,
-            config=config,
-            experiment_name=experiment_name,
-            )
-            all_metrics[layout_name] = metrics
-        except Exception as e:
-            print(f"Error running benchmark on layout {layout_folder}: {e}")
-            continue
+        #try:
+        metrics = run_benchmark_scenarii_sequential_precompute(
+            layout_folder + scenarios_folder,
+            ground_placement_strategy, 
+            drone_routing_strategy, 
+            custom_initialization_parameters_function, 
+            custom_step_parameters_function, 
+        starting_time=starting_time, 
+        max_n_scenarii=max_n_scenarii,
+        simulation_parameters=simulation_parameters,
+        file_format=file_format,
+        config=config,
+        experiment_name=experiment_name,
+        )
+        all_metrics[layout_name] = metrics
+        # except Exception as e:
+        #     print(f"Error running benchmark on layout {layout_folder}: {e}")
+        #     continue
         
     
     return all_metrics
