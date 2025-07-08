@@ -265,13 +265,14 @@ def jpg_scenario_to_npy(jpg_folder_name, npy_folder_name = None, npy_filename = 
     scenario = load_scenario_jpg(jpg_folder_name)
     save_scenario_npy(scenario, npy_folder_name + npy_filename + ".npy")
 
-def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False, n_max_layouts = None):
+def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = None, n_max_scenarii_per_layout = None, verbose = False, n_max_layouts = None, mismatch_threshold = None):
     """
     Convert all JPG scenarios in the sim2real dataset to NPY files for faster processing.
     Args:
         dataset_folder_name (str): Path to the dataset folder
         npy_folder_name (str): Path to the folder to save the NPY files
         n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
+        mismatch_threshold (float): Threshold for percentage of historical fires that could not be martched with the dataset's scenarios. If the percentage is higher than the threshold, the layout is not converted.
     """
     print(f"Converting JPG scenarios to NPY for {dataset_folder_name}")
     if npy_folder_name is None:
@@ -286,12 +287,29 @@ def sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, npy_folder_name = 
         print(layout_folder)
         if n_max_layouts is not None and n_layout >= n_max_layouts:
             break
+
+        if mismatch_threshold is not None:
+            # check the percentage of failed matches
+            if not os.path.exists(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt")):
+                print(f"Skipping folder: {layout_folder} because it does not contain selected_scenarios.txt")
+                continue
+            with open(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt"), "r") as f:
+                lines = f.readlines()
+                failed_percentage = float(lines[-1].split(" ")[-1])
+                if failed_percentage > mismatch_threshold:
+                    print(f"Skipping folder: {layout_folder} because it has a mismatch percentage of {failed_percentage}")
+                    continue
+            
         n_layout += 1
         if verbose: print(f"Converting JPG scenarios to NPY for {dataset_folder_name + layout_folder}")
-        if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
+        #if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/"):continue
         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/") :os.makedirs(dataset_folder_name + layout_folder + "/scenarii/", exist_ok=True)
         for scenario_folder in tqdm.tqdm(listdir_limited(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/", n_max_scenarii_per_layout)):
+            # has this scenario already been converted?
+            if os.path.exists(dataset_folder_name + layout_folder + "/scenarii/" + scenario_folder.strip("/") + ".npy"):
+                print(f"Scenario {scenario_folder} already converted")
+                continue
             try:
                 jpg_scenario_to_npy(dataset_folder_name + layout_folder + "/Satellite_Images_Mask/" + scenario_folder, npy_folder_name + layout_folder + "/scenarii/", scenario_folder.strip("/"))
             except Exception as e:
@@ -406,18 +424,18 @@ def load_burn_map(filename, extension = ".npy"):
 #         burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
 #         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
 #         n_layout += 1
-def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None):
+def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None, mismatch_threshold = None):
     """
     Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
     Args:
         dataset_folder_name (str): Path to the dataset folder
         n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
     """
-    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts)
+    sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold)
     print("Computing burn maps...")
-    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
+    compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts, mismatch_threshold = mismatch_threshold)
 
-def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = None, extension = ".npy", noncumulative = False, config=None):
+def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = None, extension = ".npy", noncumulative = False, config=None, mismatch_threshold = None):
     """
     Compute the burn maps for all scenarios in the sim2real dataset.
     Args:
@@ -438,6 +456,16 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layou
             extension_folder = "/Satellite_Image_Mask/"
         if extension != ".npy" and not os.path.exists(dataset_folder_name + layout_folder + extension_folder):
             continue
+        if mismatch_threshold is not None:
+            if not os.path.exists(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt")):
+                print(f"Skipping folder: {layout_folder} because it does not contain selected_scenarios.txt")
+                continue
+            with open(os.path.join("WideDataset/", layout_folder, "selected_scenarios.txt"), "r") as f:
+                lines = f.readlines()
+                failed_percentage = float(lines[-1].split(" ")[-1])
+                if failed_percentage > mismatch_threshold:
+                    print(f"Skipping folder: {layout_folder} because it has a mismatch percentage of {failed_percentage}")
+                    continue
         try:
             bm = compute_burn_map(dataset_folder_name + layout_folder + extension_folder, extension, noncumulative, config=config)
             ns = "_noncumulative" if noncumulative else ""
@@ -447,7 +475,7 @@ def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layou
         n_layout += 1
 
 
-def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic"):
+def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic", experiment_name = ""):
     """
     Combines all per-layout benchmark CSVs from Satellite_Images_Mask folders into one file.
     Preserves layout/scenario formatting (e.g., 0001, 00002).
@@ -467,36 +495,26 @@ def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "c
     for layout in os.listdir(dataset_folder):
         layout_path = os.path.join(dataset_folder, layout)
         if not os.path.isdir(layout_path):
-            continue
+            continue    
 
         layout_shortened_name = layout.split("_")[0]
 
-        csv_path = os.path.join(layout_path, "Satellite_Images_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
+        csv_path = os.path.join(layout_path, f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
         if os.path.exists(csv_path):
             print(f"✔ Found: {csv_path}")
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
             all_dfs.append(df)
         else:
-            csv_path = os.path.join(layout_path, "Satellite_Image_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
-            if os.path.exists(csv_path):
-                print(f"✔ Found: {csv_path}")
-                df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
-                all_dfs.append(df)
-            else:
-                csv_path = os.path.join(layout_path, "Satellite_lmage_Mask", f"{layout_shortened_name}_benchmark_results{suffix}.csv")
-                if os.path.exists(csv_path):
-                    print(f"✔ Found: {csv_path}")
-                    df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
-                    all_dfs.append(df)
-                else:
-                    print(f"⚠ No benchmark CSV found at: {csv_path}")
+            print(f"⚠ No benchmark CSV found at: {csv_path}")
 
     if not all_dfs:
         print("❌ No CSV files found. Nothing to combine.")
         return None
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    combined_path = os.path.join(dataset_folder, output_filename+suffix+".csv")
+    if experiment_name is None:
+        experiment_name = strategy_name
+    combined_path = os.path.join("results", "combined_benchmark_results"+experiment_name+".csv")
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 
@@ -540,7 +558,24 @@ def clean_layout_folders(root_folder):
 
         print(f"Cleaned: {layout_name}")
 
+def clean_logs_folder(root_folder):
+    """
+    Cleans the logs folder inside the root_folder by keeping only the files that are in the allowed list.
+    """
+    for layout_name in os.listdir(root_folder):
+        layout_path = os.path.join(root_folder, layout_name)
+        if not os.path.isdir(layout_path):
+            continue
+        logs_path = os.path.join(layout_path, "logs")
+        if not os.path.exists(logs_path):
+            continue
+        for file in os.listdir(logs_path):
+            #print(f"Removing: {os.path.join(logs_path, file)}")
+            os.remove(os.path.join(logs_path, file))
+        
+
 if __name__ == "__main__":
-    combine_all_benchmark_results("WideDataset/", suffix = "SensorPlacementOptimization_DroneRoutingMaxCoverageResetStaticGreedy")
+    clean_logs_folder("WideDataset/")
+    # combine_all_benchmark_results("WideDataset/", suffix = "SensorPlacementOptimization_DroneRoutingMaxCoverageResetStaticGreedy")
     #0058_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic
     #WideDataset/0058_03866/Satellite_Images_Mask/0058_03866_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic.csv

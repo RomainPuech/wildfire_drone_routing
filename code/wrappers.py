@@ -4,12 +4,13 @@ import tqdm
 import json
 
 ### For SensorPlacement Strategies
-def wrap_log_sensor_strategy(input_strat_cls):
+def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, log_id=""):
     """
     Wraps a SensorPlacementStrategy to log and reuse previous placements.
 
     Args:
         input_strat_cls (SensorPlacementStrategy): The input sensor placement strategy class.
+        bool: scenario_level_log: If True, the log file will be saved at the scenario level, otherwise it will be saved at the layout level
 
     Returns:
         WrappedStrategy (SensorPlacementStrategy): A wrapped version that logs and reuses results.
@@ -25,10 +26,12 @@ def wrap_log_sensor_strategy(input_strat_cls):
                         - n_ground_stations
                         - n_charging_stations
                         - N, M (grid size)
+                        - scenario_name: name of the scenario
                 custom_initialization_parameters: dict
                     Expected keys:
                         - log_file: Path to the log file
                         - burnmap_filename: Path to the burn map used by the Julia optimizer
+                        - recompute_logfile: If True, the log file will be recomputed
             """
 
             n_ground = automatic_initialization_parameters.get("n_ground_stations", 0)
@@ -38,16 +41,23 @@ def wrap_log_sensor_strategy(input_strat_cls):
             strategy_name = input_strat_cls.__name__
 
             # Save logs next to burnmap in "logs" directory
-            log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
+            log_id_str = str(log_id)
+            if scenario_level_log:
+                log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs", "scenario_level")
+            else:
+                log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
             os.makedirs(log_dir, exist_ok=True)
 
-            log_path = os.path.join(log_dir, f"{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge.json")
+            if scenario_level_log:
+                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters['scenario_name']}_{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
+            else:
+                log_path = os.path.join(log_dir, f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
 
-            
+
             self.ground_sensor_locations = []
             self.charging_station_locations = []
 
-            if os.path.exists(log_path):
+            if os.path.exists(log_path) and not custom_initialization_parameters.get("recompute_logfile", False):
                 # print(f"[wrap_log_strategy] Loading placement from: {log_path}")
                 with open(log_path, "r") as log_file:
                     data = json.load(log_file)
@@ -76,7 +86,7 @@ def wrap_log_sensor_strategy(input_strat_cls):
     return WrappedStrategy
 
 
-def wrap_log_drone_strategy(input_drone_cls):
+def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, log_id=""):
     """
     Wraps a DroneRoutingStrategy to add logging capabilities.
     
@@ -87,6 +97,8 @@ def wrap_log_drone_strategy(input_drone_cls):
     
     Args:
         input_drone_cls (class): A DroneRoutingStrategy class to wrap
+        scenario_level_log (bool): If True, the log file will be saved at the scenario level, otherwise it will be saved at the layout level
+        log_id (str): Additional identifier to append to the log filename
         
     Returns:
         class: A wrapped version of the input class that adds logging functionality
@@ -136,7 +148,12 @@ def wrap_log_drone_strategy(input_drone_cls):
                 self.log_file = custom_initialization_parameters["log_file"]
                 
             # Build log filename with cluster-specific fingerprint
-            log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
+            # Handle scenario_level_log similar to wrap_log_sensor_strategy
+            log_id_str = str(log_id)
+            if scenario_level_log:
+                log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs", "scenario_level")
+            else:
+                log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
             os.makedirs(log_dir, exist_ok=True)
 
             # Create a fingerprint string based on charging station layout
@@ -144,15 +161,31 @@ def wrap_log_drone_strategy(input_drone_cls):
             layout_fingerprint = "_".join([f"{x}-{y}" for x, y in sorted(charging_stations)])
 
             # Build full filename
-            log_name = f"{input_drone_cls.strategy_name}_" + \
-                    f"{automatic_initialization_parameters['n_drones']}_drones_" + \
-                    f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \
-                    f"{automatic_initialization_parameters['n_ground_stations']}_ground_stations_" + \
-                    layout_fingerprint + "_" + \
-                    (f"{custom_initialization_parameters['optimization_horizon']}_" if 'optimization_horizon' in custom_initialization_parameters else '') + "_" + \
-                    (f"{custom_initialization_parameters['reevaluation_step']}_" if 'reevaluation_step' in custom_initialization_parameters else '') + \
-                    (f"{custom_initialization_parameters['regularization_param']}_" if 'regularization_param' in custom_initialization_parameters else 'no_regularization') + \
-                    "logged_drone_routing.json"
+            if scenario_level_log:
+                log_name = f"{automatic_initialization_parameters['scenario_name']}_" + \
+                        f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_" + \
+                        f"{input_drone_cls.strategy_name}_" + \
+                        f"{automatic_initialization_parameters['n_drones']}_drones_" + \
+                        f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \
+                        f"{automatic_initialization_parameters['n_ground_stations']}_ground_stations_" + \
+                        layout_fingerprint + "_" + \
+                        (f"{custom_initialization_parameters['optimization_horizon']}_" if 'optimization_horizon' in custom_initialization_parameters else '') + "_" + \
+                        (f"{custom_initialization_parameters['reevaluation_step']}_" if 'reevaluation_step' in custom_initialization_parameters else '') + \
+                        (f"{custom_initialization_parameters['regularization_param']}_" if 'regularization_param' in custom_initialization_parameters else 'no_regularization') + \
+                        f"{log_id_str}" + \
+                        "logged_drone_routing.json"
+            else:
+                log_name = f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_" + \
+                        f"{input_drone_cls.strategy_name}_" + \
+                        f"{automatic_initialization_parameters['n_drones']}_drones_" + \
+                        f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \
+                        f"{automatic_initialization_parameters['n_ground_stations']}_ground_stations_" + \
+                        layout_fingerprint + "_" + \
+                        (f"{custom_initialization_parameters['optimization_horizon']}_" if 'optimization_horizon' in custom_initialization_parameters else '') + "_" + \
+                        (f"{custom_initialization_parameters['reevaluation_step']}_" if 'reevaluation_step' in custom_initialization_parameters else '') + \
+                        (f"{custom_initialization_parameters['regularization_param']}_" if 'regularization_param' in custom_initialization_parameters else 'no_regularization') + \
+                        f"{log_id_str}" + \
+                        "logged_drone_routing.json"
 
             self.log_file = os.path.join(log_dir, log_name)
 
@@ -201,7 +234,7 @@ def wrap_log_drone_strategy(input_drone_cls):
             # write to file
             self._save_log()
 
-            # return as original style: if user’s parent returns a 2-tuple, we do that. 
+            # return as original style: if user's parent returns a 2-tuple, we do that. 
             # or if it returns a single list, we do that. 
             # but you have the parent call's raw format, so let's be consistent.
             # print(f"[wrap_log_drone_strategy] ✏️ Logging initial drone positions to {self.log_file}")
