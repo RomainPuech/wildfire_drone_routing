@@ -5,7 +5,7 @@ using AxisArrays: AxisArray
 # Index-based implementation for model reuse
 # -----------------------------------------
 
-if !isdefined(Main, :IndexRoutingModel)
+if !isdefined(Main, :IndexRoutingModelLinear)
   struct IndexRoutingModelLinear
     model::Model
     a::Array{VariableRef, 3}

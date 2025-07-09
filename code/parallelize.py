@@ -4,13 +4,16 @@ import numpy as np
 import sys
 import time
 
-from benchmark import run_benchmark_scenarii_parallel
+from benchmark import run_benchmark_scenarii_parallel_precompute
 from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
-from Strategy import RandomSensorPlacementStrategy, DroneRoutingUniformMaxCoverageResetStatic
+from Strategy import RandomSensorPlacementStrategy, DroneRoutingMaxCoverageResetStatic
 from new_clustering import get_wrapped_clustering_strategy
 
 # Define paths and parameters
+
 input_dir = "./MinimalDataset/0001/scenarii"
+# input_dir = "/Users/josephye/Desktop/UROP/DroneBench/0019_01316"
+
 file_format = "npy"
 
 # Define simulation parameters
@@ -28,13 +31,14 @@ simulation_parameters = {
 
 # Define strategies
 sensor_strategy = wrap_log_sensor_strategy(RandomSensorPlacementStrategy)
-drone_strategy = wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformMaxCoverageResetStatic))
+drone_strategy = wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic))
 
 # Define custom initialization parameters
 def custom_initialization_parameters_function(input_dir: str):
     layout_dir = os.path.abspath(os.path.join(input_dir, ".."))
     return {
-        "burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy",
+        "burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/burn_map.npy", #minimal dataset
+        # "burnmap_filename": f"{layout_dir}/static_risk.npy",  # For the new dataset
         "reevaluation_step": 2,
         "optimization_horizon": 2,
         "regularization_param": 1,
@@ -42,14 +46,14 @@ def custom_initialization_parameters_function(input_dir: str):
 
 start_time = time.time()
 # Run benchmark across all layouts
-metrics = run_benchmark_scenarii_parallel(
+metrics = run_benchmark_scenarii_parallel_precompute(
     input_dir,
     sensor_strategy,
     drone_strategy,
     custom_initialization_parameters_function,
-    lambda: {},  # No custom step parameters
+    lambda: {},
     file_format=file_format,
-    simulation_parameters=simulation_parameters,
+    simulation_parameters=simulation_parameters
 )
 end_time = time.time()
 elapsed_time = end_time - start_time

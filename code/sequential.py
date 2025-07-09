@@ -3,9 +3,9 @@
 import os
 import time
 
-from benchmark import run_benchmark_scenarii_sequential
+from benchmark import run_benchmark_scenarii_sequential_precompute
 from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
-from Strategy import RandomSensorPlacementStrategy, DroneRoutingUniformMaxCoverageResetStatic
+from Strategy import RandomSensorPlacementStrategy, DroneRoutingUniformCoverageResetStatic
 from new_clustering import get_wrapped_clustering_strategy
 
 # --- Configuration --------------------------------------------------------
@@ -30,7 +30,7 @@ simulation_parameters = {
 # Wrap and select your strategies
 sensor_strategy = wrap_log_sensor_strategy(RandomSensorPlacementStrategy)
 drone_strategy = wrap_log_drone_strategy(
-    get_wrapped_clustering_strategy(DroneRoutingUniformMaxCoverageResetStatic)
+    get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)
 )
 
 # Custom initialization parameters (takes only input_dir; sequential runner will detect this)
@@ -53,15 +53,17 @@ config = {}
 if __name__ == "__main__":
     start = time.time()
 
-    metrics = run_benchmark_scenarii_sequential(
+    metrics = run_benchmark_scenarii_sequential_precompute(
         input_dir=input_dir,
         sensor_placement_strategy=sensor_strategy,
         drone_routing_strategy=drone_strategy,
         custom_initialization_parameters_function=custom_initialization_parameters_function,
         custom_step_parameters_function=custom_step_parameters_function,
-        # tweak any of these if needed:
+        starting_time=0,
+        max_n_scenarii=None,
         file_format=file_format,
         simulation_parameters=simulation_parameters,
+        config=config
     )
 
     elapsed = time.time() - start

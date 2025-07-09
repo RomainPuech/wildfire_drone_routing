@@ -1,0 +1,159 @@
+[SIM2REAL SEQUENTIAL] Aggregated Metrics per Layout:
+
+SIM2REAL sequential runtime: 2622.30 seconds
+
+Layout: 0004_01191
+  avg_time_to_detection: 0.66
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 34.0, 'undetected': 0.0}
+  avg_execution_time: nan
+  avg_fire_size: 1515.2941176470588
+  avg_fire_percentage: 0.47192192769848296
+  avg_map_explored: 0.07164932683341485
+  avg_distance: 9535.70588235294
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 17]
+  raw_fire_percentages: [list of length 17]
+  raw_map_explored: [list of length 17]
+  raw_distances: [list of length 17]
+
+Layout: 0016_03070
+  avg_time_to_detection: 5.34
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 100.0, 'undetected': 0.0}
+  avg_execution_time: nan
+  avg_fire_size: 203.2
+  avg_fire_percentage: 0.0634849223309464
+  avg_map_explored: 0.1029130581486897
+  avg_distance: 20526.66
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 50]
+  raw_fire_percentages: [list of length 50]
+  raw_map_explored: [list of length 50]
+  raw_distances: [list of length 50]
+
+Layout: 0019_01316
+  avg_time_to_detection: 0.18
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 6.0, 'undetected': 0.0}
+  avg_execution_time: nan
+  avg_fire_size: 241.33333333333334
+  avg_fire_percentage: 0.07382391568574669
+  avg_map_explored: 0.09034252665410437
+  avg_distance: 12133.0
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 3]
+  raw_fire_percentages: [list of length 3]
+  raw_map_explored: [list of length 3]
+  raw_distances: [list of length 3]
+
+Layout: 0023_00995
+  avg_time_to_detection: 7.96
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 48.0, 'undetected': 4.0}
+  avg_execution_time: nan
+  avg_fire_size: 6381.692307692308
+  avg_fire_percentage: 1.9404790641016283
+  avg_map_explored: 0.18030161839911527
+  avg_distance: 58761.07692307692
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 26]
+  raw_fire_percentages: [list of length 26]
+  raw_map_explored: [list of length 26]
+  raw_distances: [list of length 26]
+
+Layout: 0024_02655
+  avg_time_to_detection: 1.98
+  device_percentages: {'ground sensor': 6.0, 'charging station': 2.0, 'drone': 48.0, 'undetected': 2.0}
+  avg_execution_time: nan
+  avg_fire_size: 975.3103448275862
+  avg_fire_percentage: 0.32508719391616614
+  avg_map_explored: 0.05618109899102747
+  avg_distance: 12292.0
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 29]
+  raw_fire_percentages: [list of length 29]
+  raw_map_explored: [list of length 29]
+  raw_distances: [list of length 29]
+
+Layout: 0025_02019
+  avg_time_to_detection: 1.28
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 20.0, 'undetected': 0.0}
+  avg_execution_time: nan
+  avg_fire_size: 1077.2
+  avg_fire_percentage: 0.3738356677818343
+  avg_map_explored: 0.1288226883407138
+  avg_distance: 25919.4
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 10]
+  raw_fire_percentages: [list of length 10]
+  raw_map_explored: [list of length 10]
+  raw_distances: [list of length 10]
+
+Layout: 0037_01578
+  avg_time_to_detection: 14.84
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 54.0, 'undetected': 10.0}
+  avg_execution_time: nan
+  avg_fire_size: 2077.0625
+  avg_fire_percentage: 0.5613014938764039
+  avg_map_explored: 0.12734972057376961
+  avg_distance: 84510.9375
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 32]
+  raw_fire_percentages: [list of length 32]
+  raw_map_explored: [list of length 32]
+  raw_distances: [list of length 32]
+
+Layout: 0041_02386
+  avg_time_to_detection: 23.62
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 88.0, 'undetected': 12.0}
+  avg_execution_time: nan
+  avg_fire_size: 896.32
+  avg_fire_percentage: 0.26799259695566247
+  avg_map_explored: 0.14216476258532487
+  avg_distance: 82047.06
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 50]
+  raw_fire_percentages: [list of length 50]
+  raw_map_explored: [list of length 50]
+  raw_distances: [list of length 50]
+
+Layout: 0069_03539
+  avg_time_to_detection: 35.54
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 74.0, 'undetected': 26.0}
+  avg_execution_time: nan
+  avg_fire_size: 6822.02
+  avg_fire_percentage: 1.0517875093276103
+  avg_map_explored: 0.14778326642121947
+  avg_distance: 161618.46
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 50]
+  raw_fire_percentages: [list of length 50]
+  raw_map_explored: [list of length 50]
+  raw_distances: [list of length 50]
+
+Layout: 0068_04211
+  avg_time_to_detection: 31.04
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 66.0, 'undetected': 34.0}
+  avg_execution_time: nan
+  avg_fire_size: 1433.24
+  avg_fire_percentage: 0.18571298995788793
+  avg_map_explored: 0.07490249433106576
+  avg_distance: 92695.8
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 50]
+  raw_fire_percentages: [list of length 50]
+  raw_map_explored: [list of length 50]
+  raw_distances: [list of length 50]
+
+Layout: 0058_03866
+  avg_time_to_detection: 35.36
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 60.0, 'undetected': 40.0}
+  avg_execution_time: nan
+  avg_fire_size: 19411.46
+  avg_fire_percentage: 1.6614621136385426
+  avg_map_explored: 0.06275763136631926
+  avg_distance: 136003.8
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 50]
+  raw_fire_percentages: [list of length 50]
+  raw_map_explored: [list of length 50]
+  raw_distances: [list of length 50]
+
+Layout: 0089_00984

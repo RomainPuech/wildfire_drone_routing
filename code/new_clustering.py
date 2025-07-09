@@ -238,6 +238,3 @@ def get_wrapped_clustering_strategy(BaseStrategy):
 
     return ClusteredDroneStrategyWrapped
 
-
-if __name__ == "__main__":
-    pass

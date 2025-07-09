@@ -1,0 +1,29 @@
+[SIM2REAL PARALLEL] Aggregated Metrics per Layout:
+
+Layout: 0004_01191
+  avg_time_to_detection: 0.44
+  device_percentages: {'ground sensor': 2.0, 'charging station': 0.0, 'drone': 32.0, 'undetected': 0.0}
+  avg_execution_time: nan
+  avg_fire_size: 1082.6470588235295
+  avg_fire_percentage: 0.3371786909662492
+  avg_map_explored: 0.07503851769615628
+  avg_distance: 8138.941176470588
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 17]
+  raw_fire_percentages: [list of length 17]
+  raw_map_explored: [list of length 17]
+  raw_distances: [list of length 17]
+
+Layout: 0016_03070
+  avg_time_to_detection: 4.48
+  device_percentages: {'ground sensor': 0.0, 'charging station': 0.0, 'drone': 100.0, 'undetected': 0.0}
+  avg_execution_time: nan
+  avg_fire_size: 350.08
+  avg_fire_percentage: 0.10937402366937853
+  avg_map_explored: 0.11207338257163924
+  avg_distance: 20294.28
+  raw_execution_times: [list of length 0]
+  raw_fire_sizes: [list of length 50]
+  raw_fire_percentages: [list of length 50]
+  raw_map_explored: [list of length 50]
+  raw_distances: [list of length 50]
