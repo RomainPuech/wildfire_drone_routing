@@ -402,7 +402,6 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
     optimize!(model)
 
 
-    while iteration <= 15
         while true
             opt_val = objective_value(model)
             if opt_val < UB
@@ -502,8 +501,9 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
                             continue  # avoid error on empty set
                         end
                         delta_plus = [(u, v) for u in S for v in outside_S if c[(u,v)] < L]
+                        delta_min = [(u,v) for u in outside_S, v in S if c[(u,v)] <L]
                         if !isempty(delta_plus)
-                                @constraint(model, sum(x[u, v, s] for (u, v) in delta_plus) >= 2 * sum(y[i, s] for i in S))
+                                @constraint(model, [i in S], sum(x[u, v, s] for (u, v) in delta_plus) >= y[i, s])
                             # for i in S
                             # # for i in setdiff(outside_S,121:122)
                             # #     @assert isa(i, Int) "i is not an integer: got i = $i of type $(typeof(i))"
@@ -516,6 +516,9 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
                             #     end
                             # end                        
                         end
+                        if !isempty(delta_min)
+                            @constraint(model, [i in S], sum(x[u, v, s] for (u, v) in delta_plus) >= y[i, s])
+                        end
                     end
                 end
 
@@ -523,7 +526,6 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
                 iteration += 1
             end
         end
-    end
 end
 
 routes, UB, x, y = CPA(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
