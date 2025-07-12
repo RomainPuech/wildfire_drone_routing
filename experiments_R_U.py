@@ -11,7 +11,7 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 from dataset import preprocess_sim2real_dataset, load_scenario_npy, compute_and_save_burn_maps_sim2real_dataset, load_scenario
 from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
-from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, SensorPlacementOptimization, RandomSensorPlacementStrategy, LoggedOptimizationSensorPlacementStrategy,DroneRoutingOptimizationSlow, DroneRoutingOptimizationModelReuse, DroneRoutingOptimizationModelReuseIndex, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingUniformMaxCoverageResetStatic, FixedPlacementStrategy
+from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, SensorPlacementOptimization, RandomSensorPlacementStrategy, LoggedOptimizationSensorPlacementStrategy, DroneRoutingOptimizationModelReuseIndex, LoggedDroneRoutingStrategy, LogWrapperDrone, LogWrapperSensor, DroneRoutingUniformMaxCoverageResetStatic, FixedPlacementStrategy
 from benchmark import run_benchmark_scenario,run_benchmark_scenarii_sequential, get_burnmap_parameters,run_benchmark_scenarii_sequential_precompute, benchmark_on_sim2real_dataset_precompute
 from displays import create_scenario_video
 from new_clustering import get_wrapped_clustering_strategy
@@ -45,7 +45,7 @@ custom_initialization_parameters = {
 
 layout_folder = "WideDataset/"
 sensor_strategy = wrap_log_sensor_strategy(RandomSensorPlacementStrategy)
-drone_strategy =  wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingUniformMaxCoverageResetStatic))#DroneRoutingRegularizedMaxCoverageResetStatic#wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
+drone_strategy =  wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformMaxCoverageResetStatic))#DroneRoutingRegularizedMaxCoverageResetStatic#wrap_log_drone_strategy(get_wrapped_strategy(DroneRoutingLinearMinTime))
 
 def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
     simulation_parameters["N"] = scenario.shape[1]
@@ -55,13 +55,20 @@ def my_automatic_layout_parameters(scenario:np.ndarray,b,c):
 def return_no_custom_parameters():
     return {}
 
-def custom_initialization_parameters_function(input_dir:str):
+def custom_initialization_parameters_function2(input_dir:str):
     print(f"input_dir: {input_dir}")
     return {"burnmap_filename": f"{'/'.join(input_dir.strip('/').split('/')[:-1])}/static_risk.npy", "reevaluation_step": 5, "optimization_horizon":10, "regularization_param": 1}
 
+
+def custom_initialization_parameters_function(input_dir:str):
+    print(f"input_dir: {input_dir}")
+    return {"burnmap_filename": f"WideDataset/0244_03110/static_risk.npy", "reevaluation_step": 5, "optimization_horizon":10, "regularization_param": 1}
+
+
 dataset_folder_name = "WideDataset/"
 time_start = time.time()
-benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=None, max_n_layouts=None, simulation_parameters = simulation_parameters, file_format="jpg", config_file="config_s2r.json")
+run_benchmark_scenarii_sequential_precompute("WideDataset/0244_03110/Satellite_Image_Mask/", sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, file_format="jpg", simulation_parameters=simulation_parameters)
+#benchmark_on_sim2real_dataset_precompute(dataset_folder_name, sensor_strategy, drone_strategy, custom_initialization_parameters_function, return_no_custom_parameters, max_n_scenarii=1, max_n_layouts=None, simulation_parameters = simulation_parameters, file_format="jpg", config_file="config_s2r.json", skip_folder_names=["WideDataset/0069_03539", "WideDataset/0004_01191", "WideDataset/0058_03866", "WideDataset/0250_02864", "WideDataset/0244_03110"])
 print(f"Time taken to run benchmark on the scenario: {time.time() - time_start} seconds")
 
 # burn_map = load_scenario_npy("WideDataset/0004_01191/static_risk.npy")

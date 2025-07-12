@@ -1,13 +1,16 @@
 using NPZ
 
 
-function load_burn_map(filename)
+function load_burn_map(filename, static_map=false)
     
     try
         # Read the file
         #println("Loading burn map from $filename")
         burn_map = npzread(filename)
-        #println("Burn map loaded")
+        # if static map, duplicate the data to go from shape (1,N,M) to shape (100,N,M)
+        if static_map
+            burn_map = repeat(burn_map, outer=(100, 1, 1))
+        end
         return burn_map
     catch e
         error("Error loading burn map: $e")

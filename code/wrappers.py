@@ -78,13 +78,33 @@ def wrap_log_sensor_strategy(input_strat_cls):
 
 def wrap_log_drone_strategy(input_drone_cls):
     """
-    Wraps a DroneRoutingStrategy so that:
-      - get_initial_drone_locations() and next_actions() are logged to a JSON file
-      - if the file exists, we load from it (no re-optimization needed)
+    Wraps a DroneRoutingStrategy to add logging capabilities.
     
-    Specifically compatible with strategies that:
-      - either return a single list of (state,(x,y)) from get_initial_drone_locations()
-      - or return a 2-tuple (positions, states), e.g. ([ (x1,y1), ...], ["charge","fly",...])
+    This wrapper:
+    1. Logs all drone locations and actions to a JSON file
+    2. Loads from the log file if it exists (avoiding re-optimization)
+    3. Maintains compatibility with different strategy return formats
+    
+    Args:
+        input_drone_cls (class): A DroneRoutingStrategy class to wrap
+        
+    Returns:
+        class: A wrapped version of the input class that adds logging functionality
+        
+    Notes:
+        The wrapped class is compatible with strategies that return either:
+        - A single list of (state,(x,y)) from get_initial_drone_locations()
+        - A 2-tuple (positions, states) from get_initial_drone_locations()
+        
+        The log file format is:
+        {
+            "initial_drone_locations": [[(state,(x,y)), ...]],  # for each cluster
+            "actions_history": [
+                [(action_type, (x,y)), ...],  # step 0
+                [(action_type, (x,y)), ...],  # step 1
+                ...
+            ]
+        }
     """
 
     import json, os

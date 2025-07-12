@@ -1,0 +1,214 @@
+1:Dataset Structure:
+
+- What is the format of the "sim2real" dataset? I see it can handle both JPG and NPY formats, but what's the recommended format?
+The sim2real dataset comes in JPEG format (folder of jpeg images that each represent a time step of a wildfire propagation scenario, that we just call "scenario"). To speed up processing, one can convert these JPEG images into npy file. A single npy file represents a scenario, while a folder of JPEG images is needed to represent a scenario. npy files are heavier in terms of storage but they allow ~100x faster processing. It is a trade off between memory and speed. To convert the dataset from jpeg to npy, one can run the preprocessing function `preprocess_sim2real_dataset`.
+
+- What's the structure of a scenario file? Is it a sequence of images showing fire progression?
+The dataset is made of layouts (maps) that represent real places in the USA. For each layout, we have a number (btw 1 and 1000) of wildfire spread scenarios (we call them "scenario"). In terms of data, a layout is a folder containing a scenario folder, a satellite image of the layout, weather files, and other layout information such as its topography, elevation, slope, fuel type etc. These information come from the sim2real dataset. Each scenario is either an npy file or. folder of jpeg images. It is a spatiotemporal grid. It represents the evolution of a wildfire throughout time with each image being one time step.
+
+- What's the difference between a scenario and a burn map?
+A burn map is a map that represents the probability of a wildfire happening at any point of a layout in space and time. This is the INPUT we use to our routing and placement strategies. A scenario is a wildfire propagation scenario. It is the data we TEST our strategies on (by measuring how much time steps are required for our drones/ sensors to detect a fire).
+
+2. Drone and Sensor Configuration:
+- What are the key parameters for configuring drones (speed, battery life, coverage radius)?
+Drone Coverage radius (m), Transmission range (m), Bmax (h), speed (m/min)
+
+- What types of sensors are supported (ground stations, charging stations)?
+Ground sensor: detect fire within their coverage. Drones: moving sensors. Charging stations: sensors + they can recherge drones.
+
+- Are there any constraints on sensor placement?
+Give as input a set of possible grid point locations. Drones must start from a charging station.
+
+3. Strategy Implementation:
+- I see several strategy classes (RandomDroneRoutingStrategy, DroneRoutingOptimizationModelReuseIndex, etc.). What are the key differences between them?
+The base strategy class for sensors is `SensorPlacementStrategy` and the bse drone strategy is `DroneRoutingStrategy`. All subclasses are different drone routing and sensor placement algorithms. To test their own startegies, users must define a new strategy class inheriting from the relevant base class.
+
+- How does the optimization model work? I see references to Julia code - is this a required dependency?
+We support optimization models in Julia. In this case, the julia code is called from the python strategy class. Users of the library amy or may not use Julia to implement their own strategies.
+
+- What metrics are used to evaluate strategy performance?
+Average fire detection time, what device detected the fire in percentage (how many drones detected by sensors vs drone vs charging station vs undetected). Then secondary metrics to understand the behavior of the strategies like size of the fire when discovered, total distance traveled by the drones etc
+
+4. Visualization:
+- What visualization capabilities are available? I see create_scenario_video - what other visualization tools are there?
+One can visualize the path taken by drones during a scenario using the `create_scenario_video` function and giving as input a scenario and a drone history. Users can also plot the fire alone. It is also possible to visualize burn maps as a video.
+
+- What information can be displayed in the visualizations (drone paths, sensor locations, fire spread)?
+All of the above. Drones in black diamonds, sensors in green squares, charging stations in blue starts, fire in red squares.
+ 
+5. Benchmarking:
+- What metrics are collected during benchmarking?
+All the aforementioned startegy evaluation metrics
+
+- How are the results stored and analyzed?
+The results are stored in csv files by the `run_benchmark_scenarii_sequential` function. They can be further combined in a single pdf using the `combine_all_benchmark_results` function.
+
+6. Integration:
+- How does this library integrate with the Sim2Real-Fire dataset?
+One has to download our modified Sim2Real dataset at `https://huggingface.co/datasets/MasterYoda293/DroneBench/tree/main`  to run the benchmarking library. One can also use any dtaset that shares the same structure.
+
+- Are there any external dependencies beyond Python packages?
+Julia and all modules listed in requirements.txt
+
+- What's the relationship with the Julia code I see referenced?
+This code is called from Python. We support implementing strategies in Julia but they have to be called from Python.
+
+7. Performance:
+- What are the computational requirements for running benchmarks?
+Any modern laptop can be used
+
+- Are there any performance optimizations or parallel processing capabilities?
+We plan to implement parralelization in the future.
+
+- How does the library handle large datasets?
+It is compatible with lrge datasets. Use JPEG format for memory efficiency and npy format for speed (compute) efficiency.
+
+8. Usage Examples:
+- Could you provide a complete example of how to:
+Load and preprocess a dataset
+Configure and run a drone routing strategy
+Visualize the results
+Run benchmarks
+
+Cf `experiments_R_MC.py` to see how to benchmark a strategy on the whole dataset, and the commented code to see how to generate the visualization and benchmark on a single layout.
+ 
+9. Error Handling:
+- How does the library handle errors in sensor placement or drone routing?
+The library will report any illegal position of the drones or out of battery status. We also handle errors when benchmarking on the whole dataset.
+
+- What happens if a drone runs out of battery?
+It is declared dead and can't move nor detect fires anymore
+
+
+10. Future Development:
+- Are there any planned features or improvements?
+We plan to maintain the library and improve it with subsequent versions. We welcome feedback and collaboratio on this library. contact puech@mit.edu
+
+- What are the current limitations of the library?
+No parrallelization, Rectangular coverage areas (manhathan distance instead of euclidean)
+
+Continue to ask me questions until you are confident about every detail of the library
+
+
+
+1. Dataset Structure:
+- For the layout structure, could you confirm this hierarchy
+I confirm. One thing: every weather fil is associated with a scenario folder, and has the same name (except it is .txt)
+
+- For the burn map, is it a 3D array (time × height × width) where each value represents the probability of fire at that location and time?
+YES
+
+2. Drone and Sensor Configuration:
+For the drone parameters:
+- Is Bmax the maximum battery time in hours?
+YES
+
+- Is the coverage radius circular or rectangular (Manhattan distance)?
+Square
+
+- Can drones detect fires while charging?
+Charging stations detect fire and drones are charging on charging stations so the fire will be detected by the charging station.
+
+For sensors:
+- Do ground sensors and charging stations have the same coverage radius?
+YES. same for drones, stations and sensors
+
+- Can multiple drones charge at the same charging station simultaneously?
+YES. And charging takes 1 time step only
+
+3. Strategy Implementation:
+For the base strategy classes:
+- What methods must be implemented in SensorPlacementStrategy?
+cf the class definition and docstrings in `code/Strategy.py`. One is `get_locations`. 
+- What methods must be implemented in DroneRoutingStrategy?
+cf the class definition and docstrings in `code/Strategy.py`. methods include `get_initial_drone_locations` for initial drone allocation and `next_actions` for how to move the drones each time step.
+ 
+For the optimization model:
+- What optimization objectives are supported (e.g., minimize detection time, maximize coverage)?
+The point of this library is for users to implement and test their own startegies! If they want to try our sample ones, we implemented max coverage and some random and greedy baselines. Users can reuse our optimization model constraints for the drone mechanics logic. Cf our paper 'WFDroneBench: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection' for more details.
+
+- Is the Julia code open source and available?
+Everything is released under the same License.
+
+4. Benchmarking:
+For the CSV output:
+- What columns are included in the results?
+`sensor_strategy,drone_strategy,layout,scenario,delta_t,device,execution_time,fire_size_cells,fire_percentage,map_explored,total_distance`
+
+- Is there a way to compare results between different strategies?
+There are some metrics plots/visualizations in `displays.py`.
+
+For the combine_all_benchmark_results function:
+- What format is the output in?
+the output is a csv
+
+- What visualizations are included?
+None by default, you have to call the visualization functions seperatly
+
+5. Visualization:
+For create_scenario_video:
+- What video format is output (MP4, AVI, etc.)?
+MP4
+
+- Can the visualization be customized (colors, markers, etc.)?
+no
+
+- Are there any static visualization options (e.g., plots of metrics over time)?
+yes. cf the code
+
+6. Error Handling:
+For illegal drone positions:
+- What constitutes an illegal position?
+Outside of the grid, or do not start on a charging station
+
+- Is there a way to recover from illegal positions?
+No
+
+For battery management:
+- Is there a warning system before drones run out of battery?
+No
+
+- Can drones prioritize charging when battery is low?
+It's up to your routing strategy
+
+7. Performance:
+For the JPEG vs NPY trade-off:
+What's the typical size difference between formats?
+100x more space, 100x speedup for npy.
+
+- Is there a way to convert between formats without preprocessing the entire dataset?
+You can select how many layouts and how many scenario per layout you want to convert using the `n_max_scenarii_per_layout` and `n_max_layouts` parameters of `preprocess_sim2real_dataset`.
+
+
+8. Integration:
+For the Sim2Real dataset:
+- What modifications were made to the original dataset?
+
+We matched historical ignition points from the US fire data archive https://www.fs.usda.gov/rds/archive/ with sim2real ignition points, in order to get a realistic/historical ignition probability on top of the realistic spread pattern on sim2real.
+
+- Is there a way to use the original dataset with minimal modifications?
+Eveything is compatible with the original sim2real dataset. We only filtered it to get realistic ignition probabilities.
+
+For Julia integration:
+- What version of Julia is required?
+We used Julia version 1.11.2 using JuMP version 1.23.6  and solved with Gurobi version 12.0.0 but any recent version should work.
+
+- Are there any specific Julia packages needed?
+cf the packages downloaded at the top of the julia files.
+
+9. Usage:
+For strategy implementation:
+- Is there a template or example for implementing new strategies?
+Start from our example strategies in `code/Strategy.py`.
+
+- Are there any best practices for strategy development?
+Inherit from the relevant base class and implement all required methods. Cop past / get inspiration from the existing stratgies
+
+For benchmarking:
+- Can benchmarks be run on a subset of scenarios?
+Yes, use the `n_max_scenarii_per_layout` or `n_max_layouts` parameters, or direclty run the benchmarking on a single layout with `run_benchmark_scenarii_sequential` or a single scenario with `run_benchmark_scenario`. 
+
+- Is there a way to save intermediate results?
+You can log the computed solution for routing / placement by wraping your strategy in a logger using `wrap_log_sensor_strategy` and `wrap_log_drone_strategy`.
+
+Write a first version of the documentation in the readme file. Be as thorough as possible. Then Ask as many questions as necessary to be sure that you understand every single detail of the library

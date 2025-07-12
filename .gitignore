@@ -35,3 +35,7 @@ IP_Dataset/*
 ./ML_burn_map/ML/MLDatasets/*
 WData/*
 trash/*
+tmp*
+experiments.ipynb
+experiments_2.ipynb
+experiments.py

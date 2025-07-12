@@ -4,6 +4,27 @@ import pandas as pd
 from datetime import datetime
 from PIL import Image
 import re
+import geopandas as gpd
+from datetime import datetime
+def find_earliest_latest_dates(layout_path):
+    """
+    Find the earliest and latest dates in a layout folder.
+    """
+    earliest_date = None
+    latest_date = None
+    for filename in os.listdir(os.path.join(layout_path, "Weather_Data")):
+        if filename.endswith(".txt"):
+            first_line, last_line = read_first_and_last_lines(os.path.join(layout_path, "Weather_Data", filename))
+            first_date = " ".join(first_line.split(" ")[:4])
+            last_date = " ".join(last_line.split(" ")[:4])
+            first_date = datetime.strptime(first_date, "%Y %m %d %H%M")
+            last_date = datetime.strptime(last_date, "%Y %m %d %H%M")
+            if earliest_date is None or first_date < earliest_date:
+                earliest_date = first_date
+            if latest_date is None or last_date > latest_date:
+                latest_date = last_date
+    return earliest_date, latest_date
+
 
 def month_to_season(month):
     if month in [12, 1, 2]:
@@ -32,18 +53,23 @@ def get_scenario_season(layout_path, layout_number, scenario_number):
     file_path = os.path.join(weather_folder, filename)
 
     if not os.path.exists(file_path):
+        print(f"\n\nFile does not exist: {file_path}\n\n")
         return None, None
 
     with open(file_path, "r") as f:
         first_line = f.readline()
         if len(first_line) < 15:
+            print(f"\n\nFirst line is too short: {file_path}\n\n")
             return None, None
         try:
-            first_date = datetime.strptime(first_line[:15], "%Y %m %d %H%M")
+            y,m,d,h = first_line.split(" ")[:4]
+            first_date = datetime(int(y), int(m), int(d), int(h))
             season = month_to_season(first_date.month)
             return season, first_date
-        except Exception:
-            return None, None
+        except Exception as e:
+            print(f"\n\nError parsing first line: {file_path},    {e}\n\n")
+            print(first_line)
+            return None, datetime(1900, 1, 1, 0, 0)
 
 def load_scenario_jpg(folder_path, binary=False):
     """
@@ -80,18 +106,46 @@ def load_scenario_jpg(folder_path, binary=False):
 
 def load_selected_scenarios(selected_file_path):
     """
-    Load selected scenario IDs from a file, filtering lines like '0047_03634, <some_number>'.
+    Load selected scenario IDs from a file, creating dictionary scenario_id:fire_id.
     """
-    selected = set()
+    selected = {}
     with open(selected_file_path, "r") as f:
         for line in f:
             parts = line.strip().split(",")
             if len(parts) == 2 and "_" in parts[0]:
-                selected.add(parts[0].strip())
+                selected[parts[0].strip()] = parts[1].strip()
     print(f"Selected scenarios loaded: {len(selected)}")
     return selected
 
 def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_scenarios.txt", km_per_cell=1):
+    sm = 0
+    # load the fires dataset
+    new_fires_gdf = gpd.read_file("./newfires.gpkg") # 6th edition # gpd.read_file("./FPA_FOD_20210617.gpkg") 5th edition  
+    # replace illegal dates by jan first 1900
+    new_fires_gdf['DISCOVERYDATETIME'] = new_fires_gdf['DISCOVERYDATETIME'].replace('1001/01/01 00:00:00+00', '1900/01/01 00:00:00+00')
+    print(1)
+    new_fires_gdf['DISCOVERY_DATE'] = pd.to_datetime(new_fires_gdf['DISCOVERYDATETIME'])
+    new_fires_gdf['DISCOVERY_DATE'].dt.date
+    print(2)
+    new_fires_gdf['LONGITUDE'] = new_fires_gdf['LONGDD83']
+    new_fires_gdf['LATITUDE'] = new_fires_gdf['LATDD83']
+    new_fires_gdf = new_fires_gdf.to_crs("EPSG:4326")
+    print(len(new_fires_gdf)) # 
+
+    old_fires_gdf = gpd.read_file("FPA_FOD_20221014.gpkg")
+    old_fires_gdf['DISCOVERY_DATE'] = pd.to_datetime(old_fires_gdf['DISCOVERY_DATE'])
+    old_fires_gdf['OBJECTID'] = old_fires_gdf['FOD_ID']
+    old_fires_gdf = old_fires_gdf.to_crs("EPSG:4326")
+    print(len(old_fires_gdf)) # 2 303 566
+
+    # merge the two gdfs
+    fires_gdf = pd.concat([new_fires_gdf, old_fires_gdf])
+    print(len(fires_gdf)) 
+
+    # drop duplicates as defined as same lat, long and same date
+    fires_gdf = fires_gdf.drop_duplicates(subset=['LATITUDE', 'LONGITUDE', 'DISCOVERY_DATE'])
+    print(len(fires_gdf)) 
+
     records = []
     errors = []
     for layout_name in os.listdir(root_folder):
@@ -108,6 +162,10 @@ def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_s
                 continue
             
             selected_ids = load_selected_scenarios(selected_file_path)
+            try:
+                selected_ids_historical = load_selected_scenarios(os.path.join(layout_path, "selected_scenarios_historical.txt"))
+            except FileNotFoundError:
+                selected_ids_historical = {}
             # Build set of used weather filenames like '0047_03634.txt'
             used_weather_files = {f"{sid}.txt" for sid in selected_ids}
 
@@ -126,8 +184,6 @@ def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_s
                     os.rename(src, dst)
             
             print(f"Processing layout: {layout_name}, selected scenarios: {len(selected_ids)}")
-            seasonal_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_seasonal.txt"))
-            historical_match = os.path.exists(os.path.join(layout_path, "selected_scenarios_historical.txt"))
             scenarios_folder = os.path.join(layout_path, "Satellite_Images_Mask")
             if not os.path.exists(scenarios_folder):
                 scenarios_folder = os.path.join(layout_path, "Satellite_Image_Mask")
@@ -171,6 +227,18 @@ def summarize_selected_scenarios_jpg(root_folder, selected_file_name="selected_s
                 fast_fire = t10_size >= 0.5 * final_fire_size
                 slow_fire = not fast_fire
 
+####
+                corresponding_fire_id = int(selected_ids[scenario_folder_name])
+                corresponding_fire = fires_gdf[fires_gdf['OBJECTID'] == corresponding_fire_id]
+                assert len(corresponding_fire) == 1, f"Expected 1 fire, got {len(corresponding_fire)}, {corresponding_fire_id}"
+                # seasonal natch if the corresponding fire has the same day of the year as the scenario
+                seasonal_match = corresponding_fire['DISCOVERY_DATE'].iloc[0].strftime('%m-%d') == first_date.strftime('%m-%d')
+                if seasonal_match:
+                    sm+=1
+                    print(f"Seasonal match: {scenario_folder_name}, {corresponding_fire['DISCOVERY_DATE'].iloc[0].strftime('%m-%d')} == {first_date.strftime('%m-%d')}")
+                # historical match if the scenario is also in the historical dataset
+                historical_match = scenario_folder_name in selected_ids_historical
+####
                 record = {
                     "layout_number": layout_number,
                     "scenario_number": scenario_number,

@@ -16,4 +16,4 @@ jl.include("julia/drone_routing_opt.jl")
 jl.include("julia/drone_routing_opt_linear.jl")
 
 print("Julia session initialized.")
-# Now `jl` can be imported and reused in other parts of the program: this creates A UNIQUE SHARED JULIA SESSION
+# Now `jl` can be imported and reused in other parts of the program: this creates a unique shared Julia session

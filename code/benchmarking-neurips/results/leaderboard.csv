@@ -1,6 +1,0 @@
-Timestamp,Dataset,Model,Average Detection Time,Detection Rates,Map Explored (%),Execution Time (s)
-2025-04-28 15:56:52,/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask,JULIAX,0.0,"{'ground sensor': 0.0, 'charging station': 0.0, 'drone': 0.0, 'undetected': 100.0}",0.2222458905811765,5.347700632782496e-06
-2025-04-29 00:52:58,/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask,JULIAX,0.0,"{'ground sensor': 0.0, 'charging station': 0.0, 'drone': 0.0, 'undetected': 100.0}",0.2222458905811765,5.446479778097133e-06
-2025-04-29 01:18:54,/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask,JULIAX,0.0,"{'ground sensor': 0.0, 'charging station': 0.0, 'drone': 0.0, 'undetected': 100.0}",0.2222458905811765,4.617654113255767e-06
-2025-04-29 01:21:37,Satellite_Images_Mask,JULIAX,0.0,"{'ground sensor': 0.0, 'charging station': 0.0, 'drone': 0.0, 'undetected': 100.0}",0.2222458905811765,3.837696229568636e-06
-2025-04-29 12:10:09,Satellite_Images_Mask,JULIAX,0.0,"{'ground sensor': 0.0, 'charging station': 0.0, 'drone': 0.0, 'undetected': 100.0}",0.22224589058117653,4.216115482728489e-06

@@ -83,71 +83,7 @@ def delete_logs_folder(folder_path):
 
 
 
-####### Functions to load data #######
-
-# DEPRECATED
-# def load_ignition_map(filename):
-#     """
-#     Load an ignition map from a text file.
-    
-#     Args:
-#         filename (str): Name of the file to load (with or without .txt extension)
-    
-#     Returns:
-#         numpy.ndarray: NxN array of probabilities loaded from the file
-#     """
-#     # Add .txt extension if not present
-#     if not filename.endswith('.txt'):
-#         filename += '.txt'
-    
-#     try:
-#         # Load the map using numpy's loadtxt function with comma delimiter
-#         ignition_map = np.loadtxt(filename, delimiter=',')
-        
-#         # Verify the map is square
-#         if ignition_map.shape[0] != ignition_map.shape[1]:
-#             raise ValueError("Loaded ignition map is not square")
-            
-#         # print(f"Successfully loaded ignition map from {filename}")
-#         return ignition_map
-        
-#     except FileNotFoundError:
-#         raise FileNotFoundError(f"Could not find file: {filename}")
-#     except Exception as e:
-#         raise Exception(f"Error loading ignition map: {str(e)}")
-#     
-# DEPRECATED
-# def load_scenario(filename):
-#     """
-#     Load a scenario and its starting time from a text file.
-    
-#     Args:
-#         filename (str): Name of the file to load (with or without .txt extension)
-    
-#     Returns:
-#         tuple: (scenario, starting_time) where scenario is a TxNxN array and starting_time is an integer
-#     """
-#     if not filename.endswith('.txt'):
-#         filename += '.txt'
-    
-#     try:
-#         # Read the first two lines separately for metadata
-#         with open(filename, 'r') as f:
-#             starting_time = int(f.readline().strip())
-#             T, N, M = map(int, f.readline().strip().split(','))
-        
-#         # Use numpy's faster mmap_mode to load the data
-#         # Skip the first two lines (header) and reshape directly
-#         data = np.loadtxt(filename, delimiter=',', skiprows=2, dtype=np.float32)
-#         data = data.reshape(T, N, M)
-        
-#         return data, starting_time
-    
-#     except FileNotFoundError:
-#         raise FileNotFoundError(f"Could not find file: {filename}")
-#     except Exception as e:
-#         raise Exception(f"Error loading scenario: {str(e)}")
-    
+####### Functions to load data #######   
 
 def load_scenario_jpg(folder_path, binary=True, first_frame_only=False):
     """
@@ -247,23 +183,6 @@ def load_scenario_npy(filename):
 
     
 ####### Functions to save data #######
-
-# DEPRECATED
-# def save_ignition_map(ignition_map, filename):
-#     """
-#     Save the ignition map to a text file.
-    
-#     Args:
-#         ignition_map (numpy.ndarray): NxN array of probabilities
-#         filename (str): Name of the file to save (with .txt extension)
-#     """
-#     # Add .txt extension if not present
-#     if not filename.endswith('.txt'):
-#         filename += '.txt'
-    
-#     # Save with high precision (8 decimal places) and scientific notation
-#     np.savetxt(filename, ignition_map, fmt='%.8e', delimiter=',')
-    
 
 def save_scenario_npy(scenario, out_filename="scenario"):
     """
@@ -393,11 +312,11 @@ def load_scenario(file_or_folder_name, extension = ".npy", first_frame_only=Fals
         return load_scenario_jpg(file_or_folder_name, first_frame_only=first_frame_only)
     
 
-def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy"):
+def compute_burn_map(folder_name, extension = ".npy", noncumulative = False, config=None):
     """
-    Compute the burn map for a scenario stored as a folder of NPY files.
+    Compute the burn map for a layout.
     Args:
-        folder_name (str): Path to the folder containing the NPY files
+        folder_name (str): Path to the folder containing the scenario files / folders
     """
     if not extension.startswith("."):
         extension = "." + extension
@@ -412,8 +331,9 @@ def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy")
     
     # Process all scenarios in a single pass
     for filename in tqdm.tqdm(os.listdir(folder_name)):
-        if filename.endswith(extension):
+        if (extension == ".npy" and filename.endswith(extension)) or (extension == ".jpg" and os.path.isdir(folder_name + filename)):
             scenario = load_scenario(folder_name + filename, extension)
+            previous_frame = np.zeros_like(scenario[0]) if noncumulative else None
             T, curr_N, curr_M = scenario.shape
             
             # Initialize arrays on first file
@@ -425,6 +345,15 @@ def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy")
                 # Verify grid dimensions
                 if (curr_N, curr_M) != (N, M):
                     raise ValueError(f"Inconsistent grid dimensions in {filename}")
+
+                if config is not None:
+                    starting_time = config.get(f"offset_{filename.split('/')[-1]}", 0)
+                    if starting_time > 0:
+                        #print(f"Starting time: {starting_time}, file: {filename.split('/')[-1]}")
+                        # prepend empty grids to the scenario
+                        scenario = np.concatenate([np.zeros((starting_time, N, M)), scenario], axis=0)
+                        T = scenario.shape[0]
+
                 # Extend arrays if needed
                 if T > burn_map.shape[0]:
                     burn_map = np.pad(burn_map, ((0, T - burn_map.shape[0]), (0, 0), (0, 0)))
@@ -432,7 +361,11 @@ def compute_burn_map(folder_name, extension = ".npy", output_extension = ".npy")
             
             # Add scenario data
             for t in range(T):
-                burn_map[t] += scenario[t]
+                if noncumulative:
+                    burn_map[t] += (scenario[t] - previous_frame)
+                    previous_frame = scenario[t]
+                else:
+                    burn_map[t] += scenario[t]
                 counts[t] += 1
     
     # Calculate mean for each timestep
@@ -457,22 +390,22 @@ def load_burn_map(filename, extension = ".npy"):
 
 ####### Prepocess the sim2real dataset #######
 
-def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension = ".npy", n_max_layouts = None):
-    """
-    Compute the burn map for all scenarios in the sim2real dataset and save them as NPY files.
-    Args:
-        dataset_folder_name (str): Path to the dataset folder
-    """
-    if not dataset_folder_name.endswith("/"):
-        dataset_folder_name += "/"
-    n_layout = 0
-    for layout_folder in os.listdir(dataset_folder_name):
-        if n_max_layouts is not None and n_layout >= n_max_layouts:
-            break
-        if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
-        burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
-        save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
-        n_layout += 1
+# def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension = ".npy", n_max_layouts = None):
+#     """
+#     Compute the burn map for all scenarios in the sim2real dataset and save them as NPY files.
+#     Args:
+#         dataset_folder_name (str): Path to the dataset folder
+#     """
+#     if not dataset_folder_name.endswith("/"):
+#         dataset_folder_name += "/"
+#     n_layout = 0
+#     for layout_folder in os.listdir(dataset_folder_name):
+#         if n_max_layouts is not None and n_layout >= n_max_layouts:
+#             break
+#         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
+#         burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
+#         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
+#         n_layout += 1
 def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None):
     """
     Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
@@ -483,6 +416,35 @@ def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout =
     sim2real_scenario_jpg_folders_to_npy(dataset_folder_name, n_max_scenarii_per_layout = n_max_scenarii_per_layout, n_max_layouts = n_max_layouts)
     print("Computing burn maps...")
     compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = n_max_layouts)
+
+def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, n_max_layouts = None, extension = ".npy", noncumulative = False, config=None):
+    """
+    Compute the burn maps for all scenarios in the sim2real dataset.
+    Args:
+        dataset_folder_name (str): Path to the dataset folder
+        n_max_layouts (int): Maximum number of layouts to process
+        n_max_scenarii_per_layout (int): Maximum number of scenarii per layout to process
+    """
+    if not dataset_folder_name.endswith("/"):
+        dataset_folder_name += "/"
+    if not extension[0] == '.':
+        extension = '.' + extension
+    n_layout = 0
+    for layout_folder in os.listdir(dataset_folder_name):
+        if n_max_layouts is not None and n_layout >= n_max_layouts:
+            break
+        extension_folder = "/scenarii/" if extension == ".npy" else "/Satellite_Images_Mask/"
+        if extension != ".npy" and not os.path.exists(dataset_folder_name + layout_folder + extension_folder):
+            extension_folder = "/Satellite_Image_Mask/"
+        if extension != ".npy" and not os.path.exists(dataset_folder_name + layout_folder + extension_folder):
+            continue
+        try:
+            bm = compute_burn_map(dataset_folder_name + layout_folder + extension_folder, extension, noncumulative, config=config)
+            ns = "_noncumulative" if noncumulative else ""
+            save_burn_map(bm, dataset_folder_name + layout_folder + f"/burn_map{ns}.npy")
+        except Exception as e:
+            print(f"Error computing burn map for {dataset_folder_name + layout_folder + extension_folder}: {e}")
+        n_layout += 1
 
 
 def combine_all_benchmark_results(dataset_folder: str, output_filename: str = "combined_benchmark_results", suffix = "RandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic"):

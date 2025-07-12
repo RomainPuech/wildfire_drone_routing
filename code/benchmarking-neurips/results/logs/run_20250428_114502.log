@@ -1,9 +1,0 @@
-2025-04-28 11:45:02,623 - INFO - Starting benchmark runner...
-2025-04-28 11:45:02,624 - INFO - Parameters: {'dataset': '/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask', 'model': 'JULIAX', 'sensor_strategy': 'sensor_placement_optimization.py', 'sensor_class': 'SensorPlacementOptimization', 'drone_strategy': 'reuse_index_drone_routing.py', 'drone_class': 'DroneRoutingOptimizationModelReuseIndex', 'strategy_folder': '/Users/josephye/Desktop/wildfire_drone_routing/code/strategy', 'max_n': 3, 'starting_time': 0, 'file_format': 'jpg', 'results_dir': 'results/'}
-2025-04-28 11:46:21,797 - ERROR - Error during benchmark: [Errno 2] No such file or directory: 'results/metrics/benchmark_/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask_JULIAX_20250428_114621.json'
-Traceback (most recent call last):
-  File "/Users/josephye/Desktop/wildfire_drone_routing/code/benchmarking-neurips/benchmarks/benchmark_runner.py", line 188, in main
-    save_metrics(metrics, args.results_dir, args.dataset, args.model)
-  File "/Users/josephye/Desktop/wildfire_drone_routing/code/benchmarking-neurips/benchmarks/benchmark_runner.py", line 37, in save_metrics
-    with open(metrics_path, "w") as f:
-FileNotFoundError: [Errno 2] No such file or directory: 'results/metrics/benchmark_/Users/josephye/Desktop/wildfire_drone_routing/MinimalDataset/0002/Satellite_Images_Mask_JULIAX_20250428_114621.json'
