@@ -30,8 +30,8 @@ include("helper_functions.jl")
 # EXAMPLE ON GENERATED DATA 
 
 Random.seed!(42)
-n_drones = 3
-max_battery_time = 10
+n_drones = 2
+max_battery_time = 20
 N = 20
 M = 20
 function generate_random_charging_stations(N::Int, M::Int, num_stations::Int)
@@ -50,7 +50,7 @@ function generate_random_ground_stations(N::Int, M::Int, num_stations::Int)
 end
 GroundStations = generate_random_ground_stations(N, M, 5)
 
-L = 20
+L = floor(max_battery_time/2)
 
 # ---------- parameters ----------
 
@@ -58,6 +58,7 @@ L = 20
 H, N, M = size(risk_pertime)
 if H == 1 # we duplicate the risk per time for 100 time steps
     println("Duplicating risk per time for 100 time steps")
+    risk_pertime *= 1000
     risk_pertime = repeat(risk_pertime, 100, 1, 1)
     H = 100
 end
@@ -86,6 +87,13 @@ coords = deepcopy(GridpointsDronesDetecting)
 push!(coords, ChargingStations[1])  # For Begin_CS
 push!(coords, ChargingStations[1])  # For End_CS
 
+# Sort the transit points row-wise before assigning indices
+# sorted_transit = sort(collect(GridpointsDronesDetecting_set), by = x -> (x[2], x[1]))
+# coords = deepcopy(sorted_transit)
+# push!(coords, ChargingStations[1])  # Begin_CS
+# push!(coords, ChargingStations[1])  # End_CS
+
+
 # Define number of total drone nodes
 n_nodes = length(coords)
 c = Dict{Tuple{Int,Int}, Float64}()
@@ -102,7 +110,28 @@ for i in 1:n_nodes, j in 1:n_nodes
     end
 end
 
-c[(121,122)] = L*4
+c[(Begin_CS,End_CS)] = L*4
+
+
+# depot_x, depot_y = ChargingStations[1]
+# boundary_nodes = Set{Int}()
+
+# for i in 1:length(coords)
+#     x, y = coords[i]
+#     dist = max(abs(x - depot_x), abs(y - depot_y))  # Chebyshev distance
+
+#     if dist > floor(max_battery_time / 2) - 1
+#         push!(boundary_nodes, i)
+#     end
+# end
+
+# for i in boundary_nodes, j in boundary_nodes
+#     if i != j
+#         c[(i, j)] = L * 4
+#     end
+# end
+
+
 
 
 function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
@@ -145,9 +174,15 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
                 for i in GridpointsDrones_begin
                 for j in GridpointsDrones_end
                 if i != j && haskey(c, (i, j))
-            ) <= L
+            ) <= max_battery_time
         )
     end
+
+    #Symmetry breaking cut
+    @constraint(model, [s in 1:n_drones-1], 
+    sum(risk_pertime[1, GridpointsDronesDetecting[i]...] * y[i, s+1] for i in TransitGridpoints) - 
+    sum(risk_pertime[1, GridpointsDronesDetecting[i]...] * y[i, s]   for i in TransitGridpoints) <= 0)
+
     
     # @objective(model, Max, 0)
     @objective(model, Max, sum(risk_pertime[1,GridpointsDronesDetecting[k]...]*(y[k,s]) for k in TransitGridpoints for s in 1:n_drones)) 
@@ -261,10 +296,64 @@ function subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
     return subtours_per_drone
 end
 
-subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS)
+subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
 # sorted_subtours = OrderedDict(k => v for (k, v) in sort(collect(subtours_per_drone)))
 
 
+# --------------- FIND DEPOT CONNECTED COMPONENTS ---------------
+function depot_connected_components(x, Begin_CS, GridpointsDrones, n_drones; threshold=0.8)
+    connected_per_drone = OrderedDict{Int, Vector{Vector{Int}}}()
+
+    for s in 1:n_drones
+        used_nodes = Set{Int}()
+        edges = Tuple{Int, Int}[]
+
+        for i in GridpointsDrones, j in GridpointsDrones
+            if value(x[i, j, s]) > threshold
+                push!(edges, (i, j))
+                push!(used_nodes, i)
+                push!(used_nodes, j)
+            end
+        end
+
+        node_map = Dict(node => idx for (idx, node) in enumerate(sort(collect(used_nodes))))
+        reverse_map = Dict(v => k for (k, v) in node_map)
+
+        G = DiGraph(length(node_map))
+        for (i, j) in edges
+            add_edge!(G, node_map[i], node_map[j])
+        end
+
+        depot_idx = get(node_map, Begin_CS, nothing)
+        if depot_idx === nothing
+            connected_per_drone[s] = Vector{Vector{Int}}()
+            continue
+        end
+
+        visited = Set{Int}()
+        queue = [depot_idx]
+        while !isempty(queue)
+            current = popfirst!(queue)
+            push!(visited, current)
+            for neighbor in outneighbors(G, current)
+                if !(neighbor in visited)
+                    push!(queue, neighbor)
+                end
+            end
+        end
+
+        connected_nodes = [reverse_map[v] for v in visited]
+        connected_per_drone[s] = [sort(connected_nodes)]  # <- now a vector of vectors
+    end
+
+    return connected_per_drone
+end
+
+
+components = depot_connected_components(x, Begin_CS, GridpointsDrones, n_drones)
+for s in 1:n_drones
+    println("Drone $s depot-connected nodes: ", components[s])
+end
 
 
 
@@ -353,9 +442,7 @@ routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_
 obj_value = compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS)
 println("Objective value = $obj_value")
 
-
-
-# --------------- CUTTING PLANE ALGORITHM ---------------
+# --------------- EXTRACT TOURS FROM SOLUTION ---------------
 
 function extract_tours_from_solution(x, valid_drones, GridpointsDrones, Begin_CS, End_CS)
     tours = Dict{Int, Vector{Int}}()
@@ -387,7 +474,12 @@ function extract_tours_from_solution(x, valid_drones, GridpointsDrones, Begin_CS
     return tours
 end
 
-function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+# --------------- CUTTING PLANE ALGORITHM ---------------
+
+n_drones = 2
+function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
+
+    t_start = time()  # Start timer
 
     # Initial upper bound (UB) and initial greedy lower bound (LB)
     UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
@@ -398,11 +490,217 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
 
     iteration = 1
     model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
-    println("\n--- Iteration $iteration ---")
     optimize!(model)
 
 
         while true
+            if iteration > 40
+                println("Terminating after", iteration, "iterations.")
+                t_end = time()
+                elapsed = t_end - t_start
+                return routes, UB, x, y, elapsed
+            end
+            println("\n--- Iteration $iteration ---")
+            opt_val = objective_value(model)
+            if opt_val < UB
+                UB = opt_val
+                print(UB)
+            end
+
+            #--------------- PLOT THE GRAPH ---------------
+            node_index_to_coords = Dict(i => coords[i] for i in 1:length(coords))
+
+            # Precompute layout positions
+            locs_x = [node_index_to_coords[i][1] for i in 1:length(node_index_to_coords)]
+            locs_y = [node_index_to_coords[i][2] for i in 1:length(node_index_to_coords)]
+
+            # Node colors (green for transit, red for depots)
+            n_nodes = length(GridpointsDronesDetecting) + 2
+            nodefillc = fill(colorant"green", n_nodes)
+            nodefillc[Begin_CS] = colorant"red"
+            nodefillc[End_CS] = colorant"red"
+
+            # Define distinct colors for each drone's path
+            edge_colors = [RGB(1,1,1), RGB(1,0.5,0), RGB(0.5,0.5,1), RGB(0,1,0), RGB(1,0,1)]  # Add more if needed
+
+            # Store graphs and plots
+            drone_graphs = Dict{Int, SimpleDiGraph}()
+            drone_plots = Vector{Compose.Context}(undef, n_drones)
+
+            for s in 1:n_drones
+                G = SimpleDiGraph(n_nodes)
+                stroke_colors = RGB[]  # Edge colors for this drone
+
+                for i in GridpointsDrones, j in GridpointsDrones
+                    if value(x[i, j, s]) > 0.8
+                        add_edge!(G, i, j)
+                        push!(stroke_colors, edge_colors[s ≤ length(edge_colors) ? s : end])
+                    end
+                end
+
+                # Store graph
+                drone_graphs[s] = G
+
+                # Plot
+                drone_plots[s] = gplot(
+                    G,
+                    locs_x,
+                    locs_y;
+                    nodefillc = nodefillc,
+                    edgestrokec = stroke_colors,
+                    nodelabel = 1:nv(G),
+                    arrowlengthfrac = 0.05,
+                    nodesize = 0.8,
+                    title = "Drone $s"
+                )
+            end
+
+            # Combine plots side by side
+            side_by_side_plot = hstack(drone_plots...)
+
+            # Save as PNG (requires Cairo & Fontconfig)
+            draw(PNG("drones_side_by_side_iter$(iteration).png", 300 * n_drones, 500), side_by_side_plot)
+
+            # Show plot
+            display(side_by_side_plot)
+
+            subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
+            components = depot_connected_components(x, Begin_CS, GridpointsDrones, n_drones)
+
+            # print(subtours_per_drone)
+
+            valid_drones = [s for s in 1:n_drones if isempty(subtours_per_drone[s])]
+            invalid_drones = [s for s in 1:n_drones if !isempty(subtours_per_drone[s])]
+
+            #If there are valid tours (i.e., when there is a drone without any subtours) then
+            if !isempty(valid_drones)
+                println("Drones with valid tours: ", valid_drones)       
+                profit = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] * value(y[k, s]) 
+                                for k in TransitGridpoints, s in valid_drones)
+                if profit > best_LB
+                    best_LB = profit
+                    print(best_LB)
+                    routes = Vector{Vector{Int}}(undef, n_drones)  # Re-initialize to avoid stale entries
+
+                    routes_valid = extract_tours_from_solution(x, valid_drones, GridpointsDrones, Begin_CS, End_CS)
+                    for s in 1:n_drones
+                        routes[s] = s in valid_drones ? routes_valid[s] : []
+                    end
+                end
+            end
+
+            if isempty(invalid_drones) || best_LB == UB
+                t_end = time()
+                elapsed = t_end - t_start
+                return routes, UB, x, y, elapsed
+            else
+                println("Drones with valid tours: ", valid_drones)       
+            #If there are drones with subtours, then
+                # Add GSEC constraints to eliminate detected subtours
+                for s in invalid_drones
+                    for S in subtours_per_drone[s]
+                        @constraint(model, sum(x[i, j, s] for i in S, j in S) <= length(S) - 1)
+                        outside_S = setdiff(GridpointsDrones,S)
+                        if isempty(outside_S)
+                            continue  # avoid error on empty set
+                        end
+                        delta_plus = [(u, v) for u in S for v in outside_S if c[(u,v)] < max_battery_time]
+                        delta_min = [(u,v) for u in outside_S, v in S if c[(u,v)] < max_battery_time]
+                        if !isempty(delta_plus)
+                                @constraint(model, [i in S], sum(x[u, v, s] for (u, v) in delta_plus) >= y[i, s])                   
+                        end
+                        if !isempty(delta_min)
+                            @constraint(model, [i in S], sum(x[u, v, s] for (u, v) in delta_min) >= y[i, s])
+                        end
+                    end
+                    for T in components[s]
+                        outside_T = setdiff(TransitGridpoints, T)
+                        delta_plus_T = [(u, v) for u in T, v in outside_T if c[(u, v)] < max_battery_time]
+
+                        if !isempty(delta_plus_T)
+                            for i in T
+                                if i in TransitGridpoints
+                                    @constraint(model, sum(x[u, v, s] for (u, v) in delta_plus_T) >= y[i, s])
+                                end
+                            end
+                        end
+                    end
+                end
+
+
+                optimize!(model)
+
+                # === Compute profits per drone ===
+                drone_profits = zeros(n_drones)
+
+                for s in 1:n_drones
+                    drone_profits[s] = sum(
+                        risk_pertime[1, GridpointsDronesDetecting[i]...] * value(y[i, s])
+                        for i in TransitGridpoints
+                    )
+                end
+
+                # === Print profits ===
+                println("Drone profits at iteration $iteration:")
+                for s in 1:n_drones
+                    println("  Drone $s: ", round(drone_profits[s], digits=4))
+                end
+
+
+                iteration += 1
+                println("  Current UB: ", round(UB, digits=4))
+                println("  Best LB:    ", round(best_LB, digits=4))
+            end
+        end
+end
+
+routes, UB, x, y, elapsed = CPA(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
+
+
+
+
+
+# Greedy sequential CPA
+
+function CPA_greedy_sequential(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
+
+    n_drones_first = 1
+    CPA(risk_pertime, n_drones_first, ChargingStation, GroundStations, max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
+
+end
+
+
+t_start = time()
+routes, UB, x, y, elapsed = CPA_greedy_sequential(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
+
+t_end = time()
+elapsed = t_end - t_start
+println("Total run time: ", elapsed)
+
+
+
+function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
+
+    t_start = time()  # Start timer
+
+    # Initial upper bound (UB) and initial greedy lower bound (LB)
+    UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
+    routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
+    best_LB = compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS)
+
+    println("Initial LB from greedy = $best_LB, UB = $UB")
+
+    iteration = 1
+    model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+    optimize!(model)
+
+
+        while true
+            if iteration > 150
+                println("Terminating after 15 iterations.")
+                return routes, UB, x, y
+            end
+            println("\n--- Iteration $iteration ---")
             opt_val = objective_value(model)
             if opt_val < UB
                 UB = opt_val
@@ -467,7 +765,7 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
             display(side_by_side_plot)
 
             subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
-            print(subtours_per_drone)
+            # print(subtours_per_drone)
 
             valid_drones = [s for s in 1:n_drones if isempty(subtours_per_drone[s])]
             invalid_drones = [s for s in 1:n_drones if !isempty(subtours_per_drone[s])]
@@ -492,6 +790,7 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
             if isempty(invalid_drones) || best_LB == UB
                 return routes, UB, x, y
             else
+                println("Drones with valid tours: ", valid_drones)       
             #If there are drones with subtours, then
                 # Add GSEC constraints to eliminate detected subtours
                 for s in invalid_drones
@@ -517,16 +816,40 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
                             # end                        
                         end
                         if !isempty(delta_min)
-                            @constraint(model, [i in S], sum(x[u, v, s] for (u, v) in delta_plus) >= y[i, s])
+                            @constraint(model, [i in S], sum(x[u, v, s] for (u, v) in delta_min) >= y[i, s])
                         end
                     end
                 end
 
                 optimize!(model)
+
+                # === Compute profits per drone ===
+                drone_profits = zeros(n_drones)
+
+                for s in 1:n_drones
+                    drone_profits[s] = sum(
+                        risk_pertime[1, GridpointsDronesDetecting[i]...] * value(y[i, s])
+                        for i in TransitGridpoints
+                    )
+                end
+
+                # === Print profits ===
+                println("Drone profits at iteration $iteration:")
+                for s in 1:n_drones
+                    println("  Drone $s: ", round(drone_profits[s], digits=4))
+                end
+
+
                 iteration += 1
+                println("  Current UB: ", round(UB, digits=4))
+                println("  Best LB:    ", round(best_LB, digits=4))
             end
         end
+        t_end = time()  # End timer
+        elapsed = t_end - t_start
+        println("Total run time: ", elapsed)
+
 end
 
-routes, UB, x, y = CPA(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
+routes, UB, x, y = CPA(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L, GridpointsDrones, GridpointsDronesDetecting, TransitGridpoints, coords, Begin_CS, End_CS, c)
 
