@@ -1,0 +1,4 @@
+sensor_strategy,drone_strategy,layout,scenario,delta_t,device,execution_time,fire_size_cells,fire_percentage,map_explored,total_distance
+SensorPlacementMaxCoverageGaussianTime,DroneRoutingMaxCoverageResetStatic,0024,02006,0,drone,7.686791596589265e-06,86,0.0286652334049964,0.0546639334699931,4808
+SensorPlacementMaxCoverageGaussianTime,DroneRoutingMaxCoverageResetStatic,0025,00432,4,drone,1.2980162642384304e-05,2454,0.8516456820800423,0.160681316545664,22709
+SensorPlacementMaxCoverageGaussianTime,DroneRoutingMaxCoverageResetStatic,0016,01398,4,drone,2.459556825699345e-06,66,0.0206201027256026,0.129031854934453,27549
