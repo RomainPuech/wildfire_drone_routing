@@ -1,15 +1,15 @@
 #input as we can do it for every charging station separately.
-import Pkg
-Pkg.add("JuMP")
-Pkg.add("Gurobi")
-Pkg.add("Graphs")
-Pkg.add("GraphPlot")
-Pkg.add("Colors")
-Pkg.add("Plots")
-Pkg.add("Compose")
-Pkg.add("Cairo")
-Pkg.add("Fontconfig")
-Pkg.add("DataStructures")
+# import Pkg
+# Pkg.add("JuMP")
+# Pkg.add("Gurobi")
+# Pkg.add("Graphs")
+# Pkg.add("GraphPlot")
+# Pkg.add("Colors")
+# Pkg.add("Plots")
+# Pkg.add("Compose")
+# Pkg.add("Cairo")
+# Pkg.add("Fontconfig")
+# Pkg.add("DataStructures")
 
 import Cairo
 import Fontconfig
@@ -25,13 +25,14 @@ using DataStructures
 using Random
 
 include("helper_functions.jl")
+include("TOP_PSO.jl")
 
 
 # EXAMPLE ON GENERATED DATA 
 
 Random.seed!(42)
 n_drones = 2
-max_battery_time = 15
+max_battery_time = 8
 N = 8
 M = 8
 function generate_random_charging_stations(N::Int, M::Int, num_stations::Int)
@@ -50,7 +51,7 @@ function generate_random_ground_stations(N::Int, M::Int, num_stations::Int)
 end
 GroundStations = generate_random_ground_stations(N, M, 5)
 
-L = 15
+L = 8
 
 # ---------- parameters ----------
 
@@ -102,7 +103,7 @@ for i in 1:n_nodes, j in 1:n_nodes
     end
 end
 
-c[(121,122)] = L*4
+c[(Begin_CS,End_CS)] = L*4
 
 
 function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
@@ -158,8 +159,8 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
     return model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y
 end
 
-model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
-optimize!(model)
+# model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+# optimize!(model)
 
 function solve_TOP_init_routing(model)
     optimize!(model)
@@ -386,9 +387,9 @@ function compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS
 end
 
 
-routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
-obj_value = compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS)
-println("Objective value = $obj_value")
+# routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
+# obj_value = compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS)
+# println("Objective value = $obj_value")
 
 
 
@@ -433,22 +434,280 @@ function extract_tours_from_solution(x, drones, GridpointsDrones, Begin_CS, End_
     return tours
 end
 
+"""
+Convert TOP.jl format to PSO format and run PSO algorithm
+"""
+function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    # Convert GridpointsDronesDetecting to customer format for PSO
+    customers = GridpointsDronesDetecting
+    profits = Float64[]
+    
+    # Extract profits for each customer
+    for (x, y) in customers
+        push!(profits, risk_pertime[1, x, y])
+    end
+    
+    # Create cost matrix using infinity norm (as in TOP.jl)
+    costs = Dict{Tuple{Int,Int}, Float64}()
+    n_customers = length(customers)
+    depot_x, depot_y = ChargingStation[1]
+    
+    # Costs from depot to customers and back
+    for i in 1:n_customers
+        xi, yi = customers[i]
+        inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
+        costs[(0, i)] = inf_dist_from_depot <= 1 ? 1.0 : inf_dist_from_depot
+        costs[(i, 0)] = costs[(0, i)]
+    end
+    
+    # Costs between customers
+    for i in 1:n_customers
+        for j in 1:n_customers
+            if i != j
+                xi, yi = customers[i]
+                xj, yj = customers[j]
+                inf_dist = max(abs(xi - xj), abs(yi - yj))
+                costs[(i, j)] = inf_dist <= 1 ? 1.0 : inf_dist
+            else
+                costs[(i, j)] = 0.0
+            end
+        end
+    end
+    
+    # Run PSO algorithm with proper parameters for CPA initialization
+    println("Running PSO for CPA initialization...")
+    giant_tour, pso_profit, pso_obj = solve_PSO_TOP(
+        customers, profits, costs, n_drones, max_battery_time;
+        swarm_size=15, max_iterations=5,
+        w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
+    )
+    
+    # Convert PSO routes back to TOP.jl format
+    pso_routes = extract_routes(giant_tour, pso_obj)
+    
+    # Convert to TOP.jl route format (with Begin_CS and End_CS indices)
+    top_routes = Vector{Vector{Int}}(undef, n_drones)
+    Begin_CS = length(GridpointsDronesDetecting) + 1
+    End_CS = length(GridpointsDronesDetecting) + 2
+    
+    for s in 1:n_drones
+        if s <= length(pso_routes) && !isempty(pso_routes[s])
+            # Convert customer indices to TOP.jl format
+            route = [Begin_CS]  # Start at charging station
+            append!(route, pso_routes[s])  # Add customer indices (already correct)
+            push!(route, End_CS)  # End at charging station
+            top_routes[s] = route
+        else
+            # Empty route: just go from Begin_CS to End_CS
+            top_routes[s] = [Begin_CS, End_CS]
+        end
+    end
+    
+    return top_routes, pso_profit
+end
+
+
+"""
+Warm start the MILP model with a given solution
+"""
+function warm_start_with_solution!(model, x, y, routes, n_drones, GridpointsDrones, TransitGridpoints)
+    try
+        # Reset all variables to 0 first (using JuMP DenseAxisArray syntax)
+        for i in GridpointsDrones, j in GridpointsDrones, s in 1:n_drones
+            try
+                set_start_value(x[i, j, s], 0.0)
+            catch
+                # Variable may not exist, continue
+            end
+        end
+        
+        for k in TransitGridpoints, s in 1:n_drones
+            try
+                set_start_value(y[k, s], 0.0)
+            catch
+                # Variable may not exist, continue
+            end
+        end
+        
+        # Set variables based on the PSO solution routes
+        for s in 1:n_drones
+            if s <= length(routes) && length(routes[s]) >= 2
+                route = routes[s]
+                
+                # Set x variables for transitions in this route
+                for idx in 1:(length(route)-1)
+                    i = route[idx]
+                    j = route[idx+1]
+                    
+                    try
+                        set_start_value(x[i, j, s], 1.0)
+                        println("  Setting x[$i,$j,$s] = 1.0")
+                    catch e
+                        println("  Could not set x[$i,$j,$s]: $e")
+                    end
+                end
+                
+                # Set y variables for visited transit points
+                for node in route
+                    # Only set y for transit gridpoints (not depots)
+                    if node in TransitGridpoints
+                        try
+                            set_start_value(y[node, s], 1.0)
+                            println("  Setting y[$node,$s] = 1.0")
+                        catch e
+                            println("  Could not set y[$node,$s]: $e")
+                        end
+                    end
+                end
+            end
+        end
+        
+        println("Warm start completed successfully")
+        
+    catch e
+        println("Warning: Could not set warm start values: $e")
+        println("Continuing without warm start...")
+    end
+end
+
+function print_routes(routes, coords, n_drones, filename_suffix="")
+    println("\n=== Routes $filename_suffix ===")
+    for s in 1:n_drones
+        if s <= length(routes) && length(routes[s]) >= 2
+            route = routes[s]
+            route_str = ""
+            for (idx, node_id) in enumerate(route)
+                x, y = coords[node_id]
+                if idx == 1
+                    route_str = "($x,$y)"
+                else
+                    route_str *= " -> ($x,$y)"
+                end
+            end
+            println("Drone $s: $route_str")
+        else
+            println("Drone $s: No route")
+        end
+    end
+    println()
+end
+
+function plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, filename_suffix="")
+    # Node index to coordinates mapping
+    node_index_to_coords = Dict(i => coords[i] for i in 1:length(coords))
+
+    # Precompute layout positions
+    locs_x = [node_index_to_coords[i][1] for i in 1:length(node_index_to_coords)]
+    locs_y = [node_index_to_coords[i][2] for i in 1:length(node_index_to_coords)]
+
+    # Node colors (green for transit, red for depots)
+    n_nodes = length(GridpointsDronesDetecting) + 2
+    nodefillc = fill(colorant"green", n_nodes)
+    nodefillc[Begin_CS] = colorant"red"
+    nodefillc[End_CS] = colorant"red"
+
+    # Define distinct colors for each drone's path
+    edge_colors = [RGB(1,1,1), RGB(1,0.5,0), RGB(0.5,0.5,1), RGB(0,1,0), RGB(1,0,1)]  # Add more if needed
+
+    # Store graphs and plots
+    drone_graphs = Dict{Int, SimpleDiGraph}()
+    drone_plots = Vector{Compose.Context}(undef, n_drones)
+
+    for s in 1:n_drones
+        G = SimpleDiGraph(n_nodes)
+        stroke_colors = RGB[]  # Edge colors for this drone
+
+        # Create edges from the route
+        if s <= length(routes) && length(routes[s]) >= 2
+            route = routes[s]
+            for idx in 1:(length(route)-1)
+                i = route[idx]
+                j = route[idx+1]
+                add_edge!(G, i, j)
+                push!(stroke_colors, edge_colors[s ≤ length(edge_colors) ? s : end])
+            end
+        end
+
+        # Store graph
+        drone_graphs[s] = G
+
+        # Plot
+        drone_plots[s] = gplot(
+            G,
+            locs_x,
+            locs_y;
+            nodefillc = nodefillc,
+            edgestrokec = stroke_colors,
+            nodelabel = 1:nv(G),
+            arrowlengthfrac = 0.05,
+            nodesize = 0.8,
+            title = "Drone $s"
+        )
+    end
+
+    # Combine plots side by side
+    side_by_side_plot = hstack(drone_plots...)
+
+    # Save as PNG (requires Cairo & Fontconfig)
+    filename = isempty(filename_suffix) ? "drones_side_by_side.png" : "drones_side_by_side_$filename_suffix.png"
+    draw(PNG(filename, 300 * n_drones, 500), side_by_side_plot)
+
+    # Show plot
+    display(side_by_side_plot)
+    
+    println("Plot saved as: $filename")
+end
+
 function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
 
-    # Initial upper bound (UB) and initial greedy lower bound (LB)
+    # Initial upper bound (UB) and initial PSO lower bound (LB)
     model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
     UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
-    routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
-    best_LB = compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS)
+    
+    # Create cost matrix c for greedy comparison
+    n_nodes = length(coords)
+    c = Dict{Tuple{Int,Int}, Float64}()
+    
+    for i in 1:n_nodes, j in 1:n_nodes
+        xi, yi = coords[i]
+        xj, yj = coords[j]
+        
+        inf_dist = max(abs(xi - xj), abs(yi - yj))
+        if inf_dist <= 1
+            c[(i, j)] = 1.0
+        else
+            c[(i, j)] = L*4
+        end
+    end
+    
+    # Prevent direct connection between Begin_CS and End_CS
+    c[(Begin_CS, End_CS)] = L*4
+    
+    # Use PSO instead of greedy for initialization
+    routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    
+    # Also compute greedy for comparison
+    greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
+    greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
 
-    println("Initial LB from greedy = $best_LB, UB = $UB")
+    println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
+    println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
+    
+    # Print the initial PSO solution routes
+    print_routes(routes, coords, n_drones, "(PSO Initial)")
+    
+    # Plot the initial PSO solution
+    println("Plotting initial PSO solution...")
+    plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial")
+
+    # WARM START THE MODEL WITH THE PSO SOLUTION
+    println("Warm starting MILP with PSO solution...")
+    error("Stop here")
+    warm_start_with_solution!(model, x, y, routes, n_drones, GridpointsDrones, TransitGridpoints)
 
     iteration = 1
     println("\n--- Iteration $iteration ---")
-    # HERE YOU COULD WARM START THE MODEL WITH THE GREEDY SOLUTION !!! TODO
- 
-
 
         while true
             optimize!(model)
@@ -456,68 +715,24 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
             opt_val = objective_value(model) # this is P(SOL)
             if opt_val < UB
                 UB = opt_val
-                print(UB)
             end
+            
+            println("Iteration $iteration: LB = $best_LB, UB = $UB, Gap = $(round(((UB - best_LB) / UB) * 100, digits=2))%")
 
             # --------------- PLOT THE GRAPH ---------------
-            # ----------------------------------------------
-            node_index_to_coords = Dict(i => coords[i] for i in 1:length(coords))
-
-            # Precompute layout positions
-            locs_x = [node_index_to_coords[i][1] for i in 1:length(node_index_to_coords)]
-            locs_y = [node_index_to_coords[i][2] for i in 1:length(node_index_to_coords)]
-
-            # Node colors (green for transit, red for depots)
-            n_nodes = length(GridpointsDronesDetecting) + 2
-            nodefillc = fill(colorant"green", n_nodes)
-            nodefillc[Begin_CS] = colorant"red"
-            nodefillc[End_CS] = colorant"red"
-
-            # Define distinct colors for each drone's path
-            edge_colors = [RGB(1,1,1), RGB(1,0.5,0), RGB(0.5,0.5,1), RGB(0,1,0), RGB(1,0,1)]  # Add more if needed
-
-            # Store graphs and plots
-            drone_graphs = Dict{Int, SimpleDiGraph}()
-            drone_plots = Vector{Compose.Context}(undef, n_drones)
-
+            # Convert MILP solution to routes format for plotting
+            milp_routes = extract_tours_from_solution(x, 1:n_drones, GridpointsDrones, Begin_CS, End_CS)
+            route_vectors = Vector{Vector{Int}}(undef, n_drones)
             for s in 1:n_drones
-                G = SimpleDiGraph(n_nodes)
-                stroke_colors = RGB[]  # Edge colors for this drone
-
-                for i in GridpointsDrones, j in GridpointsDrones
-                    if value(x[i, j, s]) > 0.8
-                        add_edge!(G, i, j)
-                        push!(stroke_colors, edge_colors[s ≤ length(edge_colors) ? s : end])
-                    end
+                if haskey(milp_routes, s)
+                    route_vectors[s] = milp_routes[s]
+                else
+                    route_vectors[s] = [Begin_CS, End_CS]  # Empty route
                 end
-
-                # Store graph
-                drone_graphs[s] = G
-
-                # Plot
-                drone_plots[s] = gplot(
-                    G,
-                    locs_x,
-                    locs_y;
-                    nodefillc = nodefillc,
-                    edgestrokec = stroke_colors,
-                    nodelabel = 1:nv(G),
-                    arrowlengthfrac = 0.05,
-                    nodesize = 0.8,
-                    title = "Drone $s"
-                )
             end
-
-            # Combine plots side by side
-            side_by_side_plot = hstack(drone_plots...)
-
-            # Save as PNG (requires Cairo & Fontconfig)
-            draw(PNG("drones_side_by_side_iter$(iteration).png", 300 * n_drones, 500), side_by_side_plot)
-
-            # Show plot
-            display(side_by_side_plot)
-
-            # ----------------------------------------------
+            
+            # Plot using the reusable function
+            plot_routes(route_vectors, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "iter$(iteration)")
             # --------------- END OF PLOT ---------------
 
             # Here we assume that the relaxed problem has been solved to optimality (i.e gurobi did not timeout or anything)
@@ -550,12 +765,20 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
             end
 
             # if no subtour, then we can stop the algorithm!
-            if isempty(subtours_per_drone)
+            has_subtours = any(s -> !isempty(subtours_per_drone[s]), 1:n_drones)
+            if !has_subtours
+                println("✓ No subtours found - optimal solution reached!")
+                println("Final objective value: $best_LB")
                 return routes, UB, x, y
             end
+            
+            total_subtours = sum(length(subtours_per_drone[s]) for s in 1:n_drones)
+            println("Found $total_subtours subtours across $(length(subtours_per_drone)) drones - adding constraints...")
 
             # if lower bound is equal to upper bound, then we can stop the algorithm!
             if best_LB == UB
+                println("✓ Optimal solution found (LB = UB)!")
+                println("Final objective value: $best_LB")
                 return routes, UB, x, y
             end
 

@@ -42,3 +42,7 @@ experiments_2.ipynb
 experiments.py
 FAQ.txt
 drones_side_by_side*
+exported_paper*
+scratch*
+*.pdf
+export_paper.py
