@@ -456,7 +456,7 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
     for i in 1:n_customers
         xi, yi = customers[i]
         inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
-        costs[(0, i)] = inf_dist_from_depot <= 1 ? 1.0 : inf_dist_from_depot
+        costs[(0, i)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
         costs[(i, 0)] = costs[(0, i)]
     end
     
@@ -467,7 +467,7 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
                 xi, yi = customers[i]
                 xj, yj = customers[j]
                 inf_dist = max(abs(xi - xj), abs(yi - yj))
-                costs[(i, j)] = inf_dist <= 1 ? 1.0 : inf_dist
+                costs[(i, j)] = inf_dist <= 1 ? 1.0 : max_battery_time*4
             else
                 costs[(i, j)] = 0.0
             end
@@ -478,7 +478,7 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
     println("Running PSO for CPA initialization...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP(
         customers, profits, costs, n_drones, max_battery_time;
-        swarm_size=15, max_iterations=5,
+        swarm_size=10, max_iterations=1,
         w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
     )
     
@@ -703,7 +703,7 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
 
     # WARM START THE MODEL WITH THE PSO SOLUTION
     println("Warm starting MILP with PSO solution...")
-    error("Stop here")
+    error("Stop here") # keep this for now
     warm_start_with_solution!(model, x, y, routes, n_drones, GridpointsDrones, TransitGridpoints)
 
     iteration = 1
