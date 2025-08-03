@@ -25,33 +25,33 @@ using DataStructures
 using Random
 
 include("helper_functions.jl")
-include("TOP_PSO.jl")
+include("improved_TOP_PSO.jl")
 
-
+#error("Stop here")
 # EXAMPLE ON GENERATED DATA 
 
 Random.seed!(42)
 n_drones = 2
-max_battery_time = 8
-N = 8
-M = 8
+max_battery_time = 30  # Increase to match L
+N = 20
+M = 20
 function generate_random_charging_stations(N::Int, M::Int, num_stations::Int)
     selected = rand(1:N*M, num_stations)
     return [(div(i-1, M)+1, mod(i-1, M)+1) for i in selected]
 end
 
 # Example: generate 1 random charging station on a 20x20 grid
-N = 8
-M = 8
+N = 20  # Increase grid size
+M = 20  # Increase grid size
 ChargingStation = generate_random_charging_stations(N, M, 1)
 risk_pertime = rand(1, N, M)  # 1 time step, values between 0 and 1
 function generate_random_ground_stations(N::Int, M::Int, num_stations::Int)
     selected = rand(1:N*M, num_stations)
     return [(div(i-1, M)+1, mod(i-1, M)+1) for i in selected]
 end
-GroundStations = generate_random_ground_stations(N, M, 5)
+GroundStations = generate_random_ground_stations(N, M, 15)  # Increase number of customers
 
-L = 8
+L = 30 # Increase battery limit to allow longer routes
 
 # ---------- parameters ----------
 
@@ -475,10 +475,15 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
     end
     
     # Run PSO algorithm with proper parameters for CPA initialization
-    println("Running PSO for CPA initialization...")
+    println("=== PROBLEM SETUP ===")
+    println("Customers: $(length(customers)), Battery limit: $max_battery_time, Drones: $n_drones")
+    println("Depot: $(ChargingStation[1])")
+    println("======================")
+    
+    println("Running PSO for initial solution...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP(
-        customers, profits, costs, n_drones, max_battery_time;
-        swarm_size=10, max_iterations=1,
+        customers, profits, costs, n_drones, max_battery_time, ChargingStation[1];
+        swarm_size=5, max_iterations=30,  # Increase iterations for better optimization
         w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
     )
     

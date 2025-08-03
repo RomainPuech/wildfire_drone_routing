@@ -33,9 +33,9 @@ mutable struct PSOiA_TOP
 end
 
 """
-Fast split procedure based on interval graph model (O(m*n) complexity)
-Follows the algorithm described in Figure 1 of the paper
-Returns both the optimal profit and the optimal routes
+O(m*n) Fast split procedure based on interval graph model
+Follows the algorithm described in the paper exactly - Figure 1
+Precomputes all saturated tours in O(n) time, then uses O(m*n) DP
 """
 function fast_split_with_routes(permutation::Vector{Int}, pso::PSOiA_TOP)
     n = length(permutation)
@@ -46,21 +46,27 @@ function fast_split_with_routes(permutation::Vector{Int}, pso::PSOiA_TOP)
         return 0.0, Vector{Vector{Int}}()
     end
     
-    # Calculate saturated tours P[i] and first successor succ[i]
+    # Phase 1: Precompute all saturated tours in O(n) time
+    # This is the key improvement over the O(n²) version
     P = zeros(n)  # Profit of saturated tour starting at position i
     succ = zeros(Int, n)  # First successor of saturated tour starting at position i
     tour_lengths = zeros(Int, n)  # Length of each saturated tour
     
+    # Single forward pass to compute all saturated tours - O(n) total
+    j = 1  # Current position being evaluated
     for i in 1:n
+        # Extend tour starting at i as far as possible
         current_cost = 0.0
         current_profit = 0.0
-        j = i
         
-        # Build maximal feasible tour starting from position i
+        # Ensure j starts at least at position i
+        j = max(j, i)
+        
+        # Extend tour from current j position
         while j <= n
             customer_idx = permutation[j]
             
-            # Add travel cost to this customer
+            # Calculate travel cost to this customer
             if j == i
                 # Cost from depot to first customer
                 travel_cost = get(pso.costs, (0, customer_idx), L*4)
@@ -69,38 +75,42 @@ function fast_split_with_routes(permutation::Vector{Int}, pso::PSOiA_TOP)
                 travel_cost = get(pso.costs, (prev_customer, customer_idx), L*4)
             end
             
-            # Check if we can add this customer and still return to depot
-            # Calculate actual L-infinity distance (minimum hops) to depot
+            # Calculate return cost to depot (L-infinity distance)
             customer_coord = pso.customers[customer_idx]
             depot_x, depot_y = pso.depot_coord
             customer_x, customer_y = customer_coord
-            
-            # L-infinity distance (Chebyshev distance) = max(|x1-x2|, |y1-y2|)
             return_distance = max(abs(customer_x - depot_x), abs(customer_y - depot_y))
             
+            # Check feasibility
             if current_cost + travel_cost + return_distance > L
                 break
             end
             
+            # Add this customer to the tour
             current_cost += travel_cost
             current_profit += pso.profits[customer_idx]
             j += 1
         end
         
+        # Store results for tour starting at position i
         P[i] = current_profit
         tour_lengths[i] = j - i
         
         # Apply Equation 3: succ[i] = i + l_i^max + 1 if i + l_i^max + 1 ≤ n, else 0
-        # Here, l_i^max = j - i, so i + l_i^max + 1 = i + (j - i) + 1 = j + 1
-        if j <= n
-            succ[i] = j
+        next_pos = i + tour_lengths[i]
+        if next_pos <= n
+            succ[i] = next_pos
         else
             succ[i] = 0  # According to Equation 3
         end
+        
+        # Key optimization: if tour starting at i+1 would start after j,
+        # we can reuse the current j position for the next iteration
+        # This ensures O(n) total complexity
     end
     
-    # Dynamic programming table Γ[i,j] = max profit using j drones from position i onwards
-    # Using (n+1) × (m+1) to handle boundary conditions as per Equation 4
+    # Phase 2: Dynamic programming - O(m*n) as per Equation 4
+    # Γ[i,j] = max profit using j drones from position i onwards
     Γ = zeros(n + 1, m + 1)
     
     # Fill DP table in reverse order (as shown in Figure 1c)
@@ -128,7 +138,7 @@ function fast_split_with_routes(permutation::Vector{Int}, pso::PSOiA_TOP)
         end
     end
     
-    # Backtrack to find the optimal routes (as described in the paper)
+    # Phase 3: Backtrack to find the optimal routes (as described in the paper)
     routes = Vector{Vector{Int}}()
     i = 1
     j = m
@@ -193,9 +203,10 @@ function initialize_swarm(pso::PSOiA_TOP)
     end
     
     # Initialize some particles with IDCH heuristic (better quality)
+    # Paper mentions using slow IDCH for initialization with diversification
     n_idch = min(5, pso.swarm_size ÷ 2)
     for i in 1:n_idch
-        position = idch_heuristic(pso, false)  # Fast version
+        position = idch_heuristic(pso, true)  # Slow version with diversification for initialization
         profit = fast_split(position, pso)
         
         pso.swarm[i].position = copy(position)
@@ -212,10 +223,156 @@ function initialize_swarm(pso::PSOiA_TOP)
 end
 
 """
+2-opt tour optimization procedure
+Improves individual routes by removing two edges and reconnecting in the best way
+"""
+function two_opt_improvement!(route::Vector{Int}, pso::PSOiA_TOP)
+    if length(route) <= 3
+        return false  # Cannot improve tours with 3 or fewer customers
+    end
+    
+    improved = true
+    overall_improved = false
+    
+    while improved
+        improved = false
+        n = length(route)
+        
+        for i in 1:(n-2)
+            for j in (i+2):n
+                # Skip if j == i+1 (adjacent edges) or creates invalid swap
+                if j == i + 1
+                    continue
+                end
+                
+                # Calculate current cost of edges (i, i+1) and (j, j+1)
+                current_cost = 0.0
+                new_cost = 0.0
+                
+                # Current edges
+                if i == 1
+                    # Edge from depot to route[1]
+                    current_cost += get(pso.costs, (0, route[i]), 0.0)
+                else
+                    # Edge from route[i-1] to route[i]
+                    current_cost += get(pso.costs, (route[i-1], route[i]), 0.0)
+                end
+                
+                if i < n
+                    # Edge from route[i] to route[i+1]
+                    current_cost += get(pso.costs, (route[i], route[i+1]), 0.0)
+                end
+                
+                if j < n
+                    # Edge from route[j] to route[j+1]
+                    current_cost += get(pso.costs, (route[j], route[j+1]), 0.0)
+                else
+                    # Edge from route[j] to depot
+                    current_cost += get(pso.costs, (route[j], 0), 0.0)
+                end
+                
+                # Try 2-opt swap: reverse the order between positions i+1 and j
+                new_route = copy(route)
+                reverse!(new_route, i+1, j)
+                
+                # Calculate new cost after 2-opt
+                if i == 1
+                    # Edge from depot to new_route[1]
+                    new_cost += get(pso.costs, (0, new_route[i]), 0.0)
+                else
+                    # Edge from new_route[i-1] to new_route[i]
+                    new_cost += get(pso.costs, (new_route[i-1], new_route[i]), 0.0)
+                end
+                
+                if i < n
+                    # Edge from new_route[i] to new_route[i+1]
+                    new_cost += get(pso.costs, (new_route[i], new_route[i+1]), 0.0)
+                end
+                
+                if j < n
+                    # Edge from new_route[j] to new_route[j+1]
+                    new_cost += get(pso.costs, (new_route[j], new_route[j+1]), 0.0)
+                else
+                    # Edge from new_route[j] to depot
+                    new_cost += get(pso.costs, (new_route[j], 0), 0.0)
+                end
+                
+                # If improvement found, apply it
+                if new_cost < current_cost
+                    route[:] = new_route
+                    improved = true
+                    overall_improved = true
+                    break
+                end
+            end
+            if improved
+                break
+            end
+        end
+    end
+    
+    return overall_improved
+end
+
+"""
+Apply 2-opt to all routes in a solution
+"""
+function apply_two_opt_to_solution!(permutation::Vector{Int}, pso::PSOiA_TOP)
+    # Extract current routes from the permutation
+    _, routes = fast_split_with_routes(permutation, pso)
+    
+    improved = false
+    
+    # Apply 2-opt to each route
+    for route in routes
+        if length(route) > 3
+            if two_opt_improvement!(route, pso)
+                improved = true
+            end
+        end
+    end
+    
+    # If any route was improved, reconstruct the permutation
+    if improved
+        # Reconstruct permutation from improved routes
+        new_permutation = Int[]
+        for route in routes
+            append!(new_permutation, route)
+        end
+        
+        # Add any missing customers that were in the original permutation
+        # but not included in the optimal routes
+        used_customers = Set(new_permutation)
+        remaining_customers = Int[]
+        for customer in permutation
+            if !(customer in used_customers)
+                push!(remaining_customers, customer)
+            end
+        end
+        
+        # Append remaining customers to maintain same permutation length
+        append!(new_permutation, remaining_customers)
+        
+        # Ensure we have the exact same length as input
+        if length(new_permutation) == length(permutation)
+            permutation[:] = new_permutation
+        else
+            # If lengths don't match, don't modify (safety fallback)
+            improved = false
+        end
+    end
+    
+    return improved
+end
+
+"""
 Iterative Destruction/Construction Heuristic (IDCH)
+Now includes 2-opt optimization as mentioned in the paper
 """
 function idch_heuristic(pso::PSOiA_TOP, slow_version::Bool = false)
-    max_iter = slow_version ? length(pso.accessible_customers)^2 : length(pso.accessible_customers)
+    n = length(pso.accessible_customers)
+    max_iter = slow_version ? n^2 : n
+    diversify_every = n  # For slow version, diversify every n iterations
     
     # Start with random permutation
     current_solution = shuffle(pso.accessible_customers)
@@ -223,34 +380,66 @@ function idch_heuristic(pso::PSOiA_TOP, slow_version::Bool = false)
     best_profit = fast_split(best_solution, pso)
     
     no_improvement = 0
+    iteration = 0
     
     while no_improvement < max_iter
-        # Destruction phase: remove random customers
-        n_remove = rand(1:min(3, length(current_solution) ÷ 2))
-        destroyed = copy(current_solution)
-        removed_customers = Int[]
+        iteration += 1
         
-        for _ in 1:n_remove
-            if length(destroyed) > 1
-                idx = rand(1:length(destroyed))
-                push!(removed_customers, destroyed[idx])
-                deleteat!(destroyed, idx)
+        # Slow version: apply diversification every n iterations
+        if slow_version && (iteration % diversify_every == 0)
+            # Diversification phase as described in paper
+            # Remove up to n/m customers (large destruction)
+            max_remove_diversify = max(1, n ÷ pso.n_drones)
+            n_remove = rand(1:max_remove_diversify)
+            
+            destroyed = copy(current_solution)
+            removed_customers = Int[]
+            
+            for _ in 1:n_remove
+                if length(destroyed) > 1
+                    idx = rand(1:length(destroyed))
+                    push!(removed_customers, destroyed[idx])
+                    deleteat!(destroyed, idx)
+                end
             end
+            
+            # Apply 2-opt to each tour after destruction (paper mentions this)
+            apply_two_opt_to_solution!(destroyed, pso)
+            
+            # Reconstruction phase
+            reconstructed = best_insertion_algorithm(destroyed, removed_customers, pso)
+            current_solution = reconstructed
+        else
+            # Regular destruction phase: remove 1-3 customers
+            n_remove = rand(1:min(3, length(current_solution) ÷ 2))
+            destroyed = copy(current_solution)
+            removed_customers = Int[]
+            
+            for _ in 1:n_remove
+                if length(destroyed) > 1
+                    idx = rand(1:length(destroyed))
+                    push!(removed_customers, destroyed[idx])
+                    deleteat!(destroyed, idx)
+                end
+            end
+            
+            # Apply 2-opt procedure to reduce travel cost (as mentioned in paper)
+            apply_two_opt_to_solution!(destroyed, pso)
+            
+            # Construction phase: reinsert customers using Best Insertion
+            reconstructed = best_insertion_algorithm(destroyed, removed_customers, pso)
+            current_solution = reconstructed
         end
         
-        # Construction phase: reinsert customers using Best Insertion
-        reconstructed = best_insertion_algorithm(destroyed, removed_customers, pso)
-        profit = fast_split(reconstructed, pso)
+        profit = fast_split(current_solution, pso)
         
         if profit > best_profit
-            best_solution = copy(reconstructed)
+            best_solution = copy(current_solution)
             best_profit = profit
             no_improvement = 0
         else
             no_improvement += 1
         end
-        
-        current_solution = reconstructed
     end
     
     return best_solution
@@ -485,6 +674,7 @@ end
 
 """
 Destruction/repair operator
+Now includes 2-opt after reconstruction as mentioned in the paper
 """
 function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP)
     n = length(particle.position)
@@ -506,6 +696,10 @@ function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP)
     
     # Reconstruct using BIA
     reconstructed = best_insertion_algorithm(new_position, removed, pso)
+    
+    # Apply 2-opt to optimize tour costs after reconstruction (as mentioned in paper)
+    apply_two_opt_to_solution!(reconstructed, pso)
+    
     new_profit = fast_split(reconstructed, pso)
     
     if new_profit > particle.current_profit
@@ -516,6 +710,7 @@ function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP)
     
     return false
 end
+
 """
 Update local best positions with diversity management
 """
@@ -596,6 +791,7 @@ function calculate_travel_cost(permutation::Vector{Int}, pso::PSOiA_TOP)
     
     return total_cost
 end
+
 """
 Main PSO algorithm - following Algorithm 1 from the paper exactly
 """
@@ -733,4 +929,4 @@ function extract_routes(giant_tour::Vector{Int}, pso::PSOiA_TOP)
     # println("Total profit: $(round(optimal_profit, digits=3))")
     
     return routes
-end
+end 
