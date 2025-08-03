@@ -4,15 +4,15 @@ import tqdm
 import json
 from typing import Any, Dict, Tuple, List
 
-
-def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, log_id=""):
+### For SensorPlacement Strategies
+def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, log_id="", use_burnmap_in_log_filename: bool = True):
     """
     Wraps a SensorPlacementStrategy to log and reuse previous placements.
 
     Args:
         input_strat_cls (SensorPlacementStrategy): The input sensor placement strategy class.
         bool: scenario_level_log: If True, the log file will be saved at the scenario level, otherwise it will be saved at the layout level
-
+        bool: use_burnmap_in_log_filename: If True, the burnmap filename will be used in the log filename
     Returns:
         WrappedStrategy (SensorPlacementStrategy): A wrapped version that logs and reuses results.
     """
@@ -32,7 +32,7 @@ def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, 
                     Expected keys:
                         - log_file: Path to the log file
                         - burnmap_filename: Path to the burn map used by the Julia optimizer
-                        - recompute_logfile: If True, the log file will be recomputed
+                        - recompute_logfile_sensor: If True, the log file will be recomputed
             """
 
             n_ground = automatic_initialization_parameters.get("n_ground_stations", 0)
@@ -49,16 +49,17 @@ def wrap_log_sensor_strategy(input_strat_cls, scenario_level_log: bool = False, 
                 log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
             os.makedirs(log_dir, exist_ok=True)
 
+            bm_string = custom_initialization_parameters['burnmap_filename'].split('/')[-1] + '_' if 'burnmap_filename' in custom_initialization_parameters and use_burnmap_in_log_filename else ""
             if scenario_level_log:
-                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters['scenario_name']}_{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
+                log_path = os.path.join(log_dir, f"{automatic_initialization_parameters['scenario_name']}_{bm_string}{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
             else:
-                log_path = os.path.join(log_dir, f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
+                log_path = os.path.join(log_dir, f"{bm_string}{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge{log_id_str}.json")
 
 
             self.ground_sensor_locations = []
             self.charging_station_locations = []
 
-            if os.path.exists(log_path) and not custom_initialization_parameters.get("recompute_logfile", False):
+            if os.path.exists(log_path) and not custom_initialization_parameters.get("recompute_logfile_sensor", False):
                 # print(f"[wrap_log_strategy] Loading placement from: {log_path}")
                 with open(log_path, "r") as log_file:
                     data = json.load(log_file)
@@ -123,6 +124,7 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
     import json, os
 
     class LoggedDroneRoutingStrategy(input_drone_cls):
+        strategy_name = "LoggedDroneRoutingStrategy"
         def __init__(self, automatic_initialization_parameters, custom_initialization_parameters):
             super().__init__(automatic_initialization_parameters, custom_initialization_parameters)
             self.auto_params = automatic_initialization_parameters
@@ -191,22 +193,26 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
             self.log_file = os.path.join(log_dir, log_name)
 
             self.loaded_from_log = False
+            self.recompute_logfile_drone = custom_initialization_parameters.get("recompute_logfile_drone", False)
+            # If not recomputing step-by-step, and log exists, load it
 
-            # If user wants to force recomputation, we skip loading
-            # Otherwise we try to load from self.log_file
-            if not custom_initialization_parameters.get("recompute_logfile", False):
-                # print(f"\033[91m WE TRY TO LOAD FROM LOGFILE \033[0m")
-                if os.path.exists(self.log_file):
-                    # print(f"[wrap_log_drone_strategy] ✅ Log found at {self.log_file}, loading from disk.")
-                    with open(self.log_file, "r") as f:
-                        data = json.load(f)
-                    self.log_data = data
+            if os.path.exists(self.log_file):
+                with open(self.log_file, "r") as f:
+                    data = json.load(f)
+                self.log_data = data
+
+                # Mark as loaded only if NOT recomputing
+                if not self.recompute_logfile_drone:
                     self.loaded_from_log = True
-                    # print(f"[wrap_log_drone_strategy] Loaded {len(self.log_data.get('actions_history', []))} steps of actions.")
-                # else:
-                    # print(f"[wrap_log_drone_strategy] 🚫 No log file found at {self.log_file}. Logging will be enabled.")
-            # else:
-                # print(f"[wrap_log_drone_strategy] 🔄 Forcing recomputation. Will overwrite {self.log_file}.")
+
+                # If recomputing, ensure actions_history exists and has enough steps
+                elif self.recompute_logfile_drone and not self.log_data["actions_history"]:
+                    print(f"[wrap_log_drone_strategy] ⚠️ Log file found but empty — switching to fresh generation mode.")
+                    self.recompute_logfile_drone = False  # Fall back to regenerate full log
+            else:
+                if self.recompute_logfile_drone:
+                    print(f"[wrap_log_drone_strategy] ⚠️ No existing log found — switching to full generation mode.")
+                    self.recompute_logfile_drone = False  # Fall back to regenerate full log
 
 
             # We'll keep a step counter for next_actions
@@ -262,11 +268,19 @@ def wrap_log_drone_strategy(input_drone_cls, scenario_level_log: bool = False, l
             actions = super().next_actions(automatic_step_parameters, custom_step_parameters)
 
             # store in log_data
-            self.log_data["actions_history"].append(self._normalize_actions(actions))
+            normalized_actions = self._normalize_actions(actions)
+
+            if self.recompute_logfile_drone:
+                if self.step_counter < len(self.log_data["actions_history"]):
+                    self.log_data["actions_history"][self.step_counter] = normalized_actions
+                else:
+                    raise IndexError(f"Timestep {self.step_counter} exceeds log length {len(self.log_data['actions_history'])}")
+            else:
+                self.log_data["actions_history"].append(normalized_actions)
 
             # increment step
             self.step_counter += 1
-
+    
             # save log
             self._save_log()
             # if self.loaded_from_log and self.step_counter < len(self.log_data["actions_history"]):
@@ -417,7 +431,21 @@ class LoggableSensorStrategyWrapper:
         n_ground = automatic_initialization_parameters.get("n_ground_stations", 0)
         n_charging = automatic_initialization_parameters.get("n_charging_stations", 0)
 
-        log_filename = f"{layout_name}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge.json"
+    
+        
+        log_dir = os.path.join(os.path.dirname(custom_initialization_parameters["burnmap_filename"]), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Create burnmap string if required
+        # bm_string = ""
+        # if "burnmap_filename" in custom_initialization_parameters:
+        #     bm_string = custom_initialization_parameters["burnmap_filename"].split('/')[-1] + '_'
+
+        # Create the log filename
+    
+        scenario_name = automatic_initialization_parameters.get("scenario_name", "scenario")
+        log_filename = f"{scenario_name}{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge.json"
+
         log_path = os.path.join(log_dir, log_filename)
         self.log_path = log_path
 
@@ -425,13 +453,13 @@ class LoggableSensorStrategyWrapper:
         self.charging_station_locations = []
 
         if os.path.exists(log_path):
-            print(f"[LoggableSensorStrategy] Loaded placement from: {log_path}")
+            print(f"[DEBUG] [LoggableSensorStrategy] Using PRECOMPUTED log at: {log_path}")
             with open(log_path, "r") as f:
                 data = json.load(f)
                 self.ground_sensor_locations = [tuple(loc) for loc in data["ground_sensor_locations"]]
                 self.charging_station_locations = [tuple(loc) for loc in data["charging_station_locations"]]
         else:
-            print(f"[LoggableSensorStrategy] Running strategy: {strategy_name}")
+            print(f"[DEBUG] [LoggableSensorStrategy] NO log found at: {log_path} — computing new placement with {strategy_name}")
             base = self.base_strategy_cls(automatic_initialization_parameters, custom_initialization_parameters)
             self.ground_sensor_locations, self.charging_station_locations = base.get_locations()
             with open(log_path, "w") as f:
@@ -439,7 +467,7 @@ class LoggableSensorStrategyWrapper:
                     "ground_sensor_locations": self.ground_sensor_locations,
                     "charging_station_locations": self.charging_station_locations
                 }, f, indent=2)
-            print(f"[LoggableSensorStrategy] Saved placements to: {log_path}")
+            print(f"[DEBUG] [LoggableSensorStrategy] Saved new placement log at: {log_path}")
 
     def get_locations(self):
         return self.ground_sensor_locations, self.charging_station_locations
@@ -538,11 +566,22 @@ class LoggableDroneStrategyWrapper:
         layout_fp     = "_".join([f"{x}-{y}" for x, y
                                   in sorted(automatic_initialization_parameters["charging_stations_locations"])])
 
+
+        log_name = f"{automatic_initialization_parameters['scenario_name']}_" + \
+                        f"{custom_initialization_parameters['burnmap_filename'].split('/')[-1]}_" + \
+                        f"{self.base_strategy_cls.__name__}_" + \
+                        f"{automatic_initialization_parameters['n_drones']}_drones_" + \
+                        f"{automatic_initialization_parameters['n_charging_stations']}_charging_stations_" + \
+                        f"{automatic_initialization_parameters['n_ground_stations']}_ground_stations_" + \
+                        layout_fp + "_" + \
+                        (f"{custom_initialization_parameters['optimization_horizon']}_" if 'optimization_horizon' in custom_initialization_parameters else '') + "_" + \
+                        (f"{custom_initialization_parameters['reevaluation_step']}_" if 'reevaluation_step' in custom_initialization_parameters else '') + \
+                        (f"{custom_initialization_parameters['regularization_param']}_" if 'regularization_param' in custom_initialization_parameters else 'no_regularization') + \
+                        "logged_drone_routing.json"
+
         self._log_path = os.path.join(
             log_dir,
-            f"{os.path.basename(burnmap_file)}_{strategy_name}_{n_drones}_drones_"
-            f"{n_charge}_charging_stations_{n_ground}_ground_stations_{layout_fp}_"
-            "logged_drone_routing.json"
+            log_name
         )
 
         # -----------------------------------------------------------------
@@ -553,6 +592,7 @@ class LoggableDroneStrategyWrapper:
 
         if (not custom_initialization_parameters.get("recompute_logfile", False)
                 and os.path.exists(self._log_path)):
+            print(f"[DEBUG] [LoggableDroneStrategy] Using PRECOMPUTED log at: {self._log_path}")
             with open(self._log_path, "r") as fp:
                 self._log = json.load(fp)
             self._loaded_from_disk = True
@@ -562,6 +602,7 @@ class LoggableDroneStrategyWrapper:
                     (st, tuple(pos)) for st, pos in self._log["initial_drone_locations"]
                 ]
         else:
+            print(f"[DEBUG] [LoggableDroneStrategy] NO log found at: {self._log_path} — computing new actions and logging.")
             self._log = {
                 "initial_drone_locations": None,
                 "actions_history": []
@@ -646,7 +687,7 @@ def make_loggable_drone_strategy(strategy_cls):
     """
     Same idea for drone strategies.
     """
-    name = f"{strategy_cls.__name__}Logged"
+    name = f"{strategy_cls.__name__}"
 
     Wrapped = type(
         name,
@@ -654,7 +695,7 @@ def make_loggable_drone_strategy(strategy_cls):
         {
             'base_strategy_cls': strategy_cls,
             'strategy_name'   : strategy_cls.__name__,
-            '__module__'      : __name__,
+            '__module__': 'wrappers',
         }
     )
 
@@ -662,185 +703,22 @@ def make_loggable_drone_strategy(strategy_cls):
     return Wrapped
 
 
-from Strategy import RandomSensorPlacementStrategy, DroneRoutingUniformCoverageResetStatic
+from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy
 from new_clustering import get_wrapped_clustering_strategy
 
 # Register statically at module load
 
 RandomSensorPlacementStrategyLogged = make_loggable_sensor_strategy(RandomSensorPlacementStrategy)
-DroneRoutingUniformCoverageResetStaticLogged = make_loggable_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic))
+SensorPlacementMaxCoverageGaussianTimeLogged = make_loggable_sensor_strategy(SensorPlacementMaxCoverageGaussianTime)
 
+ClusteredUniformCoverage = get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)
+ClusteredMaxCoverage = get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)
+ClusteredRandomStrategy = get_wrapped_clustering_strategy(RandomDroneRoutingStrategy)
 
-# ====================
-# Sensor Wrapper
-# ====================
+DroneRoutingUniformCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredUniformCoverage)
+DroneRoutingMaxCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredMaxCoverage)
+RandomDroneRoutingStrategyLogged = make_loggable_drone_strategy(ClusteredRandomStrategy)
 
-# class LoggableSensorStrategyWrapper:
-#     def __init__(self, strategy_cls, auto_params: dict, custom_params: dict):
-#         self.strategy_cls = strategy_cls
-#         self.auto_params = auto_params
-#         self.custom_params = custom_params
-#         self._initialize()
-
-#     def _initialize(self):
-#         burnmap_path = self.custom_params.get("burnmap_filename")
-#         if not burnmap_path:
-#             raise ValueError("Expected 'burnmap_filename' in custom_initialization_parameters")
-
-#         base_dir = os.path.dirname(os.path.abspath(burnmap_path))
-#         log_dir = os.path.join(base_dir, "logs")
-#         os.makedirs(log_dir, exist_ok=True)
-
-#         layout_name = self.custom_params.get("log_file", "layout")
-#         strategy_name = self.strategy_cls.__name__
-#         N = self.auto_params.get("N", 0)
-#         M = self.auto_params.get("M", 0)
-#         n_ground = self.auto_params.get("n_ground_stations", 0)
-#         n_charging = self.auto_params.get("n_charging_stations", 0)
-
-#         log_filename = f"{layout_name}_{strategy_name}_{N}N_{M}M_{n_ground}ground_{n_charging}charge.json"
-#         log_path = os.path.join(log_dir, log_filename)
-#         self.log_path = log_path
-
-#         if os.path.exists(log_path):
-#             print(f"[Sensor] Loaded placement from: {log_path}")
-#             with open(log_path, "r") as f:
-#                 data = json.load(f)
-#                 self.ground_sensor_locations = [tuple(loc) for loc in data["ground_sensor_locations"]]
-#                 self.charging_station_locations = [tuple(loc) for loc in data["charging_station_locations"]]
-#         else:
-#             print(f"[Sensor] Running strategy: {strategy_name}")
-#             strategy_instance = self.strategy_cls(self.auto_params, self.custom_params)
-#             self.ground_sensor_locations, self.charging_station_locations = strategy_instance.get_locations()
-#             with open(log_path, "w") as f:
-#                 json.dump({
-#                     "ground_sensor_locations": self.ground_sensor_locations,
-#                     "charging_station_locations": self.charging_station_locations
-#                 }, f, indent=2)
-#             print(f"[Sensor] Saved placements to: {log_path}")
-
-#     def get_locations(self):
-#         return self.ground_sensor_locations, self.charging_station_locations
-
-
-# # ====================
-# # Drone Wrapper
-# # ====================
-
-# class LoggableDroneStrategyWrapper:
-#     def __init__(self, strategy_cls, auto_params: dict, custom_params: dict):
-#         self._inner = strategy_cls(auto_params, custom_params)
-#         self.custom_params = custom_params
-#         self.auto_params = auto_params
-#         self._step_counter = 0
-#         self._loaded_from_disk = False
-#         self._init_log()
-
-#     def _init_log(self):
-#         burnmap_file = self.custom_params["burnmap_filename"]
-#         base_dir = os.path.dirname(os.path.abspath(burnmap_file))
-#         log_dir = os.path.join(base_dir, "logs")
-#         os.makedirs(log_dir, exist_ok=True)
-
-#         strategy_name = self._inner.__class__.__name__
-#         N = self.auto_params["N"]
-#         M = self.auto_params["M"]
-#         n_drones = self.auto_params["n_drones"]
-#         n_charge = self.auto_params["n_charging_stations"]
-#         n_ground = self.auto_params["n_ground_stations"]
-#         layout_fp = "_".join([f"{x}-{y}" for x, y in sorted(self.auto_params["charging_stations_locations"])])
-
-#         self._log_path = os.path.join(
-#             log_dir,
-#             f"{os.path.basename(burnmap_file)}_{strategy_name}_{n_drones}_drones_"
-#             f"{n_charge}_charging_stations_{n_ground}_ground_stations_{layout_fp}_logged_drone_routing.json"
-#         )
-
-#         if not self.custom_params.get("recompute_logfile", False) and os.path.exists(self._log_path):
-#             with open(self._log_path, "r") as fp:
-#                 self._log = json.load(fp)
-#             self._loaded_from_disk = True
-#             if self._log.get("initial_drone_locations"):
-#                 self._log["initial_drone_locations"] = [
-#                     (st, tuple(pos)) for st, pos in self._log["initial_drone_locations"]
-#                 ]
-#         else:
-#             self._log = {
-#                 "initial_drone_locations": None,
-#                 "actions_history": []
-#             }
-
-#     def get_initial_drone_locations(self):
-#         if self._log["initial_drone_locations"] is not None:
-#             return self._log["initial_drone_locations"]
-
-#         raw = self._inner.get_initial_drone_locations()
-#         self._log["initial_drone_locations"] = self._normalize_initial(raw)
-#         self._flush()
-#         return raw
-
-#     def next_actions(self, auto_step_params, custom_step_params):
-#         if self._loaded_from_disk and self._step_counter < len(self._log["actions_history"]):
-#             stored = self._log["actions_history"][self._step_counter]
-#             self._step_counter += 1
-#             return self._denormalize_actions(stored)
-
-#         acts = self._inner.next_actions(auto_step_params, custom_step_params)
-#         self._log["actions_history"].append(self._normalize_actions(acts))
-#         self._step_counter += 1
-#         self._flush()
-#         return acts
-
-#     def __getattr__(self, item):
-#         return getattr(self._inner, item)
-
-#     def _flush(self):
-#         with open(self._log_path, "w") as fp:
-#             json.dump(self._log, fp, indent=2)
-
-#     @staticmethod
-#     def _normalize_initial(raw) -> List[Tuple[str, Tuple[int, int]]]:
-#         if isinstance(raw, list):
-#             if raw and isinstance(raw[0], tuple) and isinstance(raw[0][0], str):
-#                 return [(st, (int(x), int(y))) for st, (x, y) in raw]
-#             return [("charge", (int(x), int(y))) for (x, y) in raw]
-#         if isinstance(raw, tuple) and len(raw) == 2:
-#             positions, states = raw
-#             return [(st, (int(x), int(y))) for (x, y), st in zip(positions, states)]
-#         raise ValueError("Unexpected initial-location format from strategy")
-
-#     @staticmethod
-#     def _normalize_actions(acts):
-#         return [[typ, None if param is None else list(param)] for typ, param in acts]
-
-#     @staticmethod
-#     def _denormalize_actions(stored):
-#         return [(typ, None if param is None else tuple(param)) for typ, param in stored]
-
-
-# # ====================
-# # Top-Level Factories
-# # ====================
-
-# class SensorStrategyFactory:
-#     def __init__(self, strategy_cls):
-#         self.strategy_cls = strategy_cls
-
-#     def __call__(self, auto_params, custom_params):
-#         return LoggableSensorStrategyWrapper(self.strategy_cls, auto_params, custom_params)
-
-
-# class DroneStrategyFactory:
-#     def __init__(self, strategy_cls):
-#         self.strategy_cls = strategy_cls
-
-#     def __call__(self, auto_params, custom_params):
-#         return LoggableDroneStrategyWrapper(self.strategy_cls, auto_params, custom_params)
-
-
-# def create_sensor_strategy(strategy_cls):
-#     return SensorStrategyFactory(strategy_cls)
-
-
-# def create_drone_strategy(strategy_cls):
-#     return DroneStrategyFactory(strategy_cls)
+globals()["DroneRoutingUniformCoverageResetStaticLogged"] = DroneRoutingUniformCoverageResetStaticLogged
+globals()["DroneRoutingMaxCoverageResetStaticLogged"] = DroneRoutingMaxCoverageResetStaticLogged
+globals()["RandomDroneRoutingStrategyLogged"] = RandomDroneRoutingStrategyLogged
