@@ -2785,7 +2785,7 @@ class DroneRoutingMaxCoverageGrowingStatic(DroneRoutingStrategy):
                 #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         # if t is a multiple of the data time resolution, we update the whole burn map
         if self.t % self.data_time_resolution == 0:
-            # Check if we have enough time steps in the initial burnmap
+            # Check if we have enough time steps in the initial burnmap # THIS IS A PB!! IF THE INIT IS STATIC!! TODO
             if self.t < self.initial_burnmap.shape[0]:
                 self.current_burnmap[self.t:] += self.initial_burnmap[self.t]
 
@@ -3121,7 +3121,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         """
         self.t += 1
         # Every reevaluation_step calls, recompute the solution using the existing model
-        if self.call_counter == self.reevaluation_step-1:
+        if self.call_counter == self.reevaluation_step:
             self.call_counter = 0
             # save the current burnmap
             start_time = time.time()
@@ -3173,7 +3173,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
                 #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         # if t is a multiple of the data time resolution, we update the whole burn map
         if self.t % self.data_time_resolution == 0:
-            self.current_burnmap[self.t:] += self.initial_burnmap[self.t]
+            self.current_burnmap[self.t:] += self.initial_burnmap[0] #TODO asdapt to dynamic map
 
 
         return self.current_solution[idx]

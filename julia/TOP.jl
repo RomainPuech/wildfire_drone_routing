@@ -755,6 +755,12 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
     # Plot the initial PSO solution
     println("Plotting initial PSO solution...")
     plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial")
+    # also log these routes to a file, append if the file already exists   
+    open("pso_initial_routes.txt", "a") do f
+        for s in 1:n_drones
+            write(f, "Drone $s: $(coords[routes[s]])\n")
+        end
+    end
 
     # RETURN THE PSO SOLUTION DIRECTLY (bypassing CPA algorithm)
     println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
@@ -937,26 +943,26 @@ function compute_TOP_plan(risk_pertime_file::String,
     # 3) Build the time-indexed movement plan expected by Python
     # ------------------------------------------------------------------
     horizon = max_battery_time                    # optimisation horizon
-    movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:horizon ]
+    movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:horizon+1]
 
     for s in 1:n_drones
         route = s <= length(routes) && !isempty(routes[s]) ? routes[s] : [Begin_CS, End_CS]
+        movement_plan[1][s] = ("charge", ChargingStations[1])
         t = 1
-        movement_plan[t][s] = ("charge", ChargingStations[1])
-        for node_idx in route[2:end-1]          # skip depots
+        for node_idx in route[2:end-1]  # skip initial and final depots
             t += 1
             if t > horizon
                 break
             end
             movement_plan[t][s] = ("fly", coords[node_idx])
         end
-        if t < horizon
+        if t < horizon + 1 # we include the final depot manually
             t += 1
             movement_plan[t][s] = ("charge", ChargingStations[1])
         end
     end
 
-    return movement_plan
+    return movement_plan # no need to include starting depot in the movement plan
 end
 
 # Overloaded method to handle Vector{Any} for ground stations (empty case from PyCall)
