@@ -3035,7 +3035,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         self.current_burnmap = self.initial_burnmap.copy()
         if self.burnmap_type == "static":
             # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
-            self.current_burnmap = np.tile(self.initial_burnmap, (90, 1, 1))
+            self.current_burnmap = np.tile(self.initial_burnmap, (120, 1, 1))
         else:
             print(f"careful: burnmap_type is not static, it is {self.burnmap_type}")
         
@@ -3055,7 +3055,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
 
        
         self.reset_time = custom_initialization_parameters.get("reset_time", 2*63)
-        self.data_time_resolution = custom_initialization_parameters.get("data_time_resolution", 1)
+        self.data_time_resolution = automatic_initialization_parameters.get("data_time_resolution", 1)
         
         # Store original charging stations as class attribute
         self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
@@ -3085,6 +3085,8 @@ class DroneRoutingTOP(DroneRoutingStrategy):
             self.julia_charging_stations_locations,
             self.julia_ground_sensor_locations,
             self.automatic_initialization_parameters["max_battery_time"],
+            0, # t = 0 for the initial plan
+            False  # verbose=False to disable Julia plots
         )
         self.execution_time += time.time() - start_time
         # print(f"current_solution (Julia indexing): {self.current_solution}")
@@ -3104,7 +3106,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
 
 
-        return initial_positions
+        return initial_positions, self.current_burnmap_filename
 
         
         
@@ -3130,7 +3132,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
             # print("Solving next move with model reuse (integer indexing)")
             
             # Convert drone locations to Julia indexing
-            julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+            #julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
             
             # print("--- parameters for julia (Julia indexing) ---")
             # print(f"drone_locations: {julia_drone_locations}")
@@ -3146,6 +3148,8 @@ class DroneRoutingTOP(DroneRoutingStrategy):
                 self.julia_charging_stations_locations,
                 self.julia_ground_sensor_locations,
                 self.automatic_initialization_parameters["max_battery_time"],
+                self.t,
+                False  # verbose=False to disable Julia plots
             )
             self.execution_time += time.time() - start_time
             #print("Next move optimization finished")
@@ -3173,7 +3177,8 @@ class DroneRoutingTOP(DroneRoutingStrategy):
                 #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         # if t is a multiple of the data time resolution, we update the whole burn map
         if self.t % self.data_time_resolution == 0:
-            self.current_burnmap[self.t:] += self.initial_burnmap[0] #TODO asdapt to dynamic map
+            #self.current_burnmap[self.t:] += self.initial_burnmap[0] #TODO adapt to dynamic map
+            save_burn_map(self.current_burnmap, self.current_burnmap_filename)
 
 
         return self.current_solution[idx]

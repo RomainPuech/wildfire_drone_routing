@@ -8,7 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code'))
 
 from Strategy import DroneRoutingTOP
 from displays import create_video_scenario_burnmap
-
+from dataset import load_burn_map
 
 def plot_drone_trajectories(trajectories, grid_size, charging_stations, max_battery_time, save_path=None):
     """Plot the trajectories of all drones on separate grids for each journey.
@@ -165,22 +165,26 @@ def test_top_strategy_basic():
     """
 
     # --- 1. Create toy burn-map ------------------------------------
-    burnmap = np.full((1, 15, 15), 0.1, dtype=np.float32)
+    # exponential distribution with mean 0.1
+    burnmap = np.random.pareto(1, size=(1, 15, 15)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
+    #burnmap = burnmap / np.max(burnmap)
     
     burnmap_file = os.path.join("tmp_burnmap.npy")
     np.save(burnmap_file, burnmap)
 
     # --- 2. Build parameter dictionaries ------------------------
+    L = 10
     auto_params = {
         "N": 15,
         "M": 15,
         "max_battery_distance": -1,
-        "max_battery_time": 15,
+        "max_battery_time": L,
         "n_drones": 2,
         "n_ground_stations": 0,
         "n_charging_stations": 1,
         "ground_sensor_locations": [],
-        "charging_stations_locations": [(7, 7)],  # Python 0-based
+        "charging_stations_locations": [(6, 5)],  # Python 0-based
+        "data_time_resolution": L, # TODO for the momemnt battery = data res. THINK ABT IMPLICATIONS IF BATTERY IS LESS
     }
 
     custom_params = {
@@ -188,13 +192,14 @@ def test_top_strategy_basic():
         "reevaluation_step": auto_params["max_battery_time"],
         "optimization_horizon": auto_params["max_battery_time"],
         "burnmap_type": "static",
+        "reset_time": 2*auto_params["max_battery_time"],
     }
 
     print("Creating DroneRoutingTOP strategy...")
     # --- 3. Instantiate and get initial positions ---------------
     strat = DroneRoutingTOP(auto_params, custom_params)
     print("Getting initial drone locations...")
-    init_actions = strat.get_initial_drone_locations()
+    init_actions, current_burnmap_filename = strat.get_initial_drone_locations()
     print(f"Initial actions: {init_actions}")
     assert len(init_actions) == auto_params["n_drones"]
 
@@ -214,9 +219,12 @@ def test_top_strategy_basic():
     }
     
     print("Running simulation steps...")
-    for t in range(2 * auto_params["max_battery_time"]):
+    total_steps = 2 * auto_params["max_battery_time"]
+    for t in range(total_steps):
         actions = strat.next_actions(step_params, {})
-        print(f"Step {t}: actions = {actions}")
+        # Print progress every 10 steps instead of every step to avoid blocking IO
+        if t % 10 == 0 or t == total_steps - 1:
+            print(f"Step {t}/{total_steps}: actions = {actions}")
         assert len(actions) == auto_params["n_drones"], f"Invalid action length at t={t}"
         
         # Track trajectories
@@ -260,14 +268,6 @@ def test_top_strategy_basic():
     # --- 8. Generate video of trajectories overlaid on burnmap ----
     print("\nGenerating video of trajectories overlaid on burnmap...")
     
-    # Load the burnmap data we created earlier
-    burnmap_data = np.load(burnmap_file)
-    
-    # Since our burnmap is static (single timestep), we need to repeat it for all timesteps
-    total_timesteps = 2 * auto_params["max_battery_time"]
-    
-    # Create time-varying burnmap by repeating the static map
-    time_varying_burnmap = np.repeat(burnmap_data, total_timesteps + 1, axis=0)  # +1 for initial position
     
     # Format drone trajectories for the video function
     # The function expects a list where each element is the drone positions at that timestep
@@ -280,18 +280,26 @@ def test_top_strategy_basic():
         drone_locations_history.append(timestep_positions)
     
     # Create the video
+    current_burnmap = load_burn_map(current_burnmap_filename)
     create_video_scenario_burnmap(
-        burn_map=time_varying_burnmap,
+        burn_map=current_burnmap,
         drone_locations_history=drone_locations_history,
         out_filename="drone_trajectories_burnmap",
         ground_sensor_locations=auto_params.get("ground_sensor_locations", []),
         charging_stations_locations=auto_params["charging_stations_locations"],
         frames_per_image=2,
-        maxframes=total_timesteps + 1
+        maxframes=2 * auto_params["max_battery_time"] + 1
     )
     
     print("Video saved as: display_drone_trajectories_burnmap/drone_trajectories_burnmap.mp4")
-    print(f"Trajectory data: 0: {[(x+1, y+1) for x, y in trajectories[0]]},\n 1: {[(x+1, y+1) for x, y in trajectories[1]]}")
+    
+    # Print trajectory summary instead of full data to avoid blocking IO
+    for drone_id in trajectories:
+        traj_length = len(trajectories[drone_id])
+        if traj_length > 0:
+            start_pos = trajectories[drone_id][0]
+            end_pos = trajectories[drone_id][-1]
+            print(f"Drone {drone_id}: {traj_length} positions, Start: ({start_pos[0]+1}, {start_pos[1]+1}), End: ({end_pos[0]+1}, {end_pos[1]+1})")
         
     # Clean up temporary file
     if os.path.exists(burnmap_file):

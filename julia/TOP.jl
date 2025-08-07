@@ -506,7 +506,7 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
     for i in 1:n_customers
         xi, yi = customers[i]
         inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
-        costs[(0, i)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
+        costs[(0, i)] = inf_dist_from_depot #<= 1 ? 1.0 : max_battery_time*4
         costs[(i, 0)] = costs[(0, i)]
     end
     
@@ -647,7 +647,7 @@ function print_routes(routes, coords, n_drones, filename_suffix="")
     println()
 end
 
-function plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, filename_suffix="")
+function plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, filename_suffix="", verbose::Bool = true)
     # Node index to coordinates mapping
     node_index_to_coords = Dict(i => coords[i] for i in 1:length(coords))
 
@@ -707,13 +707,14 @@ function plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting
     filename = isempty(filename_suffix) ? "drones_side_by_side.png" : "drones_side_by_side_$filename_suffix.png"
     draw(PNG(filename, 300 * n_drones, 500), side_by_side_plot)
 
-    # Show plot
-    display(side_by_side_plot)
-    
-    println("Plot saved as: $filename")
+    # Show plot only if verbose mode is enabled
+    if verbose
+        display(side_by_side_plot)
+        println("Plot saved as: $filename")
+    end
 end
 
-function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false)
 
     # Initial upper bound (UB) and initial PSO lower bound (LB)
     model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
@@ -753,8 +754,10 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
     print_routes(routes, coords, n_drones, "(PSO Initial)")
     
     # Plot the initial PSO solution
-    println("Plotting initial PSO solution...")
-    plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial")
+    if verbose
+        println("Plotting initial PSO solution...")
+        plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial", verbose)
+    end
     # also log these routes to a file, append if the file already exists   
     open("pso_initial_routes.txt", "a") do f
         for s in 1:n_drones
@@ -906,9 +909,14 @@ function compute_TOP_plan(risk_pertime_file::String,
                           n_drones::Int,
                           ChargingStations::Vector{Tuple{Int,Int}},
                           GroundStations::Vector{Tuple{Int,Int}},
-                          max_battery_time::Int)
-    # Load the burn-map (.npy) exactly like the other solvers do
+                          max_battery_time::Int,
+                          t::Int,
+                          verbose::Bool = false)
+    # julia-indexing for the burnmap is 1-based, so we need to shift the time index by 1
+    t += 1
+    # Load the burn-map (.npy)
     risk_pertime = load_burn_map(risk_pertime_file)
+    risk_pertime = risk_pertime[t:end, :, :]
 
     # The TOP horizon (L) equals the max battery time by assumption
     L = max_battery_time
@@ -920,7 +928,8 @@ function compute_TOP_plan(risk_pertime_file::String,
                            ChargingStations,
                            GroundStations,
                            max_battery_time,
-                           L)
+                           L,
+                           verbose)
 
     # ------------------------------------------------------------------
     # 2) Re-build the coordinate vector that maps node indices → (x,y)
@@ -970,7 +979,9 @@ function compute_TOP_plan(risk_pertime_file::String,
                           n_drones::Int,
                           ChargingStations::Vector{Tuple{Int,Int}},
                           GroundStations::Vector{Any},  # Allow Vector{Any} for empty case
-                          max_battery_time::Int)
+                          max_battery_time::Int,
+                          t::Int,
+                          verbose::Bool = false)
     # Convert Vector{Any} to Vector{Tuple{Int,Int}}
     typed_ground_stations = Vector{Tuple{Int,Int}}()
     for gs in GroundStations
@@ -980,5 +991,5 @@ function compute_TOP_plan(risk_pertime_file::String,
     end
     
     # Call the main method with properly typed arguments
-    return compute_TOP_plan(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time)
+    return compute_TOP_plan(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose)
 end
