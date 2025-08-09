@@ -25,7 +25,8 @@ using DataStructures
 using Random
 
 include("helper_functions.jl")
-include("TOP_PSO.jl")
+# include("TOP_PSO.jl")
+include("TOP_PSO_multi_depot.jl")
 
 #error("Stop here")
 # EXAMPLE ON GENERATED DATA - COMMENTED OUT TO PREVENT AUTO-EXECUTION
@@ -517,7 +518,7 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
                 xi, yi = customers[i]
                 xj, yj = customers[j]
                 inf_dist = max(abs(xi - xj), abs(yi - yj))
-                costs[(i, j)] = inf_dist <= 1 ? 1.0 : max_battery_time*4
+                costs[(i, j)] = inf_dist <= 1 ? 1.0 : max_battery_time*4 # here we could allow for intermediate points and patch, as we do for depot. Does it take more time?
             else
                 costs[(i, j)] = 0.0
             end
@@ -558,6 +559,171 @@ function get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStati
         end
     end
     
+    return top_routes, pso_profit
+end
+
+
+"""
+Convert TOP.jl format to PSO format and run PSO algorithm
+"""
+function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    # Convert GridpointsDronesDetecting to customer format for PSO
+    customers = GridpointsDronesDetecting
+    profits = Float64[]
+
+    # add the depot and duplicate depots to the customers
+    for depot in ChargingStation
+        push!(customers, depot)
+    end
+
+    for depot in ChargingStation
+        push!(customers, depot)
+    end
+
+    # Extract profits for each customer
+    for (x, y) in customers
+        push!(profits, risk_pertime[1, x, y])
+    end
+    n_customers = length(customers) - length(ChargingStation)*2
+    # Create cost matrix using infinity norm (as in TOP.jl)
+    costs = Dict{Tuple{Int,Int}, Float64}()
+
+    # IF there are multiple depots, we create an artificial node connecting all depots
+    artificial_node = 0 #length(customers) + length(ChargingStation) + 1
+
+    
+    # cost from any customer to artificial node is distance to closest depot # not anymore: now we have infinite cost
+    for i in 1:n_customers
+        # xi, yi = customers[i]
+        # min_distance = Inf
+        # # Find the closest depot
+        # for depot in ChargingStation
+        #     depot_x, depot_y = depot
+        #     inf_dist = max(abs(xi - depot_x), abs(yi - depot_y))
+        #     if inf_dist < min_distance
+        #         min_distance = inf_dist
+        #     end
+        # end
+        costs[(artificial_node, i)] = max_battery_time*4 #min_distance
+        costs[(i, artificial_node)] = max_battery_time*4 #min_distance
+    end
+
+    # cost from artificial node to all depots is 0 and from all depots to artificial node is 0
+    # we also duplicate all depots to allow going back to artificial node at the end
+    for depot_offset in 1:length(ChargingStation)
+        depot_node = n_customers + depot_offset
+        duplicate_depot_node = n_customers + length(ChargingStation) + depot_offset
+        costs[(artificial_node, depot_node)] = 0.0
+        costs[(depot_node, artificial_node)] = 0.0
+        costs[(artificial_node, duplicate_depot_node)] = 0.0 # should I put a cost higher than the battery and add this cost to the battery?
+        costs[(duplicate_depot_node, artificial_node)] = 0.0
+    end # /!\ BREAKS TRIANGLE INEQUALITY
+    
+    # Costs between customers (this includes depots, but the cost will be overwritten later)
+    for i in 1:length(customers) # this includes the depots but the cost will be overwritten later
+        for j in 1:length(customers) # this includes the depots but the cost will be overwritten later
+            if i != j
+                # if both are duplicate depots, we put an infinite cost
+                if (i > n_customers && j == i + length(ChargingStation)) || (j > n_customers && i == j + length(ChargingStation))
+                    costs[(i, j)] = max_battery_time*4
+                    costs[(j, i)] = max_battery_time*4
+                else
+                    xi, yi = customers[i]
+                    xj, yj = customers[j]
+                    inf_dist = max(abs(xi - xj), abs(yi - yj))
+                    costs[(i, j)] = inf_dist <= 1 ? 1.0 : max_battery_time*4
+                end
+            else
+                costs[(i, j)] = 0.0
+            end
+        end
+    end
+
+    depot_offset = 0
+    for depot in ChargingStation
+        depot_offset += 1
+        depot_x, depot_y = depot
+        depot_node = length(customers) + depot_offset
+        duplicate_depot_node = length(customers) + length(ChargingStation) + depot_offset
+        # cost from artificial node to all depots is 0
+        costs[(artificial_node, depot_node)] = 0
+        costs[(depot_node, artificial_node)] = 0
+        costs[(artificial_node, duplicate_depot_node)] = 0
+        costs[(duplicate_depot_node, artificial_node)] = 0
+        # Costs from depot to customers and back
+        for i in 1:n_customers
+            xi, yi = customers[i]
+            inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
+            costs[(depot_node, i)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
+            costs[(i, depot_node)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4 # TODO  just put 1 ????
+            costs[(duplicate_depot_node, i)] = inf_dist_from_depot
+            costs[(i, duplicate_depot_node)] = inf_dist_from_depot
+        end
+    end
+
+    # print the costs matrix
+    println("Costs matrix:")
+    for i in 1:length(customers)
+        for j in 1:length(customers)
+            print(costs[(i, j)], " ")
+        end
+        println()
+    end
+
+    
+
+    
+    # Run PSO algorithm with proper parameters for CPA initialization
+    println("=== PROBLEM SETUP ===")
+    println("Customers: $(length(customers)), Battery limit: $max_battery_time, Drones: $n_drones")
+    println("Depot: $(ChargingStation[1])")
+    println("======================")
+    
+    println("Running PSO for initial solution...")
+    giant_tour, pso_profit, pso_obj = solve_PSO_TOP_multiple_depots(
+        customers, profits, costs, n_drones, max_battery_time, ChargingStation;
+        swarm_size=5, max_iterations=30,  # Increase iterations for better optimization
+        w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
+    )
+    
+    # Convert PSO routes back to TOP.jl format
+    pso_routes = extract_routes(giant_tour, pso_obj)
+    
+    # Convert to TOP.jl route format (with Begin_CS and End_CS indices)
+    top_routes = Vector{Vector{Int}}(undef, n_drones)
+    Begin_CS = 0 # length(GridpointsDronesDetecting) + 1
+    End_CS = 0 # length(GridpointsDronesDetecting) + 2
+    
+    for s in 1:n_drones
+        if s <= length(pso_routes) && !isempty(pso_routes[s])
+            # Convert customer indices to TOP.jl format
+            route = [Begin_CS]  # Start at charging station
+            append!(route, pso_routes[s])  # Add customer indices (already correct)
+            push!(route, End_CS)  # End at charging station
+            top_routes[s] = route
+        else
+            # Empty route: just go from Begin_CS to End_CS
+            top_routes[s] = [Begin_CS, End_CS]
+        end
+    end
+
+    # print the top routes
+    println("Top routes:")
+    for s in 1:n_drones
+        println("Drone $s: $(top_routes[s])")
+    end
+
+    # here, we replace the duplicate nodes with the original nodes
+    for s in 1:n_drones
+        if s <= length(top_routes) && length(top_routes[s]) >= 2
+            route = top_routes[s]
+            for i in 1:length(route)
+                if route[i] > n_customers + length(ChargingStation)
+                    route[i] = route[i] - length(ChargingStation) # we remove the duplicate depot
+                end
+            end
+        end
+    end
     return top_routes, pso_profit
 end
 
@@ -632,7 +798,12 @@ function print_routes(routes, coords, n_drones, filename_suffix="")
             route = routes[s]
             route_str = ""
             for (idx, node_id) in enumerate(route)
-                x, y = coords[node_id]
+                if node_id == 0
+                    x, y = -1, -1 # ARTIFICIAL NODE
+                    # route_str += "(A,A)"
+                else
+                    x, y = coords[node_id]
+                end
                 if idx == 1
                     route_str = "($x,$y)"
                 else
@@ -741,7 +912,14 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
     c[(Begin_CS, End_CS)] = L*4
     
     # Use PSO instead of greedy for initialization
-    routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    # TODO TEMPORARY: ALWAYS CALL THE MULTI-DEPOT VERSION
+    routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    # if length(ChargingStation) == 1
+    #     routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    # else
+    #     routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+    # end
+
     
     # Also compute greedy for comparison
     greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
@@ -761,7 +939,15 @@ function CPA(risk_pertime, n_drones, ChargingStation, GroundStations, max_batter
     # also log these routes to a file, append if the file already exists   
     open("pso_initial_routes.txt", "a") do f
         for s in 1:n_drones
-            write(f, "Drone $s: $(coords[routes[s]])\n")
+            write(f, "Drone $s: ")
+            for (i, route_idx) in enumerate(routes[s])
+                coord = get(coords, route_idx, (-1, -1))
+                write(f, "$coord")
+                if i < length(routes[s])
+                    write(f, " -> ")
+                end
+            end
+            write(f, "\n")
         end
     end
 
@@ -963,7 +1149,37 @@ function compute_TOP_plan(risk_pertime_file::String,
             if t > horizon
                 break
             end
-            movement_plan[t][s] = ("fly", coords[node_idx])
+            
+            next_node = coords[node_idx]
+            current_node = get(coords, route[t-1], (0,0)) # 0,0 here for the python plot
+            
+            # Check if we can fly directly (Chebyshev distance = 1)
+            if max(abs(next_node[1] - current_node[1]), abs(next_node[2] - current_node[2])) != 1
+                # We need to "patch" the path with intermediate steps
+                current_pos = (current_node[1], current_node[2])  # Create a copy to avoid mutating original
+                
+                while max(abs(next_node[1] - current_pos[1]), abs(next_node[2] - current_pos[2])) > 1
+                    # Move one step toward the target
+                    new_x = current_pos[1]
+                    new_y = current_pos[2]
+                    if abs(next_node[1] - current_pos[1]) > 0
+                        new_x += sign(next_node[1] - current_pos[1])
+                    end
+                    if abs(next_node[2] - current_pos[2]) > 0
+                        new_y += sign(next_node[2] - current_pos[2])
+                    end
+                    current_pos = (new_x, new_y)
+                    
+                    movement_plan[t][s] = ("fly", current_pos)
+                    t += 1
+                    
+                    # Safety check to prevent infinite loops
+                    if t > horizon
+                        break
+                    end
+                end
+            end
+            movement_plan[t][s] = ("fly", next_node)
         end
         if t < horizon + 1 # we include the final depot manually
             t += 1
@@ -973,6 +1189,125 @@ function compute_TOP_plan(risk_pertime_file::String,
 
     return movement_plan # no need to include starting depot in the movement plan
 end
+
+
+
+
+
+
+
+
+
+#### MULTIPLE DEPOTS
+function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
+    n_drones::Int,
+    ChargingStations::Vector{Tuple{Int,Int}},
+    GroundStations::Vector{Tuple{Int,Int}},
+    max_battery_time::Int,
+    t::Int,
+    verbose::Bool = false)
+   # julia-indexing for the burnmap is 1-based, so we need to shift the time index by 1
+   t += 1
+   # Load the burn-map (.npy)
+   risk_pertime = load_burn_map(risk_pertime_file)
+   risk_pertime = risk_pertime[t:end, :, :]
+
+   # The TOP horizon (L) equals the max battery time by assumption
+   L = max_battery_time
+
+   # ------------------------------------------------------------------
+   # 1) Solve the Team-Orienteering Problem via CPA (returns routes)
+   # ------------------------------------------------------------------
+   routes, UB, x, y = CPA(risk_pertime, n_drones,
+                          ChargingStations,
+                          GroundStations,
+                          max_battery_time,
+                          L,
+                          verbose)
+
+   # ------------------------------------------------------------------
+   # 2) Re-build the coordinate vector that maps node indices → (x,y)
+   #    so we can convert the integer routes into explicit actions
+   # ------------------------------------------------------------------
+   _, N, M = size(risk_pertime)
+   I = [(x, y) for x in 1:N for y in 1:M]            # all grid cells
+   Grid_set  = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+   Grid_det  = setdiff(Grid_set, ChargingStations)
+   Grid_det_vec = convert(Vector{Tuple{Int,Int}}, collect(Grid_det))
+
+   coords = deepcopy(Grid_det_vec)
+   push!(coords, ChargingStations[1])  # Begin_CS
+   push!(coords, ChargingStations[1])  # End_CS
+
+   Begin_CS = length(Grid_det_vec) + 1
+   End_CS   = length(Grid_det_vec) + 2
+
+   # ------------------------------------------------------------------
+   # 3) Build the time-indexed movement plan expected by Python
+   # ------------------------------------------------------------------
+   horizon = max_battery_time                    # optimization horizon
+   movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:horizon+1]
+
+   for s in 1:n_drones
+       route = s <= length(routes) && !isempty(routes[s]) ? routes[s] : [Begin_CS, End_CS]
+       movement_plan[1][s] = ("charge", ChargingStations[1])
+       t = 1
+       for node_idx in route[2:end-1]  # skip initial and final depots
+           t += 1
+           if t > horizon
+               break
+           end
+
+           
+           next_node = coords[node_idx]
+           current_node = get(coords, route[t-1], (0,0)) # 0,0 here for the python plot
+           
+           # Check if we can fly directly (Chebyshev distance = 1)
+           if t >=3 && max(abs(next_node[1] - current_node[1]), abs(next_node[2] - current_node[2])) != 1
+               # We need to "patch" the path with intermediate steps
+               current_pos = (current_node[1], current_node[2])  # Create a copy to avoid mutating original
+               
+               while max(abs(next_node[1] - current_pos[1]), abs(next_node[2] - current_pos[2])) > 1
+                   # Move one step toward the target
+                   new_x = current_pos[1]
+                   new_y = current_pos[2]
+                   if abs(next_node[1] - current_pos[1]) > 0
+                       new_x += sign(next_node[1] - current_pos[1])
+                   end
+                   if abs(next_node[2] - current_pos[2]) > 0
+                       new_y += sign(next_node[2] - current_pos[2])
+                   end
+                   current_pos = (new_x, new_y)
+                   
+                   movement_plan[t][s] = ("fly", current_pos)
+                   t += 1
+                   
+                   # Safety check to prevent infinite loops
+                   if t > horizon
+                       break
+                   end
+               end
+           end
+           movement_plan[t][s] = ("fly", next_node)
+       end
+    #    if t < horizon + 1 # we include the final depot manually
+    #        t += 1
+    #        movement_plan[t][s] = ("charge", ChargingStations[1])
+    #    end
+   end
+
+   return movement_plan[2:end] # no need to include starting depot in the movement plan
+end
+
+
+
+
+
+
+
+
+
+
 
 # Overloaded method to handle Vector{Any} for ground stations (empty case from PyCall)
 function compute_TOP_plan(risk_pertime_file::String,
@@ -992,4 +1327,22 @@ function compute_TOP_plan(risk_pertime_file::String,
     
     # Call the main method with properly typed arguments
     return compute_TOP_plan(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose)
+end
+
+
+function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
+    n_drones::Int,
+    ChargingStations::Vector{Tuple{Int,Int}},
+    GroundStations::Vector{Any},  # Allow Vector{Any} for empty case
+    max_battery_time::Int,
+    t::Int,
+    verbose::Bool = false)
+    # Convert Vector{Any} to Vector{Tuple{Int,Int}}
+    typed_ground_stations = Vector{Tuple{Int,Int}}()
+    for gs in GroundStations
+        if isa(gs, Tuple{Int,Int})
+            push!(typed_ground_stations, gs)
+        end
+    end
+    return compute_TOP_plan_multiple_depots(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose)
 end

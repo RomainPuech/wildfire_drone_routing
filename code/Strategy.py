@@ -3079,7 +3079,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
 
         start_time = time.time()
-        self.current_solution = jl.compute_TOP_plan(
+        self.current_solution = jl.compute_TOP_plan_multiple_depots(
             self.current_burnmap_filename,
             self.automatic_initialization_parameters["n_drones"],
             self.julia_charging_stations_locations,
@@ -3142,7 +3142,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
 
             # Solve next move with the existing model
             start_time = time.time()
-            self.current_solution = jl.compute_TOP_plan(
+            self.current_solution = jl.compute_TOP_plan_multiple_depots(
                 self.current_burnmap_filename,
                 self.automatic_initialization_parameters["n_drones"],
                 self.julia_charging_stations_locations,

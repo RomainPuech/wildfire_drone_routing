@@ -12,25 +12,6 @@ mutable struct Particle
     current_profit::Float64        # Current profit
 end
 
-mutable struct PSOiA_TOP
-    swarm::Vector{Particle}
-    global_best::Vector{Int}
-    global_best_profit::Float64
-    swarm_size::Int
-    max_iterations::Int
-    w::Float64                     # Inertia weight
-    c1::Float64                    # Cognitive factor
-    c2::Float64                    # Social factor
-    ph::Float64                    # Probability of random move
-    pm::Float64                    # Probability of local search
-    n_drones::Int
-    max_battery_time::Int
-    customers::Vector{Tuple{Int,Int}}  # Customer coordinates
-    profits::Vector{Float64}       # Customer profits
-    costs::Dict{Tuple{Int,Int}, Float64}  # Travel costs
-    accessible_customers::Vector{Int}  # Indices of accessible customers
-    depot_coord::Tuple{Int,Int}    # Depot coordinates
-end
 
 mutable struct PSOiA_TOP_multiple_depots
     swarm::Vector{Particle}
@@ -51,138 +32,6 @@ mutable struct PSOiA_TOP_multiple_depots
     accessible_customers::Vector{Int}  # Indices of accessible customers
     depot_coord::Vector{Tuple{Int,Int}}    # Depot coordinates
 end
-
-"""
-Fast split procedure based on interval graph model (O(m*n) complexity)
-Follows the algorithm described in Figure 1 of the paper
-Returns both the optimal profit and the optimal routes
-"""
-function fast_split_with_routes(permutation::Vector{Int}, pso::PSOiA_TOP)
-    n = length(permutation)
-    m = pso.n_drones
-    L = pso.max_battery_time
-    
-    if n == 0
-        return 0.0, Vector{Vector{Int}}()
-    end
-    
-    # Calculate saturated tours P[i] and first successor succ[i]
-    P = zeros(n)  # Profit of saturated tour starting at position i
-    succ = zeros(Int, n)  # First successor of saturated tour starting at position i
-    tour_lengths = zeros(Int, n)  # Length of each saturated tour
-    
-    for i in 1:n
-        current_cost = 0.0
-        current_profit = 0.0
-        j = i
-        
-        # Build maximal feasible tour starting from position i
-        while j <= n
-            customer_idx = permutation[j]
-            
-            # Add travel cost to this customer
-            if j == i
-                # Cost from depot to first customer
-                travel_cost = get(pso.costs, (0, customer_idx), L*4)
-            else
-                prev_customer = permutation[j-1]
-                travel_cost = get(pso.costs, (prev_customer, customer_idx), L*4)
-            end
-            
-            # Check if we can add this customer and still return to depot
-            # Calculate actual L-infinity distance (minimum hops) to depot
-            customer_coord = pso.customers[customer_idx]
-            depot_x, depot_y = pso.depot_coord
-            customer_x, customer_y = customer_coord
-            
-            # L-infinity distance (Chebyshev distance) = max(|x1-x2|, |y1-y2|)
-            return_distance = max(abs(customer_x - depot_x), abs(customer_y - depot_y))
-            
-            if current_cost + travel_cost + return_distance > L
-                break
-            end
-            
-            current_cost += travel_cost
-            current_profit += pso.profits[customer_idx]
-            j += 1
-        end
-        
-        P[i] = current_profit
-        tour_lengths[i] = j - i
-        
-        # Apply Equation 3: succ[i] = i + l_i^max + 1 if i + l_i^max + 1 ≤ n, else 0
-        # Here, l_i^max = j - i, so i + l_i^max + 1 = i + (j - i) + 1 = j + 1
-        if j <= n
-            succ[i] = j
-        else
-            succ[i] = 0  # According to Equation 3
-        end
-    end
-    
-    # Dynamic programming table Γ[i,j] = max profit using j drones from position i onwards
-    # Using (n+1) × (m+1) to handle boundary conditions as per Equation 4
-    Γ = zeros(n + 1, m + 1)
-    
-    # Fill DP table in reverse order (as shown in Figure 1c)
-    for i in n:-1:1
-        for j in 0:m
-            if j == 0
-                # No drones left, no profit possible
-                Γ[i, j + 1] = 0.0
-            else
-                # Option 1: Don't use tour starting at i
-                Γ[i, j + 1] = Γ[i + 1, j + 1]
-                
-                # Option 2: Use saturated tour starting at i
-                # According to Equation 4: max{Γ(succ[i], j-1) + P[i], Γ(i+1, j)}
-                if succ[i] == 0
-                    # When succ[i] = 0, Γ(succ[i], j-1) = 0 according to Equation 4
-                    profit_with_tour = P[i] + 0.0
-                else
-                    # Normal case: access Γ[succ[i], j] which corresponds to Γ(succ[i], j-1) in paper notation
-                    profit_with_tour = P[i] + Γ[succ[i], j]
-                end
-                
-                Γ[i, j + 1] = max(Γ[i, j + 1], profit_with_tour)
-            end
-        end
-    end
-    
-    # Backtrack to find the optimal routes (as described in the paper)
-    routes = Vector{Vector{Int}}()
-    i = 1
-    j = m
-    
-    while i <= n && j > 0 && length(routes) < m
-        # Check which option was chosen in the DP
-        option1 = Γ[i + 1, j + 1]  # Don't use tour starting at i
-        
-        option2 = 0.0
-        if succ[i] == 0
-            option2 = P[i] + 0.0
-        else
-            option2 = P[i] + Γ[succ[i], j]
-        end
-        
-        if abs(option2 - Γ[i, j + 1]) < 1e-10  # Use saturated tour starting at i
-            # Extract the saturated tour starting at position i
-            tour_end = i + tour_lengths[i] - 1
-            route = permutation[i:tour_end]
-            push!(routes, route)
-            
-            i = succ[i] > 0 ? succ[i] : n + 1
-            j -= 1
-        else  # Skip this position
-            i += 1
-        end
-    end
-    
-    return Γ[1, m + 1], routes
-end
-
-
-
-
 
 
 """
@@ -224,7 +73,7 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
             # Calculate actual L-infinity distance (minimum hops) to closest depot
             customer_coord = pso_multiple_depots.customers[customer_idx]
             customer_x, customer_y = customer_coord
-            min_distance = max_battery_time*2
+            min_distance = L*2
             for depot_offset in 1:length(pso_multiple_depots.depot_coord)
                 depot_x, depot_y = pso_multiple_depots.depot_coord[depot_offset]
                 distance_to = max(abs(depot_x - customer_x), abs(depot_y - customer_y))
@@ -322,11 +171,6 @@ end
 
 
 # Update the original fast_split to use the new function
-function fast_split(permutation::Vector{Int}, pso::PSOiA_TOP)
-    profit, _ = fast_split_with_routes(permutation, pso)
-    return profit
-end
-
 function fast_split_multiple_depots(permutation::Vector{Int}, pso_multiple_depots::PSOiA_TOP_multiple_depots)
     profit, _ = fast_split_with_routes_multiple_depots(permutation, pso_multiple_depots)
     return profit
@@ -335,11 +179,11 @@ end
 """
 Initialize particle swarm
 """
-function initialize_swarm(pso::PSOiA_TOP)
+function initialize_swarm(pso::PSOiA_TOP_multiple_depots)
     for i in 1:pso.swarm_size
         # Create random permutation of accessible customers
         position = shuffle(pso.accessible_customers)
-        profit = fast_split(position, pso)
+        profit = fast_split_multiple_depots(position, pso)
         
         particle = Particle(
             copy(position),
@@ -362,7 +206,7 @@ function initialize_swarm(pso::PSOiA_TOP)
     n_idch = min(5, pso.swarm_size ÷ 2)
     for i in 1:n_idch
         position = idch_heuristic(pso, false)  # Fast version
-        profit = fast_split(position, pso)
+        profit = fast_split_multiple_depots(position, pso)
         
         pso.swarm[i].position = copy(position)
         pso.swarm[i].local_best = copy(position)
@@ -380,13 +224,13 @@ end
 """
 Iterative Destruction/Construction Heuristic (IDCH)
 """
-function idch_heuristic(pso::PSOiA_TOP, slow_version::Bool = false)
+function idch_heuristic(pso::PSOiA_TOP_multiple_depots, slow_version::Bool = false)
     max_iter = slow_version ? length(pso.accessible_customers)^2 : length(pso.accessible_customers)
     
     # Start with random permutation
     current_solution = shuffle(pso.accessible_customers)
     best_solution = copy(current_solution)
-    best_profit = fast_split(best_solution, pso)
+    best_profit = fast_split_multiple_depots(best_solution, pso)
     
     no_improvement = 0
     
@@ -406,7 +250,7 @@ function idch_heuristic(pso::PSOiA_TOP, slow_version::Bool = false)
         
         # Construction phase: reinsert customers using Best Insertion
         reconstructed = best_insertion_algorithm(destroyed, removed_customers, pso)
-        profit = fast_split(reconstructed, pso)
+        profit = fast_split_multiple_depots(reconstructed, pso)
         
         if profit > best_profit
             best_solution = copy(reconstructed)
@@ -425,7 +269,7 @@ end
 """
 Best Insertion Algorithm (BIA)
 """
-function best_insertion_algorithm(partial_solution::Vector{Int}, unrouted::Vector{Int}, pso::PSOiA_TOP)
+function best_insertion_algorithm(partial_solution::Vector{Int}, unrouted::Vector{Int}, pso::PSOiA_TOP_multiple_depots)
     solution = copy(partial_solution)
     remaining = copy(unrouted)
     
@@ -491,7 +335,7 @@ end
 """
 Position update using genetic crossover-like operator
 """
-function update_position!(particle::Particle, global_best::Vector{Int}, pso::PSOiA_TOP)
+function update_position!(particle::Particle, global_best::Vector{Int}, pso::PSOiA_TOP_multiple_depots)
     n = length(particle.position)
     
     # Calculate number of customers to extract from each source
@@ -532,7 +376,7 @@ function update_position!(particle::Particle, global_best::Vector{Int}, pso::PSO
     append!(new_position, shuffle(remaining))
     
     particle.position = new_position
-    particle.current_profit = fast_split(new_position, pso)
+    particle.current_profit = fast_split_multiple_depots(new_position, pso)
 end
 
 """
@@ -575,7 +419,7 @@ end
 """
 Local search with three neighborhoods
 """
-function local_search!(particle::Particle, pso::PSOiA_TOP)
+function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     improved = true
     
     while improved
@@ -602,7 +446,7 @@ end
 """
 Shift operator: move customer to different position
 """
-function shift_operator!(particle::Particle, pso::PSOiA_TOP)
+function shift_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     n = length(particle.position)
     positions = shuffle(1:n)  # Random order evaluation
     
@@ -614,7 +458,7 @@ function shift_operator!(particle::Particle, pso::PSOiA_TOP)
             deleteat!(new_position, i)
             insert!(new_position, j > i ? j-1 : j, customer)
             
-            new_profit = fast_split(new_position, pso)
+            new_profit = fast_split_multiple_depots(new_position, pso)
             if new_profit > particle.current_profit
                 particle.position = new_position
                 particle.current_profit = new_profit
@@ -628,7 +472,7 @@ end
 """
 Swap operator: exchange two customers
 """
-function swap_operator!(particle::Particle, pso::PSOiA_TOP)
+function swap_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     n = length(particle.position)
     positions = shuffle(1:n)
     
@@ -638,7 +482,7 @@ function swap_operator!(particle::Particle, pso::PSOiA_TOP)
             new_position = copy(particle.position)
             new_position[i], new_position[j] = new_position[j], new_position[i]
             
-            new_profit = fast_split(new_position, pso)
+            new_profit = fast_split_multiple_depots(new_position, pso)
             if new_profit > particle.current_profit
                 particle.position = new_position
                 particle.current_profit = new_profit
@@ -652,7 +496,7 @@ end
 """
 Destruction/repair operator
 """
-function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP)
+function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     n = length(particle.position)
     # Paper specifies: "between 1 and n/m" customers
     max_remove = max(1, n ÷ pso.n_drones)
@@ -672,7 +516,7 @@ function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP)
     
     # Reconstruct using BIA
     reconstructed = best_insertion_algorithm(new_position, removed, pso)
-    new_profit = fast_split(reconstructed, pso)
+    new_profit = fast_split_multiple_depots(reconstructed, pso)
     
     if new_profit > particle.current_profit
         particle.position = reconstructed
@@ -685,7 +529,7 @@ end
 """
 Update local best positions with diversity management
 """
-function update_local_bests!(pso::PSOiA_TOP, δ::Float64 = 1e-6)
+function update_local_bests!(pso::PSOiA_TOP_multiple_depots, δ::Float64 = 1e-6)
     # Sort particles by local best profit
     sorted_indices = sortperm([p.local_best_profit for p in pso.swarm])
     worst_idx = sorted_indices[1]
@@ -737,7 +581,7 @@ end
 """
 Calculate travel cost for a given solution (needed for similarity measure)
 """
-function calculate_travel_cost(permutation::Vector{Int}, pso::PSOiA_TOP)
+function calculate_travel_cost(permutation::Vector{Int}, pso::PSOiA_TOP_multiple_depots)
     if isempty(permutation)
         return 0.0
     end
@@ -765,7 +609,7 @@ end
 """
 Main PSO algorithm - following Algorithm 1 from the paper exactly
 """
-function solve_PSO_TOP(customers::Vector{Tuple{Int,Int}}, profits::Vector{Float64}, 
+function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profits::Vector{Float64}, 
                        costs::Dict{Tuple{Int,Int}, Float64}, n_drones::Int, 
                        max_battery_time::Int, depot_coord::Tuple{Int,Int} = (0, 0);
                        swarm_size::Int = 50, max_iterations::Int = 1000,
@@ -795,7 +639,7 @@ function solve_PSO_TOP(customers::Vector{Tuple{Int,Int}}, profits::Vector{Float6
     end
     
     # Initialize PSO
-    pso = PSOiA_TOP(
+    pso = PSOiA_TOP_multiple_depots(
         Particle[], Int[], -Inf, swarm_size, max_iterations,
         w, c1, c2, ph, pm, n_drones, max_battery_time,
         customers, profits, costs, accessible_customers, depot_coord
@@ -836,7 +680,7 @@ function solve_PSO_TOP(customers::Vector{Tuple{Int,Int}}, profits::Vector{Float6
             end
             
             # Evaluate S[x].pos (see Section 2.2)
-            pso.swarm[x].current_profit = fast_split(pso.swarm[x].position, pso)
+            pso.swarm[x].current_profit = fast_split_multiple_depots(pso.swarm[x].position, pso)
             
             # Update lbest of S (see Section 2.6)
             prev_global_best = pso.global_best_profit
@@ -993,9 +837,9 @@ end
 """
 Convert giant tour to actual routes using the optimal split procedure from the paper
 """
-function extract_routes(giant_tour::Vector{Int}, pso::PSOiA_TOP)
+function extract_routes(giant_tour::Vector{Int}, pso::PSOiA_TOP_multiple_depots)
     # Use the proper split procedure from the paper
-    optimal_profit, routes = fast_split_with_routes(giant_tour, pso)
+    optimal_profit, routes = fast_split_with_routes_multiple_depots(giant_tour, pso)
     
     #println("=== OPTIMAL ROUTES ===")
     for (i, route) in enumerate(routes)

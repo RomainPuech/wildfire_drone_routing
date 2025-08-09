@@ -173,17 +173,17 @@ def test_top_strategy_basic():
     np.save(burnmap_file, burnmap)
 
     # --- 2. Build parameter dictionaries ------------------------
-    L = 10
+    L = 3
     auto_params = {
-        "N": 15,
-        "M": 15,
+        "N": 5,
+        "M": 5,
         "max_battery_distance": -1,
         "max_battery_time": L,
         "n_drones": 2,
         "n_ground_stations": 0,
         "n_charging_stations": 1,
         "ground_sensor_locations": [],
-        "charging_stations_locations": [(6, 5)],  # Python 0-based
+        "charging_stations_locations": [(0, 0), (4, 4)],  # Python 0-based
         "data_time_resolution": L, # TODO for the momemnt battery = data res. THINK ABT IMPLICATIONS IF BATTERY IS LESS
     }
 
