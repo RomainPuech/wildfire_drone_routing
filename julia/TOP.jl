@@ -580,9 +580,9 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
         end
         n_duplicates_array = [0 for _ in 1:length(ChargingStation)]
         for i in 1:n_drones
-            for depot in ChargingStation
+            for (depot_idx, depot) in enumerate(ChargingStation)
                 if initial_drone_positions[i] == depot
-                    n_duplicates_array[depot] += 1
+                    n_duplicates_array[depot_idx] += 1
                     break
                 end 
             end
@@ -591,13 +591,13 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     else
         # How many times we duplicate the depot depends on the number of drones.
         # We want as many copies of any depot as there are drones.
-        n_duplicates = n_drones
+        n_duplicates_array = [n_drones for _ in 1:length(ChargingStation)]
     end
 
 
     # add the depot and duplicate depots to the customers
-    for _ in 1:n_duplicates
-        for depot in ChargingStation
+    for (depot_idx, depot) in enumerate(ChargingStation)
+        for _ in 1:n_duplicates_array[depot_idx]
             push!(customers, depot)
         end
     end
@@ -608,7 +608,7 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     for (x, y) in customers
         push!(profits, risk_pertime[1, x, y])
     end
-    n_customers = length(customers) - length(ChargingStation) * n_duplicates
+    n_customers = length(customers) - sum(n_duplicates_array)
     println("n_customers: $n_customers")
     # Create cost matrix using infinity norm (as in TOP.jl)
     costs = Dict{Tuple{Int,Int}, Float64}()
@@ -636,20 +636,47 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
 
     # cost from artificial node to all depots is 0 and from all depots to artificial node is 0
     # we also duplicate all depots to allow going back to artificial node at the end
-    for depot_offset in 1:length(ChargingStation)
-        for duplicate_batch in 1:n_duplicates
-            depot_node = n_customers + (duplicate_batch-1) * length(ChargingStation) + depot_offset
+    depot_node = n_customers + 1  # Start indexing depot nodes after customers
+    for depot_idx in 1:length(ChargingStation)
+        for duplicate_idx in 1:n_duplicates_array[depot_idx]
             costs[(artificial_node, depot_node)] = 0.0 # should I put a cost higher than the battery and add this cost to the battery?
             costs[(depot_node, artificial_node)] = 0.0
+            depot_node += 1
         end
     end # /!\ BREAKS TRIANGLE INEQUALITY
+    
+    # Create a helper function to check if two depot nodes are duplicates of the same depot
+    function are_same_depot_duplicates(i, j, n_customers, n_duplicates_array)
+        if i <= n_customers || j <= n_customers
+            return false  # At least one is not a depot
+        end
+        
+        # Find which depot each node belongs to
+        depot_i = -1
+        depot_j = -1
+        current_depot_node = n_customers + 1
+        
+        for depot_idx in 1:length(n_duplicates_array)
+            for duplicate_idx in 1:n_duplicates_array[depot_idx]
+                if current_depot_node == i
+                    depot_i = depot_idx
+                end
+                if current_depot_node == j
+                    depot_j = depot_idx
+                end
+                current_depot_node += 1
+            end
+        end
+        
+        return depot_i == depot_j && depot_i != -1
+    end
     
     # Costs between customers (this includes depots, but the cost will be overwritten later)
     for i in 1:length(customers) # this includes the depots but the cost will be overwritten later
         for j in 1:length(customers) # this includes the depots but the cost will be overwritten later
             if i != j
                 # if both are duplicate of the same depot, we put an infinite cost
-                if (i > n_customers && (j - i) % length(ChargingStation) == 0) || (j > n_customers && (i - j) % length(ChargingStation) == 0)
+                if are_same_depot_duplicates(i, j, n_customers, n_duplicates_array)
                     costs[(i, j)] = max_battery_time*4
                     costs[(j, i)] = max_battery_time*4
                 else
@@ -664,37 +691,18 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
         end
     end
 
-    depot_offset = 0
-    for depot in ChargingStation
-        depot_offset += 1
+    depot_node = n_customers + 1  # Start indexing depot nodes after customers
+    for (depot_idx, depot) in enumerate(ChargingStation)
         depot_x, depot_y = depot
-        for duplicate_batch in 1:n_duplicates
-            depot_node = n_customers + (duplicate_batch-1) * length(ChargingStation) + depot_offset
-        #duplicate_depot_node = n_customers + length(ChargingStation) + depot_offset
-        # cost from artificial node to all depots is 0
-        # costs[(artificial_node, depot_node)] = 0
-        # costs[(depot_node, artificial_node)] = 0
-        # costs[(artificial_node, duplicate_depot_node)] = 0
-        # costs[(duplicate_depot_node, artificial_node)] = 0
-        # Costs from depot to customers and back
+        for duplicate_idx in 1:n_duplicates_array[depot_idx]
+            # Costs from depot to customers and back
             for i in 1:n_customers
                 xi, yi = customers[i]
                 inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
                 costs[(depot_node, i)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
-                costs[(i, depot_node)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4 # TODO  just put 1 ????
-                #costs[(duplicate_depot_node, i)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
-                #costs[(i, duplicate_depot_node)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
-
-                # println("i, depot_node, duplicate_depot_node: $i, $depot_node, $duplicate_depot_node")
-
-                # if i == 23 && duplicate_depot_node == 27
-                #     println("Cost from depot to customer 23: $(costs[(depot_node, i)])")
-                #     println("Cost from customer 23 to depot: $(costs[(i, depot_node)])")
-                #     println("Cost from duplicate depot to customer 23: $(costs[(duplicate_depot_node, i)])")
-                #     println("Cost from customer 23 to duplicate depot: $(costs[(i, duplicate_depot_node)])")
-                #     println("coordinates: $(customers[i]) $(customers[depot_node]) $(customers[duplicate_depot_node]) ")
-                # end
+                costs[(i, depot_node)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
             end
+            depot_node += 1
         end
     end
 
@@ -806,16 +814,34 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     end
 
     # here, we replace the duplicate nodes with the original nodes
+    # Create a mapping from duplicate depot indices to original depot indices
+    function map_duplicate_to_original(node_idx, n_customers, n_duplicates_array)
+        if node_idx <= n_customers
+            return node_idx  # Customer node, no change
+        end
+        
+        # This is a depot node, find which original depot it corresponds to
+        current_depot_node = n_customers + 1
+        for depot_idx in 1:length(n_duplicates_array)
+            for duplicate_idx in 1:n_duplicates_array[depot_idx]
+                if current_depot_node == node_idx
+                    # Return the index of the first duplicate of this depot
+                    first_duplicate_idx = n_customers + sum(n_duplicates_array[1:depot_idx-1]) + 1
+                    return first_duplicate_idx
+                end
+                current_depot_node += 1
+            end
+        end
+        
+        return node_idx  # Should not reach here
+    end
+    
     for s in 1:n_drones
         if s <= length(top_routes) && length(top_routes[s]) >= 2
             route = top_routes[s]
             for i in 1:length(route)
-                if route[i] > n_customers + length(ChargingStation)
-                    a = (route[i] - n_customers) ÷ length(ChargingStation)
-                    route[i] = route[i] - a * length(ChargingStation) # we remove the duplicate depot
-                    if route[i] == n_customers
-                        route[i] = route[i] + length(ChargingStation) # bc we start at 1, i.e. the first depot is at index 1 so last depot is at index length(ChargingStation)
-                    end
+                if route[i] > n_customers
+                    route[i] = map_duplicate_to_original(route[i], n_customers, n_duplicates_array)
                 end
             end
         end

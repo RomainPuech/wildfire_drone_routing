@@ -3145,6 +3145,13 @@ class DroneRoutingTOP(DroneRoutingStrategy):
             # print("--- end of parameters ---")
 
             # Solve next move with the existing model
+            julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+            print("current drone locations in julia indexing are:", julia_drone_locations)
+            # if drone are not on charging stations, we raise an error # TODO, put this in julia instead of here
+            for drone_location in julia_drone_locations:
+                if drone_location not in self.julia_charging_stations_locations:
+                    raise ValueError(f"Drone is not on a charging station: {drone_location}")
+            
             start_time = time.time()
             self.current_solution = jl.compute_TOP_plan_multiple_depots(
                 self.current_burnmap_filename,
@@ -3153,7 +3160,8 @@ class DroneRoutingTOP(DroneRoutingStrategy):
                 self.julia_ground_sensor_locations,
                 self.automatic_initialization_parameters["max_battery_time"],
                 self.t,
-                False  # verbose=False to disable Julia plots
+                False,  # verbose=False to disable Julia plots
+                julia_drone_locations
             )
             self.execution_time += time.time() - start_time
             #print("Next move optimization finished")
