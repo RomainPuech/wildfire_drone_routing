@@ -163,27 +163,32 @@ def test_top_strategy_basic():
        • no exception is raised
        • each step returns exactly n_drones actions
     """
-
+    # params
+    L = 7
+    N = M = 20
     # --- 1. Create toy burn-map ------------------------------------
-    # exponential distribution with mean 0.1
-    burnmap = np.random.pareto(1, size=(1, 15, 15)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
+    burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
+    # multiply each cell by the infinity norm if its index
+    for i in range(N):
+        for j in range(M):
+            burnmap[0, i, j] = burnmap[0, i, j] * (abs(i) + abs(j)) * 10
+    burnmap[0, 0, 0] = 15
     #burnmap = burnmap / np.max(burnmap)
     
     burnmap_file = os.path.join("tmp_burnmap.npy")
     np.save(burnmap_file, burnmap)
 
     # --- 2. Build parameter dictionaries ------------------------
-    L = 3
     auto_params = {
-        "N": 5,
-        "M": 5,
+        "N": N,
+        "M": M,
         "max_battery_distance": -1,
         "max_battery_time": L,
-        "n_drones": 2,
+        "n_drones": 3,
         "n_ground_stations": 0,
         "n_charging_stations": 1,
-        "ground_sensor_locations": [],
-        "charging_stations_locations": [(0, 0), (4, 4)],  # Python 0-based
+        "ground_sensor_locations": [(0,0)],
+        "charging_stations_locations": [(3, 3), (10,10)],  # Python 0-based
         "data_time_resolution": L, # TODO for the momemnt battery = data res. THINK ABT IMPLICATIONS IF BATTERY IS LESS
     }
 

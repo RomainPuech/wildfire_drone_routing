@@ -37,12 +37,12 @@ def initialize_julia_session():
     """)
     
     print("initializing the ground sensor julia module")
-    Main.include("julia/ground_charging_opt.jl")
+    #Main.include("julia/ground_charging_opt.jl")
     
     print("initializing the drone julia module")
-    Main.include("julia/drone_routing_opt.jl")
+    #Main.include("julia/drone_routing_opt.jl")
     
-    Main.include("julia/drone_routing_opt_linear.jl")
+    #Main.include("julia/drone_routing_opt_linear.jl")
 
     print("initializing the TOP julia module")
     Main.include("julia/TOP.jl")

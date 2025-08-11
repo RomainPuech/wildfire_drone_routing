@@ -3086,8 +3086,10 @@ class DroneRoutingTOP(DroneRoutingStrategy):
             self.julia_ground_sensor_locations,
             self.automatic_initialization_parameters["max_battery_time"],
             0, # t = 0 for the initial plan
-            False  # verbose=False to disable Julia plots
+            False,  # verbose=False to disable Julia plots
+            [] # initial_drone_positions
         )
+        #print(f"current solution: {self.current_solution}")
         self.execution_time += time.time() - start_time
         # print(f"current_solution (Julia indexing): {self.current_solution}")
         
@@ -3097,12 +3099,14 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         
         # Extract initial positions from the first step of the solution
         # Extract full action tuples from step 0
-        initial_plan = self.current_solution[0]  # list of (code, (x, y))
 
         initial_positions = self.current_solution[0]
         self.call_counter = 0
         
         print("Initial optimisation finished")
+        print(f"initial_positions: {initial_positions}")
+        #print(f"current solution: {self.current_solution}")
+
         print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
 
 
@@ -3167,7 +3171,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         # Return the appropriate step from the pre-computed plan
         self.call_counter += 1
         idx = self.call_counter
-        assert idx < len(self.current_solution), f"idx={idx} is greater than the number of steps in the solution={len(self.current_solution)}"
+        assert idx < len(self.current_solution), f"idx={idx} is greater than the number of steps in the solution={len(self.current_solution)}. reevaluation_step={self.reevaluation_step}"
         # print(f"[debug] returning plan step {self.call_counter} of {len(self.current_solution)}")
         # update the burnmap: set every visited cell to 0
         for action in self.current_solution[idx]:
