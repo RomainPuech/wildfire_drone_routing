@@ -198,7 +198,7 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots)
         if profit > pso.global_best_profit
             pso.global_best = copy(position)
             pso.global_best_profit = profit
-            println("Initial swarm: New best = $(round(pso.global_best_profit, digits=3))")
+            # println("Initial swarm: New best = $(round(pso.global_best_profit, digits=3))")
         end
     end
     
@@ -216,7 +216,7 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots)
         if profit > pso.global_best_profit
             pso.global_best = copy(position)
             pso.global_best_profit = profit
-            println("IDCH initialization: New best = $(round(pso.global_best_profit, digits=3)), Solution: $(pso.global_best)")
+            # println("IDCH initialization: New best = $(round(pso.global_best_profit, digits=3)), Solution: $(pso.global_best)")
         end
     end
 end
@@ -728,14 +728,14 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
                        swarm_size::Int = 50, max_iterations::Int = 1000,
                        w::Float64 = 0.3, c1::Float64 = 0.5, c2::Float64 = 0.3,
                        ph::Float64 = 0.1, pm::Float64 = 0.3)
-    println("Starting solve_PSO_TOP_multiple_depots in TOP_PSO_multi_depot.jl...")
+    # println("Starting solve_PSO_TOP_multiple_depots in TOP_PSO_multi_depot.jl...")
     # Start timing the algorithm execution
     start_time = time()
     
     # Determine accessible customers using L-infinity distance to closest depot instead of cost matrix
     accessible_customers = Int[]
-    println("Customers: $(customers)")
-    println("See, we have the depots above...")
+    # println("Customers: $(customers)")
+    # println("See, we have the depots above...")
     for i in 1:length(customers)
         # Calculate L-infinity distance (minimum hops) to visit customer and return
         customer_coord = customers[i]
@@ -808,7 +808,7 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
             # Check if update Rule 3 is applied (new local best discovered)
             if pso.global_best_profit > prev_global_best
                 improvement_found = true
-                println("Iter $iter: New best = $(round(pso.global_best_profit, digits=3)), Solution: $(pso.global_best)")
+                println("Iter $iter: New best = $(round(pso.global_best_profit, digits=3))")#, Solution: $(pso.global_best)")
             end
         end
 

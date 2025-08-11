@@ -14,7 +14,7 @@ if module_path not in sys.path:
 from dataset import preprocess_sim2real_dataset, load_scenario_npy, compute_and_save_burn_maps_sim2real_dataset, load_scenario, combine_all_benchmark_results
 from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
 from new_clustering import get_wrapped_clustering_strategy
-from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageGrowingStatic, DroneRoutingMaxCoverageGrowingStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, DroneRoutingUniformCoverageResetStatic
+from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageGrowingStatic, DroneRoutingMaxCoverageGrowingStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingTOP
 from benchmark import run_benchmark_scenario,run_benchmark_scenarii_sequential, get_burnmap_parameters,run_benchmark_scenarii_sequential_precompute, benchmark_on_sim2real_dataset_precompute
 from displays import create_scenario_video
 
@@ -35,7 +35,8 @@ custom_initialization_parameters = {
     "load_from_logfile": False, 
     "reevaluation_step": 5, 
     "optimization_horizon":10,
-    "regularization_param": 1e5
+    "regularization_param": 1e5,
+    "reset_time": 2*simulation_parameters["max_battery_time"]*63,
     } #"regularization_param": 0.0001}
 
 layout_folder = "WideDataset/"
@@ -79,9 +80,10 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     #         os.remove("tmp_burnmaps/" + file)
 
 
-    run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}MCg{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}Ug{bm_prefix}")
+    #run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
+    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingTOP)), custom_initialization_parameters_function, f"{ss_prefix}TOP{bm_prefix}")
+    #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}MCg{bm_prefix}")
+    #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}Ug{bm_prefix}")
     # run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
     
     

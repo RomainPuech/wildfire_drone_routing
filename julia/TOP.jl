@@ -114,7 +114,7 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
     # Extract dimensions from risk_pertime 
     H, N, M = size(risk_pertime)
     if H == 1 # we duplicate the risk per time for 100 time steps
-        println("Duplicating risk per time for 100 time steps")
+        # println("Duplicating risk per time for 100 time steps")
         risk_pertime = repeat(risk_pertime, 100, 1, 1)
         H = 100
     end
@@ -567,10 +567,10 @@ end
 Convert TOP.jl format to PSO format and run PSO algorithm
 """
 function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions = [])
-    println("Starting get_PSO_solution_multiple_depots...")
+    # println("Starting get_PSO_solution_multiple_depots...")
     # Convert GridpointsDronesDetecting to customer format for PSO
     customers = GridpointsDronesDetecting
-    println("Customers: $(customers)")
+    # println("Customers: $(customers)")
     profits = Float64[]
 
     # find how many drones start at each depot
@@ -601,15 +601,15 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
             push!(customers, depot)
         end
     end
-    println("Customers: $(customers)")
-    println("len Customers: $(length(customers))")
+    # println("Customers: $(customers)")
+    # println("len Customers: $(length(customers))")
 
     # Extract profits for each customer
     for (x, y) in customers
         push!(profits, risk_pertime[1, x, y])
     end
     n_customers = length(customers) - sum(n_duplicates_array)
-    println("n_customers: $n_customers")
+    # println("n_customers: $n_customers")
     # Create cost matrix using infinity norm (as in TOP.jl)
     costs = Dict{Tuple{Int,Int}, Float64}()
 
@@ -707,79 +707,81 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     end
 
     # print the costs matrix
-    println("Costs matrix:")
-    println("Format: costs[from, to]")
-    println("Rows = from, Columns = to")
-    
-    # Calculate maximum width needed for any cost value
-    max_cost_width = 0
-    for i in 0:length(customers), j in 0:length(customers)
-        cost = costs[(i, j)]
-        if cost == Inf
-            cost_str = "Inf"
-        elseif cost >= 100
-            cost_str = string(Int(cost))
-        else
-            cost_str = string(round(cost, digits=1))
-        end
-        max_cost_width = max(max_cost_width, length(cost_str))
-    end
-    
-    # Calculate column width (cost width + 2 spaces for padding)
-    col_width = max_cost_width + 2
-    total_width = length(customers) * col_width + 10  # +10 for row headers
-    
-    println("=" ^ total_width)
-    
-    # Print column headers
-    print("        ")
-    for j in 0:length(customers)
-        j_str = string(j)
-        padding = col_width - length(j_str)
-        left_pad = div(padding, 2)
-        right_pad = padding - left_pad
-        print(" " ^ left_pad * j_str * " " ^ right_pad)
-    end
-    println()
-    println("-" ^ total_width)
-    
-    # Print matrix with row headers
-    for i in 0:length(customers)
-        i_str = string(i)
-        right_pad = i<10 ? 1 : 0
-        row_header = "  " * i_str * " " ^ right_pad * "  |"
-        print(row_header)
-        
-        for j in 0:length(customers)
-            cost = costs[(i, j)]
-            if cost == Inf
-                cost_str = "Inf"
-            elseif cost >= 100
-                cost_str = string(Int(cost))
-            else
-                cost_str = string(round(cost, digits=1))
-            end
-            
-            # Center the cost string in the column
-            padding = col_width - length(cost_str)
-            left_pad = div(padding, 2)
-            right_pad = padding - left_pad
-            print(" " ^ left_pad * cost_str * " " ^ right_pad)
-        end
-        println()
-    end
-    println("=" ^ total_width)
+    # println("Costs matrix:")
+    # println("Format: costs[from, to]")
+    # println("Rows = from, Columns = to")
 
+    ### Pretty print the costs matrix
     
+    # # Calculate maximum width needed for any cost value
+    # max_cost_width = 0
+    # for i in 0:length(customers), j in 0:length(customers)
+    #     cost = costs[(i, j)]
+    #     if cost == Inf
+    #         cost_str = "Inf"
+    #     elseif cost >= 100
+    #         cost_str = string(Int(cost))
+    #     else
+    #         cost_str = string(round(cost, digits=1))
+    #     end
+    #     max_cost_width = max(max_cost_width, length(cost_str))
+    # end
+    
+    # # Calculate column width (cost width + 2 spaces for padding)
+    # col_width = max_cost_width + 2
+    # total_width = length(customers) * col_width + 10  # +10 for row headers
+    
+    # println("=" ^ total_width)
+    
+    # # Print column headers
+    # print("        ")
+    # for j in 0:length(customers)
+    #     j_str = string(j)
+    #     padding = col_width - length(j_str)
+    #     left_pad = div(padding, 2)
+    #     right_pad = padding - left_pad
+    #     print(" " ^ left_pad * j_str * " " ^ right_pad)
+    # end
+    # println()
+    # println("-" ^ total_width)
+    
+    # # Print matrix with row headers
+    # for i in 0:length(customers)
+    #     i_str = string(i)
+    #     right_pad = i<10 ? 1 : 0
+    #     row_header = "  " * i_str * " " ^ right_pad * "  |"
+    #     print(row_header)
+        
+    #     for j in 0:length(customers)
+    #         cost = costs[(i, j)]
+    #         if cost == Inf
+    #             cost_str = "Inf"
+    #         elseif cost >= 100
+    #             cost_str = string(Int(cost))
+    #         else
+    #             cost_str = string(round(cost, digits=1))
+    #         end
+            
+    #         # Center the cost string in the column
+    #         padding = col_width - length(cost_str)
+    #         left_pad = div(padding, 2)
+    #         right_pad = padding - left_pad
+    #         print(" " ^ left_pad * cost_str * " " ^ right_pad)
+    #     end
+    #     println()
+    # end
+    # println("=" ^ total_width)
+
+    ### END OF PRETTY PRINT
 
     
     # Run PSO algorithm with proper parameters for CPA initialization
     println("=== PROBLEM SETUP ===")
     println("Customers: $(length(customers)), Battery limit: $max_battery_time, Drones: $n_drones")
-    println("Depot: $(ChargingStation[1])")
-    println("======================")
+    # println("Depot: $(ChargingStation[1])")
+    # println("======================")
     
-    println("Running PSO for initial solution...")
+    # println("Running PSO for initial solution...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP_multiple_depots(
         customers, profits, costs, n_drones, max_battery_time, ChargingStation;
         swarm_size=5, max_iterations=30,  # Increase iterations for better optimization
@@ -808,10 +810,10 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     end
 
     # print the top routes
-    println("Top routes:")
-    for s in 1:n_drones
-        println("Drone $s: $(top_routes[s])")
-    end
+    # println("Top routes:")
+    # for s in 1:n_drones
+    #     println("Drone $s: $(top_routes[s])")
+    # end
 
     # here, we replace the duplicate nodes with the original nodes
     # Create a mapping from duplicate depot indices to original depot indices
@@ -949,7 +951,7 @@ function get_patched_tours_coordinates(routes, GridpointsDronesDetecting, Chargi
         tours_coordinates[s] = Vector{Tuple{Int,Int}}()  # Initialize with empty vector
         if s <= length(routes) && length(routes[s]) >= 3
             route = routes[s]
-            println("route: $route")
+            # println("route: $route")
             if route[1] != 0
                 error("First node should be the artificial node")
             end
@@ -1071,7 +1073,7 @@ function plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting
 end
 
 function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
-    println("Starting CPA...")
+    # println("Starting CPA...")
     # Initial upper bound (UB) and initial PSO lower bound (LB)
     model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
@@ -1110,8 +1112,8 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
     greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
 
-    println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
-    println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
+    # println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
+    # println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
     
 
     # print GridpointsDronesDetecting
@@ -1120,7 +1122,7 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
 
 
     # Print the initial PSO solution routes
-    print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
+    # print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
     tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStation,n_drones)
     #println("tours_coordinates: $(tours_coordinates)")
     
@@ -1145,9 +1147,9 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     # end
 
     # RETURN THE PSO SOLUTION DIRECTLY (bypassing CPA algorithm)
-    println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
-    println("Final PSO objective value: $best_LB")
-    println("Skipping CPA algorithm as requested")
+    # println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
+    # println("Final PSO objective value: $best_LB")
+    # println("Skipping CPA algorithm")
     return routes, UB, x, y, tours_coordinates
 
     # COMMENTED OUT: The rest of the CPA algorithm
@@ -1284,207 +1286,207 @@ end
 
 
 
-function CPA_single_depot(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false)
-    println("Starting CPA with single depot...")
-    # Initial upper bound (UB) and initial PSO lower bound (LB)
-    model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+# function CPA_single_depot(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false)
+#     println("Starting CPA with single depot...")
+#     # Initial upper bound (UB) and initial PSO lower bound (LB)
+#     model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
-    UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
+#     UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
     
-    # Create cost matrix c for greedy comparison
-    n_nodes = length(coords)
-    c = Dict{Tuple{Int,Int}, Float64}()
+#     # Create cost matrix c for greedy comparison
+#     n_nodes = length(coords)
+#     c = Dict{Tuple{Int,Int}, Float64}()
     
-    for i in 1:n_nodes, j in 1:n_nodes
-        xi, yi = coords[i]
-        xj, yj = coords[j]
+#     for i in 1:n_nodes, j in 1:n_nodes
+#         xi, yi = coords[i]
+#         xj, yj = coords[j]
         
-        inf_dist = max(abs(xi - xj), abs(yi - yj))
-        if inf_dist <= 1
-            c[(i, j)] = 1.0
-        else
-            c[(i, j)] = L*4
-        end
-    end
+#         inf_dist = max(abs(xi - xj), abs(yi - yj))
+#         if inf_dist <= 1
+#             c[(i, j)] = 1.0
+#         else
+#             c[(i, j)] = L*4
+#         end
+#     end
     
-    # Prevent direct connection between Begin_CS and End_CS
-    c[(Begin_CS, End_CS)] = L*4
+#     # Prevent direct connection between Begin_CS and End_CS
+#     c[(Begin_CS, End_CS)] = L*4
     
-    # Use PSO instead of greedy for initialization
-    routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
+#     # Use PSO instead of greedy for initialization
+#     routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
 
     
-    # Also compute greedy for comparison
-    greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
-    greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
+#     # Also compute greedy for comparison
+#     greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
+#     greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
 
-    println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
-    println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
+#     println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
+#     println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
     
 
-    # print GridpointsDronesDetecting
-    # println("GridpointsDronesDetecting: $(GridpointsDronesDetecting)")
-    # println("length(GridpointsDronesDetecting): $(length(GridpointsDronesDetecting))")
+#     # print GridpointsDronesDetecting
+#     # println("GridpointsDronesDetecting: $(GridpointsDronesDetecting)")
+#     # println("length(GridpointsDronesDetecting): $(length(GridpointsDronesDetecting))")
 
 
-    # Print the initial PSO solution routes
-    print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
-    tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStation,n_drones)
-    #println("tours_coordinates: $(tours_coordinates)")
+#     # Print the initial PSO solution routes
+#     print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
+#     tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStation,n_drones)
+#     #println("tours_coordinates: $(tours_coordinates)")
     
-    # Plot the initial PSO solution
-    if verbose
-        println("Plotting initial PSO solution...")
-        plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial", verbose)
-    end
-    # also log these routes to a file, append if the file already exists   
-    # open("pso_initial_routes.txt", "a") do f
-    #     for s in 1:n_drones
-    #         write(f, "Drone $s: ")
-    #         for (i, route_idx) in enumerate(routes[s])
-    #             coord = get(GridpointsDronesDetecting, route_idx, (-1, -1))
-    #             write(f, "$coord")
-    #             if i < length(routes[s])
-    #                 write(f, " -> ")
-    #             end
-    #         end
-    #         write(f, "\n")
-    #     end
-    # end
+#     # Plot the initial PSO solution
+#     if verbose
+#         println("Plotting initial PSO solution...")
+#         plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial", verbose)
+#     end
+#     # also log these routes to a file, append if the file already exists   
+#     # open("pso_initial_routes.txt", "a") do f
+#     #     for s in 1:n_drones
+#     #         write(f, "Drone $s: ")
+#     #         for (i, route_idx) in enumerate(routes[s])
+#     #             coord = get(GridpointsDronesDetecting, route_idx, (-1, -1))
+#     #             write(f, "$coord")
+#     #             if i < length(routes[s])
+#     #                 write(f, " -> ")
+#     #             end
+#     #         end
+#     #         write(f, "\n")
+#     #     end
+#     # end
 
-    # RETURN THE PSO SOLUTION DIRECTLY (bypassing CPA algorithm)
-    println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
-    println("Final PSO objective value: $best_LB")
-    println("Skipping CPA algorithm as requested")
-    return routes, UB, x, y, tours_coordinates
+#     # RETURN THE PSO SOLUTION DIRECTLY (bypassing CPA algorithm)
+#     println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
+#     println("Final PSO objective value: $best_LB")
+#     println("Skipping CPA algorithm as requested")
+#     return routes, UB, x, y, tours_coordinates
 
-    # COMMENTED OUT: The rest of the CPA algorithm
-    # WARM START THE MODEL WITH THE PSO SOLUTION
-    # println("Warm starting MILP with PSO solution...")
-    # error("Stop here") # keep this for now
-    # warm_start_with_solution!(model, x, y, routes, n_drones, GridpointsDrones, TransitGridpoints)
+#     # COMMENTED OUT: The rest of the CPA algorithm
+#     # WARM START THE MODEL WITH THE PSO SOLUTION
+#     # println("Warm starting MILP with PSO solution...")
+#     # error("Stop here") # keep this for now
+#     # warm_start_with_solution!(model, x, y, routes, n_drones, GridpointsDrones, TransitGridpoints)
 
-    # iteration = 1
-    # println("\n--- Iteration $iteration ---")
+#     # iteration = 1
+#     # println("\n--- Iteration $iteration ---")
 
-    #     while true
-    #         optimize!(model)
+#     #     while true
+#     #         optimize!(model)
 
-    #         opt_val = objective_value(model) # this is P(SOL)
-    #         if opt_val < UB
-    #             UB = opt_val
-    #         end
+#     #         opt_val = objective_value(model) # this is P(SOL)
+#     #         if opt_val < UB
+#     #             UB = opt_val
+#     #         end
             
-    #         println("Iteration $iteration: LB = $best_LB, UB = $UB, Gap = $(round(((UB - best_LB) / UB) * 100, digits=2))%")
+#     #         println("Iteration $iteration: LB = $best_LB, UB = $UB, Gap = $(round(((UB - best_LB) / UB) * 100, digits=2))%")
 
-    #         # --------------- PLOT THE GRAPH ---------------
-    #         # Convert MILP solution to routes format for plotting
-    #         milp_routes = extract_tours_from_solution(x, 1:n_drones, GridpointsDrones, Begin_CS, End_CS)
-    #         route_vectors = Vector{Vector{Int}}(undef, n_drones)
-    #         for s in 1:n_drones
-    #             if haskey(milp_routes, s)
-    #                 route_vectors[s] = milp_routes[s]
-    #             else
-    #                 route_vectors[s] = [Begin_CS, End_CS]  # Empty route
-    #             end
-    #         end
+#     #         # --------------- PLOT THE GRAPH ---------------
+#     #         # Convert MILP solution to routes format for plotting
+#     #         milp_routes = extract_tours_from_solution(x, 1:n_drones, GridpointsDrones, Begin_CS, End_CS)
+#     #         route_vectors = Vector{Vector{Int}}(undef, n_drones)
+#     #         for s in 1:n_drones
+#     #             if haskey(milp_routes, s)
+#     #                 route_vectors[s] = milp_routes[s]
+#     #             else
+#     #                 route_vectors[s] = [Begin_CS, End_CS]  # Empty route
+#     #             end
+#     #         end
             
-    #         # Plot using the reusable function
-    #         plot_routes(route_vectors, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "iter$(iteration)")
-    #         # --------------- END OF PLOT ---------------
+#     #         # Plot using the reusable function
+#     #         plot_routes(route_vectors, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "iter$(iteration)")
+#     #         # --------------- END OF PLOT ---------------
 
-    #         # Here we assume that the relaxed problem has been solved to optimality (i.e gurobi did not timeout or anything)
-    #         # extract subtours from the solution
-    #         subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
+#     #         # Here we assume that the relaxed problem has been solved to optimality (i.e gurobi did not timeout or anything)
+#     #         # extract subtours from the solution
+#     #         subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
 
-    #         # extract tours from the solution
-    #         tours_per_drone = extract_tours_from_solution(x, 1:n_drones, GridpointsDrones, Begin_CS, End_CS)
-    #         # this becomes our new feasible solution if it improves the current LB
-    #         if !isempty(tours_per_drone)
-    #             profit = 0.0
-    #             for s in 1:n_drones
-    #                 # if a tour exists for drone s, then we add the profit of the tour to the total profit
-    #                 if haskey(tours_per_drone, s) && length(tours_per_drone[s]) > 2
-    #                     profit += sum(risk_pertime[1, coords[k]...] for k in tours_per_drone[s][2:end-1]) # skip the depots
-    #                 end
-    #             end
-    #             if profit > best_LB
-    #                 best_LB = profit
-    #                 # cast dict to vector of vectors    
-    #                 routes = Vector{Vector{Int}}(undef, n_drones)
-    #                 for s in 1:n_drones
-    #                     if haskey(tours_per_drone, s)
-    #                         routes[s] = tours_per_drone[s]
-    #                     else
-    #                         routes[s] = []
-    #                     end
-    #                 end
-    #             end
-    #         end
+#     #         # extract tours from the solution
+#     #         tours_per_drone = extract_tours_from_solution(x, 1:n_drones, GridpointsDrones, Begin_CS, End_CS)
+#     #         # this becomes our new feasible solution if it improves the current LB
+#     #         if !isempty(tours_per_drone)
+#     #             profit = 0.0
+#     #             for s in 1:n_drones
+#     #                 # if a tour exists for drone s, then we add the profit of the tour to the total profit
+#     #                 if haskey(tours_per_drone, s) && length(tours_per_drone[s]) > 2
+#     #                     profit += sum(risk_pertime[1, coords[k]...] for k in tours_per_drone[s][2:end-1]) # skip the depots
+#     #                 end
+#     #             end
+#     #             if profit > best_LB
+#     #                 best_LB = profit
+#     #                 # cast dict to vector of vectors    
+#     #                 routes = Vector{Vector{Int}}(undef, n_drones)
+#     #                 for s in 1:n_drones
+#     #                     if haskey(tours_per_drone, s)
+#     #                         routes[s] = tours_per_drone[s]
+#     #                     else
+#     #                         routes[s] = []
+#     #                     end
+#     #                 end
+#     #             end
+#     #         end
 
-    #         # if no subtour, then we can stop the algorithm!
-    #         has_subtours = any(s -> !isempty(subtours_per_drone[s]), 1:n_drones)
-    #         if !has_subtours
-    #             println("✓ No subtours found - optimal solution reached!")
-    #             println("Final objective value: $best_LB")
-    #             return routes, UB, x, y
-    #         end
+#     #         # if no subtour, then we can stop the algorithm!
+#     #         has_subtours = any(s -> !isempty(subtours_per_drone[s]), 1:n_drones)
+#     #         if !has_subtours
+#     #             println("✓ No subtours found - optimal solution reached!")
+#     #             println("Final objective value: $best_LB")
+#     #             return routes, UB, x, y
+#     #         end
             
-    #         total_subtours = sum(length(subtours_per_drone[s]) for s in 1:n_drones)
-    #         println("Found $total_subtours subtours across $(length(subtours_per_drone)) drones - adding constraints...")
+#     #         total_subtours = sum(length(subtours_per_drone[s]) for s in 1:n_drones)
+#     #         println("Found $total_subtours subtours across $(length(subtours_per_drone)) drones - adding constraints...")
 
-    #         # if lower bound is equal to upper bound, then we can stop the algorithm!
-    #         if best_LB == UB
-    #             println("✓ Optimal solution found (LB = UB)!")
-    #             println("Final objective value: $best_LB")
-    #             return routes, UB, x, y
-    #         end
+#     #         # if lower bound is equal to upper bound, then we can stop the algorithm!
+#     #         if best_LB == UB
+#     #             println("✓ Optimal solution found (LB = UB)!")
+#     #             println("Final objective value: $best_LB")
+#     #             return routes, UB, x, y
+#     #         end
 
-    #         # if there are subtours, then we need to add GSEC constraints to eliminate them
-    #         # THE BIG QUESTION IS: Do we use only the tour for the GSEC constraint, or do we use the whole relaxed solution (tour + subtours)? TODO
-    #         # OR do we use the subtours, so we take their complement??!!! TODO
+#     #         # if there are subtours, then we need to add GSEC constraints to eliminate them
+#     #         # THE BIG QUESTION IS: Do we use only the tour for the GSEC constraint, or do we use the whole relaxed solution (tour + subtours)? TODO
+#     #         # OR do we use the subtours, so we take their complement??!!! TODO
 
-    #         for s in 1:n_drones
-    #             for T in subtours_per_drone[s]
-    #                 # S is V \ T
-    #                 S = setdiff(GridpointsDrones,T)
-    #                 # check that both depots are in S: raise error if not
-    #                 if !(Begin_CS in S && End_CS in S)
-    #                     error("Begin_CS or End_CS not in S")
-    #                 end
-    #                 # check that S is not empty: raise error if it is
-    #                 if isempty(S)
-    #                     error("S is empty")
-    #                 end
+#     #         for s in 1:n_drones
+#     #             for T in subtours_per_drone[s]
+#     #                 # S is V \ T
+#     #                 S = setdiff(GridpointsDrones,T)
+#     #                 # check that both depots are in S: raise error if not
+#     #                 if !(Begin_CS in S && End_CS in S)
+#     #                     error("Begin_CS or End_CS not in S")
+#     #                 end
+#     #                 # check that S is not empty: raise error if it is
+#     #                 if isempty(S)
+#     #                     error("S is empty")
+#     #                 end
 
-    #                 outside_S = T
+#     #                 outside_S = T
     
-    #                 delta_plus = [(u, v) for u in S for v in outside_S if c[(u,v)] < L]
-    #                 delta_min = [(u,v) for u in outside_S for v in S if c[(u,v)] <L]
+#     #                 delta_plus = [(u, v) for u in S for v in outside_S if c[(u,v)] < L]
+#     #                 delta_min = [(u,v) for u in outside_S for v in S if c[(u,v)] <L]
 
-    #                 delta = [delta_plus; delta_min]
+#     #                 delta = [delta_plus; delta_min]
 
-    #                 gamma = [(u,v) for u in S for v in S if c[(u,v)] <L]
+#     #                 gamma = [(u,v) for u in S for v in S if c[(u,v)] <L]
 
-    #                 gamma_T = [(u,v) for u in T for v in T if c[(u,v)] <L]
+#     #                 gamma_T = [(u,v) for u in T for v in T if c[(u,v)] <L]
                     
-    #                 S_minus_depots = setdiff(S, [Begin_CS, End_CS])
-    #                 # println("S_minus_depots = $S_minus_depots")
+#     #                 S_minus_depots = setdiff(S, [Begin_CS, End_CS])
+#     #                 # println("S_minus_depots = $S_minus_depots")
 
 
-    #                 if !isempty(delta)
-    #                     @constraint(model, [i in T, s in 1:n_drones], sum(x[u, v, s] for (u, v) in delta) >= 2*y[i, s]) # (8) in the paper
-    #                     @constraint(model, [j in T, s in 1:n_drones], sum(x[u, v, s] for (u, v) in gamma) <= sum(y[i, s] for i in S_minus_depots) - y[j,s] + 1) # (9) in the paper
-    #                     @constraint(model, [j in T, s in 1:n_drones], sum(x[u, v, s] for (u, v) in gamma_T) <= sum(y[i, s] for i in T) - y[j,s]) # (10) in the paper
-    #                 end
-    #             end
-    #         end
+#     #                 if !isempty(delta)
+#     #                     @constraint(model, [i in T, s in 1:n_drones], sum(x[u, v, s] for (u, v) in delta) >= 2*y[i, s]) # (8) in the paper
+#     #                     @constraint(model, [j in T, s in 1:n_drones], sum(x[u, v, s] for (u, v) in gamma) <= sum(y[i, s] for i in S_minus_depots) - y[j,s] + 1) # (9) in the paper
+#     #                     @constraint(model, [j in T, s in 1:n_drones], sum(x[u, v, s] for (u, v) in gamma_T) <= sum(y[i, s] for i in T) - y[j,s]) # (10) in the paper
+#     #                 end
+#     #             end
+#     #         end
 
-         #         optimize!(model)
-     #         iteration += 1
+#          #         optimize!(model)
+#      #         iteration += 1
              
-     #     end
-end
+#      #     end
+# end
 
 
 
@@ -1492,115 +1494,115 @@ end
 # ---------------- PUBLIC PYTHON API ----------------
 #  This wrapper is the **only** function Python has to call. It keeps the
 #  internal details (milp model, CPA internals, etc.) hidden.
-function compute_TOP_plan_single_depot(risk_pertime_file::String,
-                          n_drones::Int,
-                          ChargingStations::Vector{Tuple{Int,Int}},
-                          GroundStations::Vector{Tuple{Int,Int}},
-                          max_battery_time::Int,
-                          t::Int,
-                          verbose::Bool = false)
-    # julia-indexing for the burnmap is 1-based, so we need to shift the time index by 1
-    t += 1
-    # Load the burn-map (.npy)
-    risk_pertime = load_burn_map(risk_pertime_file)
-    risk_pertime = risk_pertime[t:end, :, :]
+# function compute_TOP_plan_single_depot(risk_pertime_file::String,
+#                           n_drones::Int,
+#                           ChargingStations::Vector{Tuple{Int,Int}},
+#                           GroundStations::Vector{Tuple{Int,Int}},
+#                           max_battery_time::Int,
+#                           t::Int,
+#                           verbose::Bool = false)
+#     # julia-indexing for the burnmap is 1-based, so we need to shift the time index by 1
+#     t += 1
+#     # Load the burn-map (.npy)
+#     risk_pertime = load_burn_map(risk_pertime_file)
+#     risk_pertime = risk_pertime[t:end, :, :]
 
-    # put risk of 0 for the charging stations
-    for cs in ChargingStations
-        risk_pertime[1:end, cs[1], cs[2]] .= 0
-    end
-    # put risk of 0 for the ground stations
-    for gs in GroundStations
-        risk_pertime[1:end, gs[1], gs[2]] .= 0
-    end
+#     # put risk of 0 for the charging stations
+#     for cs in ChargingStations
+#         risk_pertime[1:end, cs[1], cs[2]] .= 0
+#     end
+#     # put risk of 0 for the ground stations
+#     for gs in GroundStations
+#         risk_pertime[1:end, gs[1], gs[2]] .= 0
+#     end
 
 
-    # The TOP horizon (L) equals the max battery time by assumption
-    L = max_battery_time
+#     # The TOP horizon (L) equals the max battery time by assumption
+#     L = max_battery_time
 
-    # ------------------------------------------------------------------
-    # 1) Solve the Team-Orienteering Problem via CPA (returns routes)
-    # ------------------------------------------------------------------
-    routes, UB, x, y, tours_coordinates = CPA_single_depot(risk_pertime, n_drones,
-                           ChargingStations,
-                           GroundStations,
-                           max_battery_time,
-                           L,
-                           verbose)
+#     # ------------------------------------------------------------------
+#     # 1) Solve the Team-Orienteering Problem via CPA (returns routes)
+#     # ------------------------------------------------------------------
+#     routes, UB, x, y, tours_coordinates = CPA_single_depot(risk_pertime, n_drones,
+#                            ChargingStations,
+#                            GroundStations,
+#                            max_battery_time,
+#                            L,
+#                            verbose)
 
-    # ------------------------------------------------------------------
-    # 2) Re-build the coordinate vector that maps node indices → (x,y)
-    #    so we can convert the integer routes into explicit actions
-    # ------------------------------------------------------------------
+#     # ------------------------------------------------------------------
+#     # 2) Re-build the coordinate vector that maps node indices → (x,y)
+#     #    so we can convert the integer routes into explicit actions
+#     # ------------------------------------------------------------------
         
-    _, N, M = size(risk_pertime)
-    I = [(x, y) for x in 1:N for y in 1:M]            # all grid cells
-    Grid_set  = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
-    Grid_det  = setdiff(Grid_set, ChargingStations)
-    Grid_det_vec = convert(Vector{Tuple{Int,Int}}, collect(Grid_det))
+#     _, N, M = size(risk_pertime)
+#     I = [(x, y) for x in 1:N for y in 1:M]            # all grid cells
+#     Grid_set  = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+#     Grid_det  = setdiff(Grid_set, ChargingStations)
+#     Grid_det_vec = convert(Vector{Tuple{Int,Int}}, collect(Grid_det))
 
-    coords = deepcopy(Grid_det_vec)
-    push!(coords, ChargingStations[1])  # Begin_CS
-    push!(coords, ChargingStations[1])  # End_CS
+#     coords = deepcopy(Grid_det_vec)
+#     push!(coords, ChargingStations[1])  # Begin_CS
+#     push!(coords, ChargingStations[1])  # End_CS
 
-    Begin_CS = length(Grid_det_vec) + 1
-    End_CS   = length(Grid_det_vec) + 2
+#     Begin_CS = length(Grid_det_vec) + 1
+#     End_CS   = length(Grid_det_vec) + 2
 
-    # ------------------------------------------------------------------
-    # 3) Build the time-indexed movement plan expected by Python
-    # ------------------------------------------------------------------
-    horizon = max_battery_time                    # optimisation horizon
-    movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:horizon+1]
+#     # ------------------------------------------------------------------
+#     # 3) Build the time-indexed movement plan expected by Python
+#     # ------------------------------------------------------------------
+#     horizon = max_battery_time                    # optimisation horizon
+#     movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:horizon+1]
 
-    for s in 1:n_drones
-        route = s <= length(routes) && !isempty(routes[s]) ? routes[s] : [Begin_CS, End_CS]
-        movement_plan[1][s] = ("charge", ChargingStations[1])
-        t = 1
-        for node_idx in route[2:end-1]  # skip initial and final depots
-            t += 1
-            if t > horizon
-                break
-            end
+#     for s in 1:n_drones
+#         route = s <= length(routes) && !isempty(routes[s]) ? routes[s] : [Begin_CS, End_CS]
+#         movement_plan[1][s] = ("charge", ChargingStations[1])
+#         t = 1
+#         for node_idx in route[2:end-1]  # skip initial and final depots
+#             t += 1
+#             if t > horizon
+#                 break
+#             end
             
-            next_node = coords[node_idx]
-            current_node = get(coords, route[t-1], (0,0)) # 0,0 here for the python plot
+#             next_node = coords[node_idx]
+#             current_node = get(coords, route[t-1], (0,0)) # 0,0 here for the python plot
             
-            # Check if we can fly directly (Chebyshev distance = 1)
-            if max(abs(next_node[1] - current_node[1]), abs(next_node[2] - current_node[2])) != 1
-                # We need to "patch" the path with intermediate steps
-                current_pos = (current_node[1], current_node[2])  # Create a copy to avoid mutating original
+#             # Check if we can fly directly (Chebyshev distance = 1)
+#             if max(abs(next_node[1] - current_node[1]), abs(next_node[2] - current_node[2])) != 1
+#                 # We need to "patch" the path with intermediate steps
+#                 current_pos = (current_node[1], current_node[2])  # Create a copy to avoid mutating original
                 
-                while max(abs(next_node[1] - current_pos[1]), abs(next_node[2] - current_pos[2])) > 1
-                    # Move one step toward the target
-                    new_x = current_pos[1]
-                    new_y = current_pos[2]
-                    if abs(next_node[1] - current_pos[1]) > 0
-                        new_x += sign(next_node[1] - current_pos[1])
-                    end
-                    if abs(next_node[2] - current_pos[2]) > 0
-                        new_y += sign(next_node[2] - current_pos[2])
-                    end
-                    current_pos = (new_x, new_y)
+#                 while max(abs(next_node[1] - current_pos[1]), abs(next_node[2] - current_pos[2])) > 1
+#                     # Move one step toward the target
+#                     new_x = current_pos[1]
+#                     new_y = current_pos[2]
+#                     if abs(next_node[1] - current_pos[1]) > 0
+#                         new_x += sign(next_node[1] - current_pos[1])
+#                     end
+#                     if abs(next_node[2] - current_pos[2]) > 0
+#                         new_y += sign(next_node[2] - current_pos[2])
+#                     end
+#                     current_pos = (new_x, new_y)
                     
-                    movement_plan[t][s] = ("fly", current_pos)
-                    t += 1
+#                     movement_plan[t][s] = ("fly", current_pos)
+#                     t += 1
                     
-                    # Safety check to prevent infinite loops
-                    if t > horizon
-                        break
-                    end
-                end
-            end
-            movement_plan[t][s] = ("fly", next_node)
-        end
-        if t < horizon + 1 # we include the final depot manually
-            t += 1
-            movement_plan[t][s] = ("charge", ChargingStations[1])
-        end
-    end
+#                     # Safety check to prevent infinite loops
+#                     if t > horizon
+#                         break
+#                     end
+#                 end
+#             end
+#             movement_plan[t][s] = ("fly", next_node)
+#         end
+#         if t < horizon + 1 # we include the final depot manually
+#             t += 1
+#             movement_plan[t][s] = ("charge", ChargingStations[1])
+#         end
+#     end
 
-    return movement_plan # no need to include starting depot in the movement plan
-end
+#     return movement_plan # no need to include starting depot in the movement plan
+# end
 
 
 
@@ -1659,7 +1661,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
         end
         movement_plan[max_battery_time+1][s] = ("charge", tours_coordinates[s][end])
     end
-    println("movement_plan: $movement_plan")
+    # println("movement_plan: $movement_plan")
     return movement_plan
 
 #    # ------------------------------------------------------------------

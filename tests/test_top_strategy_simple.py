@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # Add code directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code'))
 
-from Strategy import DroneRoutingTOP
+from Strategy import DroneRoutingTOP, DroneRoutingTOPGrowing, DroneRoutingTOPGrowingProba
 from displays import create_video_scenario_burnmap
 from dataset import load_burn_map
 
@@ -164,16 +164,17 @@ def test_top_strategy_basic():
        • each step returns exactly n_drones actions
     """
     # params
-    L = 10
-    N = M = 15
+    L = 5
+    N = M = 10
+    time_periods = 4
     # --- 1. Create toy burn-map ------------------------------------
-    burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
-    # multiply each cell by the infinity norm if its index
-    for i in range(N):
-        for j in range(M):
-            burnmap[0, i, j] = burnmap[0, i, j] * (abs(i) + abs(j)) * 10
-    burnmap[0, 0, 0] = 15
-    #burnmap = burnmap / np.max(burnmap)
+    #burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
+    burnmap = np.random.rand(1, N, M)
+    # # multiply each cell by the infinity norm if its index
+    # for i in range(N):
+    #     for j in range(M):
+    #         burnmap[0, i, j] = burnmap[0, i, j] * (abs(i) + abs(j)) * 10
+    # #burnmap = burnmap / np.max(burnmap)
     
     burnmap_file = os.path.join("tmp_burnmap.npy")
     np.save(burnmap_file, burnmap)
@@ -187,7 +188,7 @@ def test_top_strategy_basic():
         "n_drones": 3,
         "n_ground_stations": 0,
         "n_charging_stations": 1,
-        "ground_sensor_locations": [(0,0)],
+        "ground_sensor_locations": [(0,0), (0,8)],
         "charging_stations_locations": [(3, 3), (8,8)],  # Python 0-based
         "data_time_resolution": L, # TODO for the momemnt battery = data res. THINK ABT IMPLICATIONS IF BATTERY IS LESS
     }
@@ -224,7 +225,7 @@ def test_top_strategy_basic():
     }
     
     print("Running simulation steps...")
-    total_steps = 3 * auto_params["max_battery_time"]
+    total_steps = time_periods * auto_params["max_battery_time"]
     for t in range(total_steps):
         actions = strat.next_actions(step_params, {})
         # Print progress every 10 steps instead of every step to avoid blocking IO
@@ -293,7 +294,7 @@ def test_top_strategy_basic():
         ground_sensor_locations=auto_params.get("ground_sensor_locations", []),
         charging_stations_locations=auto_params["charging_stations_locations"],
         frames_per_image=2,
-        maxframes=3 * auto_params["max_battery_time"] + 1
+        maxframes=time_periods * auto_params["max_battery_time"] + 1
     )
     
     print("Video saved as: display_drone_trajectories_burnmap/drone_trajectories_burnmap.mp4")

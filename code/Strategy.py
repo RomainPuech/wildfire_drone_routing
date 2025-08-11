@@ -2998,6 +2998,7 @@ class DroneRoutingUniformCoverageGrowingStatic(DroneRoutingStrategy):
 
 class DroneRoutingTOP(DroneRoutingStrategy):
     strategy_name = "DroneRoutingTOP"
+    burnmap_handeling_type = "fixed_reset"
     """
     Drone routing strategy that uses a Team Orienteering Problem (TOP) approach.
     """
@@ -3035,7 +3036,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         self.current_burnmap = self.initial_burnmap.copy()
         if self.burnmap_type == "static":
             # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
-            self.current_burnmap = np.tile(self.initial_burnmap, (120, 1, 1))
+            self.current_burnmap = np.tile(self.initial_burnmap, (100, 1, 1))
         else:
             print(f"careful: burnmap_type is not static, it is {self.burnmap_type}")
         
@@ -3055,6 +3056,8 @@ class DroneRoutingTOP(DroneRoutingStrategy):
 
        
         self.reset_time = custom_initialization_parameters.get("reset_time", 2*63)
+        self.reset_time_periods = self.reset_time // self.reevaluation_step
+        print(f"reset_time_periods: {self.reset_time_periods}")
         self.data_time_resolution = automatic_initialization_parameters.get("data_time_resolution", 1)
         
         # Store original charging stations as class attribute
@@ -3184,14 +3187,31 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         # update the burnmap: set every visited cell to 0
         for action in self.current_solution[idx]:
             if action[0] == "fly":
-                #print(f"setting burnmap at {action[1]} to 0 at time {self.t}")
-                self.current_burnmap[self.t:min(self.t+self.reset_time,self.current_burnmap.shape[0]),action[1][0], action[1][1]] = 0
+                # What we do here with the burn map depends on `burnmap_handeling_type`. If it is "fixed_reset", we reset the burn map to 0 for the next reset_time steps. If it is "growing", we set it to 0 forever and add the initial burnmap to the current burnmap.
+                if self.burnmap_handeling_type == "fixed_reset":
+                    # in the case of TOP, we don't reset for the next reset_time steps, but rather reset for the time left until the next reevaluation (as the only time steps of the burn map actually used are the ones on the re-optimization times)
+                    time_left_until_next_reevaluation = self.reevaluation_step - self.t % self.reevaluation_step
+                    self.current_burnmap[self.t:min(self.t+time_left_until_next_reevaluation + (self.reset_time_periods-1)*self.reevaluation_step,self.current_burnmap.shape[0]),action[1][0], action[1][1]] = 0
+                elif self.burnmap_handeling_type == "growing" or self.burnmap_handeling_type == "growing_proba":
+                    self.current_burnmap[self.t:,action[1][0], action[1][1]] = 0
+                else:
+                    raise ValueError(f"Invalid burnmap_handeling_type: {self.burnmap_handeling_type}")
                 #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         # if t is a multiple of the data time resolution, we update the whole burn map
         if self.t % self.data_time_resolution == 0:
-            #self.current_burnmap[self.t:] += self.initial_burnmap[0] #TODO adapt to dynamic map
+            if self.burnmap_handeling_type == "growing":
+                self.current_burnmap[self.t:] += self.initial_burnmap[self.t] #TODO adapt to dynamic map
+            elif self.burnmap_handeling_type == "growing_proba": # this is assuming independence though
+                self.current_burnmap[self.t:] = 1 - (1 - self.current_burnmap[self.t]) * (1 - self.initial_burnmap[self.t])
             save_burn_map(self.current_burnmap, self.current_burnmap_filename)
 
 
         return self.current_solution[idx]
 
+class DroneRoutingTOPGrowing(DroneRoutingTOP):
+    strategy_name = "DroneRoutingTOPGrowing"
+    burnmap_handeling_type = "growing"
+
+class DroneRoutingTOPGrowingProba(DroneRoutingTOP):
+    strategy_name = "DroneRoutingTOPGrowingProba"
+    burnmap_handeling_type = "growing_proba"
