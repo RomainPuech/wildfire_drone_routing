@@ -3307,7 +3307,8 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
 
 
-        return initial_positions, self.current_burnmap_filename
+        return initial_positions#, self.current_burnmap_filename
+    
 
         
         
@@ -3409,3 +3410,7 @@ class DroneRoutingTOPGrowing(DroneRoutingTOP):
 class DroneRoutingTOPGrowingProba(DroneRoutingTOP):
     strategy_name = "DroneRoutingTOPGrowingProba"
     burnmap_handeling_type = "growing_proba"
+
+
+class TestStrategy(RandomDroneRoutingStrategy):
+    strategy_name = "TestStrategy"

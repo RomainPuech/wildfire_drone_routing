@@ -12,9 +12,9 @@ module_path = os.path.abspath(".") + "/code"
 if module_path not in sys.path:
     sys.path.append(module_path)
 from dataset import preprocess_sim2real_dataset, load_scenario_npy, compute_and_save_burn_maps_sim2real_dataset, load_scenario, combine_all_benchmark_results
-from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
+from wrappers import DroneRoutingTOPLogged, SensorPlacementMaxCoverageGaussianTimeLogged
 from new_clustering import get_wrapped_clustering_strategy
-from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageGrowingStatic, DroneRoutingMaxCoverageGrowingStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingTOP
+from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageGrowingStatic, DroneRoutingMaxCoverageGrowingStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingTOP, TestStrategy
 from benchmark import run_benchmark_scenario,run_benchmark_scenarii_sequential, get_burnmap_parameters,run_benchmark_scenarii_sequential_precompute, benchmark_on_sim2real_dataset_precompute
 from displays import create_scenario_video
 
@@ -22,8 +22,8 @@ from displays import create_scenario_video
 simulation_parameters =  {
     "max_battery_distance": -1,
     "max_battery_time": 1,
-    "n_drones": 3,
-    "n_ground_stations": 4,
+    "n_drones": 2,
+    "n_ground_stations": 8,
     "n_charging_stations": 2,
     "drone_speed_m_per_min": 600,
     "coverage_radius_m": 300,
@@ -81,7 +81,7 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
 
 
     #run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingTOP)), custom_initialization_parameters_function, f"{ss_prefix}TOP{bm_prefix}")
+    run_one_drone_strategy(sensor_strategy, DroneRoutingTOP, custom_initialization_parameters_function, f"{ss_prefix}TOP{bm_prefix}")
     #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}MCg{bm_prefix}")
     #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)), custom_initialization_parameters_function, f"{ss_prefix}Ug{bm_prefix}")
     # run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    sensor_strategy = wrap_log_sensor_strategy(SensorPlacementMaxCoverageGaussianTime)
+    sensor_strategy = SensorPlacementMaxCoverageGaussianTimeLogged
     run_all_drone_strategies(sensor_strategy, args.ss_prefix, args.bm_prefix)
     # print size of the following layouts: 265, 319, 320, 321, 323, 337 
     # print(load_scenario("WideDataset/0111_03612/Satellite_Images_Mask/0111_00013", extension = ".jpg").shape)

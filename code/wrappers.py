@@ -256,7 +256,8 @@ class LoggableDroneStrategyWrapper:
         if isinstance(raw, list):
             if raw and isinstance(raw[0], tuple) and isinstance(raw[0][0], str):
                 # already [(state,(x,y))]
-                return [(st, (int(x), int(y))) for st, (x, y) in raw]
+                print(f"raw: {raw}")
+                return [(st, (int(x), int(y))) for (st, (x, y)) in raw]
             # just [(x,y),...]  – assume start on charger
             return [("charge", (int(x), int(y))) for (x, y) in raw]
 
@@ -302,7 +303,7 @@ def make_loggable_drone_strategy(strategy_cls):
     return Wrapped
 
 
-from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy
+from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy, DroneRoutingTOP, TestStrategy
 from new_clustering import get_wrapped_clustering_strategy
 
 # Register statically at module load
@@ -313,11 +314,17 @@ SensorPlacementMaxCoverageGaussianTimeLogged = make_loggable_sensor_strategy(Sen
 ClusteredUniformCoverage = get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)
 ClusteredMaxCoverage = get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)
 ClusteredRandomStrategy = get_wrapped_clustering_strategy(RandomDroneRoutingStrategy)
+ClusteredTOP = get_wrapped_clustering_strategy(DroneRoutingTOP)
+ClusteredTestStrategy = get_wrapped_clustering_strategy(TestStrategy)
 
 DroneRoutingUniformCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredUniformCoverage)
 DroneRoutingMaxCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredMaxCoverage)
 RandomDroneRoutingStrategyLogged = make_loggable_drone_strategy(ClusteredRandomStrategy)
+DroneRoutingTOPLogged = make_loggable_drone_strategy(ClusteredTOP)
+TestStrategyLogged = make_loggable_drone_strategy(ClusteredTestStrategy)
 
 globals()["DroneRoutingUniformCoverageResetStatic"] = DroneRoutingUniformCoverageResetStaticLogged
 globals()["DroneRoutingMaxCoverageResetStatic"] = DroneRoutingMaxCoverageResetStaticLogged
 globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategyLogged
+globals()["DroneRoutingTOP"] = DroneRoutingTOPLogged
+globals()["TestStrategy"] = TestStrategyLogged

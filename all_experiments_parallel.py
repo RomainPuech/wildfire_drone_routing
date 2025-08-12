@@ -25,7 +25,7 @@ from displays import create_scenario_video
 simulation_parameters =  {
     "max_battery_distance": -1,
     "max_battery_time": 1,
-    "n_drones": 3,
+    "n_drones": 2,
     "n_ground_stations": 8,
     "n_charging_stations": 2,
     "drone_speed_m_per_min": 600,
@@ -42,7 +42,7 @@ custom_initialization_parameters = {
     } #"regularization_param": 0.0001}
 
 
-dataset_folder_name = "/home/gridsan/jye/WFDroneBench_local/WideDataset"
+dataset_folder_name = "./WideDataset"
 
 # Mapping used to resolve burnmap filename
 BM_PREFIX_TO_NAME = {
@@ -122,7 +122,7 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     #         os.remove("tmp_burnmaps/" + file)
 
     # run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, "DroneRoutingMaxCoverageResetStatic", init_func, f"{ss_prefix}MCg{bm_prefix}_parallel")
+    run_one_drone_strategy(sensor_strategy, "DroneRoutingTOP", init_func, f"{ss_prefix}TOP{bm_prefix}_parallel")
     # run_one_drone_strategy(sensor_strategy, DroneRoutingUniformCoverageResetStaticLogged, init_func, f"{ss_prefix}Ug{bm_prefix}_parallel")
     # run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
         

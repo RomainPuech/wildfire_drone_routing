@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'code'))
 
 from Strategy import DroneRoutingTOP, DroneRoutingTOPGrowing, DroneRoutingTOPGrowingProba
+from wrappers import ClusteredTOP
 from displays import create_video_scenario_burnmap
 from dataset import load_burn_map
 
@@ -165,8 +166,8 @@ def test_top_strategy_basic():
     """
     # params
     L = 5
-    N = M = 10
-    time_periods = 4
+    N = M = 6
+    time_periods = 6
     # --- 1. Create toy burn-map ------------------------------------
     #burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
     burnmap = np.random.rand(1, N, M)
@@ -188,9 +189,10 @@ def test_top_strategy_basic():
         "n_drones": 3,
         "n_ground_stations": 0,
         "n_charging_stations": 1,
-        "ground_sensor_locations": [(0,0), (0,8)],
-        "charging_stations_locations": [(3, 3), (8,8)],  # Python 0-based
+        "ground_sensor_locations": [(0,0), (0,3)],
+        "charging_stations_locations": [(2, 3), (5,5)],  # Python 0-based
         "data_time_resolution": L, # TODO for the momemnt battery = data res. THINK ABT IMPLICATIONS IF BATTERY IS LESS
+        "transmission_range": 60,
     }
 
     custom_params = {
@@ -203,9 +205,10 @@ def test_top_strategy_basic():
 
     print("Creating DroneRoutingTOP strategy...")
     # --- 3. Instantiate and get initial positions ---------------
-    strat = DroneRoutingTOP(auto_params, custom_params)
+    strat = ClusteredTOP(auto_params, custom_params)
     print("Getting initial drone locations...")
-    init_actions, current_burnmap_filename = strat.get_initial_drone_locations()
+    init_actions = strat.get_initial_drone_locations()
+    current_burnmap_filename = getattr(strat, "current_burnmap_filename", None)
     print(f"Initial actions: {init_actions}")
     assert len(init_actions) == auto_params["n_drones"]
 

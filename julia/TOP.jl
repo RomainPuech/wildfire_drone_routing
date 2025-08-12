@@ -947,6 +947,7 @@ Get the coordinates of the tours, remove the artificial node, and patches the pa
 """
 function get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations, n_drones)
     tours_coordinates = Vector{Vector{Tuple{Int,Int}}}(undef, n_drones)
+    println("routes: $routes")
     for s in 1:n_drones
         tours_coordinates[s] = Vector{Tuple{Int,Int}}()  # Initialize with empty vector
         if s <= length(routes) && length(routes[s]) >= 3
@@ -1621,6 +1622,9 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     t::Int,
     verbose::Bool = false,
     initial_drone_positions = [])
+    if n_drones == 0
+        return []
+    end
    # julia-indexing for the burnmap is 1-based, so we need to shift the time index by 1
    t += 1
    # Load the burn-map (.npy)
@@ -1652,11 +1656,15 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
                           initial_drone_positions)
 
     movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:max_battery_time+1]
+    println("tours_coordinates: $tours_coordinates")
     for s in 1:n_drones
         t = 1
+        
         movement_plan[1][s] = ("charge", tours_coordinates[s][t])
+        
         while t < max_battery_time
             t += 1
+            println("t: $t, s: $s")
             movement_plan[t][s] = ("fly", tours_coordinates[s][t])
         end
         movement_plan[max_battery_time+1][s] = ("charge", tours_coordinates[s][end])

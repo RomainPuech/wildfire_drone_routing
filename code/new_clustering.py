@@ -320,6 +320,16 @@ class ClusteredDroneStrategyWrapped:
         self.initial_positions = []
         self.initial_states = []
 
+    # ---------------------------------------------------------------------
+    # attribute delegation – behave exactly like the real strategy
+    # ---------------------------------------------------------------------
+    def __getattr__(self, item):
+        # Delegate attribute access to the first strategy instance
+        # This assumes all strategy instances have the same attributes
+        if self.strategy_instances:
+            return getattr(self.strategy_instances[0], item)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+
     def find_clusters(self, charging_stations, drone_battery):
         radius = drone_battery
         n = len(charging_stations)
