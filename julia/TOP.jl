@@ -567,6 +567,7 @@ end
 Convert TOP.jl format to PSO format and run PSO algorithm
 """
 function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions = [])
+    start_time = time()
     # println("Starting get_PSO_solution_multiple_depots...")
     # Convert GridpointsDronesDetecting to customer format for PSO
     customers = GridpointsDronesDetecting
@@ -780,14 +781,17 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     println("Customers: $(length(customers)), Battery limit: $max_battery_time, Drones: $n_drones")
     # println("Depot: $(ChargingStation[1])")
     # println("======================")
-    
+    time_before_pso = time()
+    total_time_without_pso = time_before_pso - start_time
     # println("Running PSO for initial solution...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP_multiple_depots(
-        customers, profits, costs, n_drones, max_battery_time, ChargingStation;
+        customers, profits, costs, n_drones, n_customers, max_battery_time, ChargingStation;
         swarm_size=5, max_iterations=30,  # Increase iterations for better optimization
         w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
     )
-    
+    time_after_pso = time()
+    println("execution time for PSO algorithm: $(time_after_pso - time_before_pso)")
+   
     # Convert PSO routes back to TOP.jl format
     pso_routes = extract_routes(giant_tour, pso_obj)
     
@@ -848,6 +852,9 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
             end
         end
     end
+    time_after_mapping = time()
+    total_time_without_pso += time_after_mapping - time_after_pso
+    println("total time without PSO: $total_time_without_pso")
     return top_routes, pso_profit
 end
 
@@ -1622,6 +1629,8 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     t::Int,
     verbose::Bool = false,
     initial_drone_positions = [])
+
+    start_time = time()
     if n_drones == 0
         return []
     end
@@ -1647,6 +1656,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
    # ------------------------------------------------------------------
    # 1) Solve the Team-Orienteering Problem via CPA (returns routes)
    # ------------------------------------------------------------------
+   time_before_cpa = time()
    routes, UB, x, y, tours_coordinates = CPA_multiple_depots(risk_pertime, n_drones,
                           ChargingStations,
                           GroundStations,
@@ -1654,6 +1664,10 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
                           L,
                           verbose,
                           initial_drone_positions)
+    time_after_cpa = time()
+    cpa_time = time_after_cpa - time_before_cpa
+    println("execution time for CPA: $cpa_time")
+    
 
     movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:max_battery_time+1]
     println("tours_coordinates: $tours_coordinates")
@@ -1664,12 +1678,26 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
         
         while t < max_battery_time
             t += 1
-            println("t: $t, s: $s")
-            movement_plan[t][s] = ("fly", tours_coordinates[s][t])
+            #println("t: $t, s: $s")
+            if t > length(tours_coordinates[s])
+                warn("WARNING: tours_coordinates[s] is too short")
+                println("WARNING: tours_coordinates[s] is too short")
+                println("tours_coordinates[s]: $tours_coordinates[s]")
+                println("t: $t")
+                println("s: $s")
+                println("max_battery_time: $max_battery_time")
+                println("length(tours_coordinates[s]): $(length(tours_coordinates[s]))")
+                movement_plan[t][s] = ("fly", tours_coordinates[s][end])
+            else
+                movement_plan[t][s] = ("fly", tours_coordinates[s][t])
+            end
         end
         movement_plan[max_battery_time+1][s] = ("charge", tours_coordinates[s][end])
     end
     # println("movement_plan: $movement_plan")
+    total_time = time() - start_time
+    println("total julia time: $total_time")
+    println("total time without CPA: $(total_time - cpa_time)")
     return movement_plan
 
 #    # ------------------------------------------------------------------

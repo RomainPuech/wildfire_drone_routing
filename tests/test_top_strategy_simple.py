@@ -165,12 +165,18 @@ def test_top_strategy_basic():
        • each step returns exactly n_drones actions
     """
     # params
-    L = 5
-    N = M = 6
-    time_periods = 6
+    L = 10
+    N = M = 10
+    time_periods = 2
     # --- 1. Create toy burn-map ------------------------------------
-    #burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
-    burnmap = np.random.rand(1, N, M)
+    burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails
+    # save burn map to a file
+    burnmap_file = os.path.join("test_burnmap.npy")
+    #burnmap = np.load(burnmap_file)
+    np.save(burnmap_file, burnmap)
+
+
+    #burnmap = np.random.rand(1, N, M)
     # # multiply each cell by the infinity norm if its index
     # for i in range(N):
     #     for j in range(M):
@@ -186,7 +192,7 @@ def test_top_strategy_basic():
         "M": M,
         "max_battery_distance": -1,
         "max_battery_time": L,
-        "n_drones": 3,
+        "n_drones": 2,
         "n_ground_stations": 0,
         "n_charging_stations": 1,
         "ground_sensor_locations": [(0,0), (0,3)],

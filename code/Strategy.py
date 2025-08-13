@@ -3230,7 +3230,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         self.current_burnmap = self.initial_burnmap.copy()
         if self.burnmap_type == "static":
             # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
-            self.current_burnmap = np.tile(self.initial_burnmap, (100, 1, 1))
+            self.current_burnmap = np.tile(self.initial_burnmap, (200, 1, 1))
         else:
             print(f"careful: burnmap_type is not static, it is {self.burnmap_type}")
         
@@ -3288,6 +3288,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         )
         #print(f"current solution: {self.current_solution}")
         self.execution_time += time.time() - start_time
+        print(f"execution time for initial plan: {self.execution_time}")
         # print(f"current_solution (Julia indexing): {self.current_solution}")
         
         # Convert to Python indexing (Julia 1-based → Python 0-based)
@@ -3361,6 +3362,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
                 False,  # verbose=False to disable Julia plots
                 julia_drone_locations
             )
+            print(f"execution time for next move: {time.time() - start_time}")
             self.execution_time += time.time() - start_time
             #print("Next move optimization finished")
             # print("current solution (Julia indexing)")
