@@ -165,8 +165,8 @@ def test_top_strategy_basic():
        • each step returns exactly n_drones actions
     """
     # params
-    L = 10
-    N = M = 10
+    L = 63
+    N = M = 17
     time_periods = 2
     # --- 1. Create toy burn-map ------------------------------------
     burnmap = np.random.pareto(1, size=(1, N, M)) * 0.001  # Pareto with shape parameter 1 gives very fat tails

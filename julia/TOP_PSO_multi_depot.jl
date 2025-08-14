@@ -196,20 +196,13 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
     tour_lengths = zeros(Int, n)  # Length of each saturated tour
     
     for i in 1:n
-        # if i is a not a depot, skip
-        #println("n_pure_customers: $(pso_multiple_depots.n_pure_customers)")
-        #error("STOP")
-        if permutation[i] <= pso_multiple_depots.n_pure_customers
-            succ[i] = i + 1
-            continue
-        end 
-        #else
+        # Allow tours to start from any position, not just depot positions
+        # The original logic was incorrect - it skipped all customer positions
         current_cost = 0.0
         current_profit = 0.0
         travel_cost = 0.0
         prev_customer = permutation[i]
         j = i + 1
-        # all the rest
     
         # Build maximal feasible tour starting from position i
         while j <= n
@@ -275,6 +268,7 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
 
     # start_time_phase_3 = time()
     # Backtrack to find the optimal routes (as described in the paper)
+    # routes actually never used as output!! but we keep it for now #TODO
     routes = Vector{Vector{Int}}()
     i = 1
     j = m
@@ -582,7 +576,7 @@ function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     
     while improved
         improved = false
-        neighborhoods = [1, 2, 3]  # shift, swap, destruction/repair
+        neighborhoods = [1, 2]#, 3]  # shift, swap, destruction/repair
         shuffle!(neighborhoods)
         
         for neighborhood in neighborhoods
@@ -659,6 +653,54 @@ function move_element(vec, i, j)
 end
 
 """
+Check if a node is blocking at its current position (i.e if it is neighbor of its predecessor)
+"""
+function is_blocking(particle::Particle, i::Int, pso::PSOiA_TOP_multiple_depots)
+    if i == 1
+        return false
+    end
+    L = pso.max_battery_time
+    node_i = particle.position[i]
+    node_i_pred = particle.position[i-1]
+    if get(pso.costs, (node_i_pred, node_i), L*4) > L
+        return true
+    end
+    return false
+end
+
+"""
+Check if a node is blocking at its new position (i.e if it is neighbor of the previous node)
+"""
+function is_blocking_once_inserted(particle::Particle, i::Int, j::Int, pso::PSOiA_TOP_multiple_depots)
+    if j == 1
+        return false
+    end
+    L = pso.max_battery_time
+    node_i = particle.position[i]
+    node_j_pred = particle.position[j-1]
+    if get(pso.costs, (node_j_pred, node_i), L*4) > L
+        return true
+    end
+    return false
+end
+
+"""
+Check if a node is blocking once removed (i.e if it is neighbor of the previous node)
+"""
+function is_blocking_once_removed(particle::Particle, i::Int, pso::PSOiA_TOP_multiple_depots)
+    if i == length(particle.position) || i == 1
+        return false
+    end
+    L = pso.max_battery_time
+    node_i_succ = particle.position[i+1]
+    node_i_pred = particle.position[i-1]
+    if get(pso.costs, (node_i_pred, node_i_succ), L*4) > L
+        return true
+    end
+    return false
+end
+
+"""
 Shift operator: move customer to different position
 """
 function shift_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
@@ -671,11 +713,33 @@ function shift_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
         for j in shuffle(setdiff(1:n, [i]))
             # GRID based optimization: is it worth trying this shift or not?
             # if the shift won't change the current tours, then we don't need to try it
+            # easy version first: IF:
+            
+            # simplified but equivalent: if moving it blocks both, then we don't try it
+            if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_removed(particle, i, pso)
+                # then we don't try it
+                continue
+            end
+            # slightly more complex strategy: TODO implement it just after you improved the swap prcedure.
+            ##########
+            # # if it blocks there, but there was already blocked, the only thing that matters is here.
+            # if is_blocking(particle, j, pso) && is_blocking_once_inserted(particle, i, j, pso)
+            #     # the only thing that matters is here.
+            #     if !is_blocking_once_removed(particle, i, pso) && !is_blocking(particle, i, pso)
+            #         # then we need to know if it increaes profits. if not, no need to try it.
+            #         #it increases profits if it connects to a part that increases profits OR if it doesn't connect but has better own profit.
+            #         # if the new one is blocking on the right, then we need to check if its profit is less than the old one's profit (eventuellement + ceux du node a droite). If so, we skip.
+
+            #         continue
+            #     end
+            # end
+            ##########
 
 
 
 
-            # Try moving customer from position i to position j
+
+            ## Try moving customer from position i to position j
             # new_position = copy(particle.position)
             # customer = new_position[i]
             # deleteat!(new_position, i)
@@ -711,6 +775,10 @@ function swap_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     pos = particle.position
     for i in positions
         for j in shuffle((i+1):n)
+            # same as for shifts: if both are blocking in their respective new positions, then we don't try it
+            if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_inserted(particle, j, i, pso)
+                continue
+            end
             pos[i], pos[j] = pos[j], pos[i]  # trial swap
             new_profit = fast_split_multiple_depots(pos, pso)
             if new_profit > particle.current_profit

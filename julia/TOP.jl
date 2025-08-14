@@ -786,7 +786,7 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     # println("Running PSO for initial solution...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP_multiple_depots(
         customers, profits, costs, n_drones, n_customers, max_battery_time, ChargingStation;
-        swarm_size=5, max_iterations=30,  # Increase iterations for better optimization
+        swarm_size=5, max_iterations=50,  # Increase iterations for better optimization
         w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
     )
     time_after_pso = time()
@@ -1080,6 +1080,73 @@ function plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting
     end
 end
 
+function find_highest_risk_point_within_radius(risk_pertime, possible_centers, radius, possible_points)
+    best_risk = -1.0
+    best_point = nothing
+    best_center = nothing
+    best_cost = 0.0
+    for center in possible_centers
+        for point in possible_points
+            cost = max(abs(center[1] - point[1]), abs(center[2] - point[2]))
+            if cost <= radius && point[1] > 0 && point[1] <= size(risk_pertime, 2) && point[2] > 0 && point[2] <= size(risk_pertime, 3) && risk_pertime[1, point...] > best_risk
+                best_risk = risk_pertime[1, point...]
+                best_point = point
+                best_center = center
+                best_cost = cost
+            end
+        end
+    end
+    return best_point, best_center, best_cost
+end
+
+function get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStation, GroundStations, max_battery_time, n_drones, initial_drone_positions)
+    possible_points = setdiff(GridpointsDronesDetecting, ChargingStation)
+    possible_points = setdiff(possible_points, GroundStations)
+    for s in 1:n_drones
+        possible_points = setdiff(possible_points, tours_coordinates[s])
+    end
+    # check which initial positions we are still allowed to use. These are the ones in the initial_drone_positions that are not in the first node of tours_coordinates counted with multiplicity
+    allowed_initial_positions = copy(initial_drone_positions)
+    for s in 1:n_drones
+        if length(tours_coordinates[s]) > 0
+            start_node = tours_coordinates[s][1]
+            idx = findfirst(x -> x == start_node, allowed_initial_positions)
+            if idx !== nothing
+                deleteat!(allowed_initial_positions, idx)
+            end
+        end
+    end
+    # now make allowed_initial_positions a set to avoid duplicates
+    allowed_initial_positions = Set(allowed_initial_positions)
+    if length(allowed_initial_positions) == 0
+        # we can use any initial position
+        allowed_initial_positions = ChargingStation
+    end
+    # we now have the list of allowed initial positions. We now find the chain of points
+    best_first_point, first_center, current_cumulative_cost = find_highest_risk_point_within_radius(risk_pertime, allowed_initial_positions, max_battery_time, possible_points)
+    route = [first_center, best_first_point]
+    while current_cumulative_cost < max_battery_time
+        best_next_point, _, best_cost = find_highest_risk_point_within_radius(risk_pertime, [route[end]], max_battery_time - current_cumulative_cost, possible_points)
+        push!(route, best_next_point)
+        possible_points = setdiff(possible_points, route)
+        current_cumulative_cost += best_cost
+    end
+    push!(route, first_center) # add the first center again to close the loop
+    # now we have the route. We need to patch the path between successive points
+    final_route = []
+    for i in 1:length(route)-1
+        current_point = route[i]
+        push!(final_route, current_point)
+        next_point = route[i+1]
+        while abs(current_point[1] - next_point[1]) > 1 || abs(current_point[2] - next_point[2]) > 1
+            current_point = (current_point[1] + sign(next_point[1] - current_point[1]), current_point[2] + sign(next_point[2] - current_point[2]))
+            push!(final_route, current_point)
+        end
+    end
+    push!(final_route, first_center) # add the first center again to close the loop
+    return final_route
+end
+
 function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
     # println("Starting CPA...")
     # Initial upper bound (UB) and initial PSO lower bound (LB)
@@ -1117,8 +1184,8 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
 
     
     # Also compute greedy for comparison
-    greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
-    greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
+    #greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
+    #greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
 
     # println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
     # println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
@@ -1132,6 +1199,13 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     # Print the initial PSO solution routes
     # print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
     tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStation,n_drones)
+    # fallback mechanism: if one of the tours is empty, we use a greedy solution
+    for s in 1:n_drones
+        if length(tours_coordinates[s]) < 3
+            println("WARNING:We use the FALLBACK SOLUTION for drone $s")
+            tours_coordinates[s] = get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStation, GroundStations, max_battery_time, n_drones, initial_drone_positions)
+        end
+    end
     #println("tours_coordinates: $(tours_coordinates)")
     
     # Plot the initial PSO solution
@@ -1680,7 +1754,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
             t += 1
             #println("t: $t, s: $s")
             if t > length(tours_coordinates[s])
-                warn("WARNING: tours_coordinates[s] is too short")
+                #warn("WARNING: tours_coordinates[s] is too short")
                 println("WARNING: tours_coordinates[s] is too short")
                 println("tours_coordinates[s]: $tours_coordinates[s]")
                 println("t: $t")
