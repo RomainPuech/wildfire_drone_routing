@@ -159,6 +159,9 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
 
     c[(Begin_CS,End_CS)] = L*4
 
+    return GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints
+    # what comes after, we don't need it anymore since we don't use the model
+
     model = Model(Gurobi.Optimizer)
     set_silent(model)
 
@@ -207,7 +210,7 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
     # @objective(model, Max, 0)
     @objective(model, Max, sum(risk_pertime[1,GridpointsDronesDetecting[k]...]*(y[k,s]) for k in TransitGridpoints for s in 1:n_drones)) # (1)
 
-    return model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y
+    return GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints
 end
 
 # model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
@@ -786,7 +789,7 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     # println("Running PSO for initial solution...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP_multiple_depots(
         customers, profits, costs, n_drones, n_customers, max_battery_time, ChargingStation;
-        swarm_size=5, max_iterations=50,  # Increase iterations for better optimization
+        swarm_size=5, max_iterations=1,  # Increase iterations for better optimization
         w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3
     )
     time_after_pso = time()
@@ -1150,9 +1153,9 @@ end
 function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
     # println("Starting CPA...")
     # Initial upper bound (UB) and initial PSO lower bound (LB)
-    model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+    GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
-    UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
+    # UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
     
     # Create cost matrix c for greedy comparison
     n_nodes = length(coords)
@@ -1232,7 +1235,7 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     # println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
     # println("Final PSO objective value: $best_LB")
     # println("Skipping CPA algorithm")
-    return routes, UB, x, y, tours_coordinates
+    return routes, tours_coordinates
 
     # COMMENTED OUT: The rest of the CPA algorithm
     # WARM START THE MODEL WITH THE PSO SOLUTION
@@ -1731,7 +1734,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
    # 1) Solve the Team-Orienteering Problem via CPA (returns routes)
    # ------------------------------------------------------------------
    time_before_cpa = time()
-   routes, UB, x, y, tours_coordinates = CPA_multiple_depots(risk_pertime, n_drones,
+   routes, tours_coordinates = CPA_multiple_depots(risk_pertime, n_drones,
                           ChargingStations,
                           GroundStations,
                           max_battery_time,

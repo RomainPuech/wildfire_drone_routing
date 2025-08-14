@@ -195,14 +195,21 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
     succ = zeros(Int, n)  # First successor of saturated tour starting at position i
     tour_lengths = zeros(Int, n)  # Length of each saturated tour
     
-    for i in 1:n
-        # Allow tours to start from any position, not just depot positions
-        # The original logic was incorrect - it skipped all customer positions
+    for i in 1:n # HERE! instead of 1:n, you could i += (j-i)... (but then you say can never go from a node to a depot (which is fine?)) #TODO
+        # if i is a not a depot, skip
+        #println("n_pure_customers: $(pso_multiple_depots.n_pure_customers)")
+        #error("STOP")
+        if permutation[i] <= pso_multiple_depots.n_pure_customers
+            succ[i] = i + 1
+            continue
+        end 
+        #else
         current_cost = 0.0
         current_profit = 0.0
         travel_cost = 0.0
         prev_customer = permutation[i]
         j = i + 1
+        # all the rest
     
         # Build maximal feasible tour starting from position i
         while j <= n

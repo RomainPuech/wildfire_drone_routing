@@ -122,7 +122,7 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     #         os.remove("tmp_burnmaps/" + file)
 
     # run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, "DroneRoutingTOP", init_func, f"{ss_prefix}TOP{bm_prefix}_parallel")
+    run_one_drone_strategy(sensor_strategy, "DroneRoutingMaxCoverageResetStatic", init_func, f"{ss_prefix}TOP{bm_prefix}_parallel")
     # run_one_drone_strategy(sensor_strategy, DroneRoutingUniformCoverageResetStaticLogged, init_func, f"{ss_prefix}Ug{bm_prefix}_parallel")
     # run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
         
