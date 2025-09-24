@@ -22,19 +22,22 @@ git clone https://github.com/RomainPuech/wildfire_drone_routing.git
 cd wildfire_drone_routing
 ```
 
-2. Install Python dependencies:
+2. We use Python 3.10. Install Python dependencies with:
 ```bash
-pip install -r requirements.txt
+conda env create -f environment.yml
+conda activate juliaenv
 ```
 
 3. Install Julia (version 1.11.2 or later) and required packages:
 ```julia
 using Pkg
-Pkg.add("JuMP")
-Pkg.add("Gurobi")  # or your preferred solver
+Pkg.activate("julia_env")
+Pkg.instantiate()
 ```
 
-4. Download the modified Sim2Real dataset:
+This tells Julia to use the environment located at ./julia_env, which contains `Project.toml` and `Manifest.toml`, and install all exact versions of the packages.
+
+1. Download the modified Sim2Real dataset:
 ```bash
 # Download from Hugging Face
 https://huggingface.co/datasets/MasterYoda293/DroneBench/tree/main
