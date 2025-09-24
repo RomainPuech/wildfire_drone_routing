@@ -1,9 +1,0 @@
-numpy
-opencv-python
-matplotlib
-tqdm
-juliacall
-shapely
-pandas
-scipy
-geopandas
