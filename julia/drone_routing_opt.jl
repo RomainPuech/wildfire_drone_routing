@@ -1,4 +1,3 @@
-# import helper_functions such as load_burn_map
 include("helper_functions.jl")
 # ] add AxisArrays
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ
@@ -260,38 +259,6 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         end
     end
 
-    # #print objective value
-    # println("Objective value: ", objective_value(model))
-    # println("b: ", value.(b))
-    # println("movement_plan: ", movement_plan)
-
-    # println("Objective value: ", objective_value(model), " because: ")
-
-    # for k in 1:length(GridpointsDronesDetecting)
-    #     if value(theta[1,k]) >= 0.9
-    #         println("Theta variable: ", 1, " ", GridpointsDronesDetecting[k], " ", value(theta[1,k]), " and risk_pertime: ", risk_pertime[1+offset, GridpointsDronesDetecting[k]...])
-    #     end
-    #     if value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,1]) >= 0.9
-    #         println("A variable 1: ", 1, " ", GridpointsDronesDetecting[grid_to_idx[GridpointsDronesDetecting[k]]], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,1]))
-    #     end
-    #     if value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,2]) >= 0.9
-    #         println("A variable 2: ", 1, " ", GridpointsDronesDetecting[grid_to_idx[GridpointsDronesDetecting[k]]], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,2]))
-    #     end
-    # end
-    # for t in 2:T
-    #     for k in 1:length(GridpointsDronesDetecting)
-    #         if value(theta[t,k])-value(theta[t-1,k]) >= 0.9
-    #             println("Theta variable: ", t, " ", GridpointsDronesDetecting[k], " ", value(theta[t,k]) - value(theta[t-1,k]), " and risk_pertime: ", risk_pertime[t+offset, GridpointsDronesDetecting[k]...])
-    #         end
-    #         if value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,1]) >= 0.9
-    #             println("A variable 1: ", t, " ", GridpointsDronesDetecting[k], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,1]))
-    #         end
-    #         if value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,2]) >= 0.9
-    #             println("A variable 2: ", t, " ", GridpointsDronesDetecting[k], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,2]))
-    #         end
-    #     end
-    # end
-
     return movement_plan[1:reevaluation_step]
 end
 
@@ -414,38 +381,7 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
             end
         end
     end
-    # println("movement_plan: ", movement_plan)
-    # print the battery variable
-    #println("Battery variable: ", value.(b))
-    #println("movement_plan: ", movement_plan)
-    # print theta variable as an array
-    # println("Objective value: ", objective_value(model), " because: ")
-    # println("Max obj val possible at 1: ", sum(risk_pertime[1+offset, GridpointsDronesDetecting[k]...] for k in 1:length(GridpointsDronesDetecting)))
 
-    # for k in 1:length(GridpointsDronesDetecting)
-    #     if value(theta[1,k]) >= 0.9
-    #         println("Theta variable: ", 1, " ", GridpointsDronesDetecting[k], " ", value(theta[1,k]), " and risk_pertime: ", risk_pertime[1+offset, GridpointsDronesDetecting[k]...])
-    #     end
-    #     if value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,1]) >= 0.9
-    #         println("A variable 1: ", 1, " ", GridpointsDronesDetecting[grid_to_idx[GridpointsDronesDetecting[k]]], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,1]))
-    #     end
-    #     if value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,2]) >= 0.9
-    #         println("A variable 2: ", 1, " ", GridpointsDronesDetecting[grid_to_idx[GridpointsDronesDetecting[k]]], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],1,2]))
-    #     end
-    # end
-    # for t in 2:T
-    #     for k in 1:length(GridpointsDronesDetecting)
-    #         if value(theta[t,k])-value(theta[t-1,k]) >= 0.9
-    #             println("Theta variable: ", t, " ", GridpointsDronesDetecting[k], " ", value(theta[t,k]) - value(theta[t-1,k]), " and risk_pertime: ", risk_pertime[t+offset, GridpointsDronesDetecting[k]...])
-    #         end
-    #         if value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,1]) >= 0.9
-    #             println("A variable: ", t, " ", GridpointsDronesDetecting[k], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,1]))
-    #         end
-    #         if value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,2]) >= 0.9
-    #             println("A variable 2: ", t, " ", GridpointsDronesDetecting[k], " ", value(a[grid_to_idx[GridpointsDronesDetecting[k]],t,2]))
-    #         end
-    #     end
-    # end
     return movement_plan[1:reevaluation_step]
 end
 
@@ -1253,86 +1189,3 @@ function new_solve_index_next_move_routing(routing_model::NewIndexRoutingModel, 
     return movement_plan[1:reevaluation_step]
 end
 
-
-# # Example parameters
-# risk_pertime_file = "WideDataset/0004_01191/static_risk.npy"
-# n_drones = 2
-# ChargingStations = [(35,14), (30,42)]
-# GroundStations = [(10,10), (20,20), (30,30), (40,40)]
-# optimization_horizon = 10
-# max_battery_time = 5
-# reevaluation_step = 3
-
-# # 1. Create the model
-# routing_model = create_index_routing_model(
-#     risk_pertime_file,
-#     n_drones,
-#     ChargingStations,
-#     GroundStations,
-#     optimization_horizon,
-#     max_battery_time
-# )
-
-# println("Model created successfully!")
-
-# # 2. Solve initial routing
-# init_plan = solve_index_init_routing(routing_model, reevaluation_step)
-# println("Initial plan:")
-# println(init_plan)
-
-# # 3. Prepare arguments for next-move routing
-# # Extract drone locations and states from the last step of the initial plan
-# last_step = init_plan[end]
-# drone_locations = [action[2] for action in last_step]  # [(x, y), ...]
-# drone_states = [action[1] for action in last_step]     # "charge" or "fly"
-# # For this example, set battery_level to max for all drones
-# battery_level = fill(max_battery_time, n_drones)
-
-# # 4. Solve next move routing
-# next_plan = solve_index_next_move_routing(
-#     routing_model,
-#     reevaluation_step,
-#     drone_locations,
-#     drone_states,
-#     battery_level
-# )
-# println("Next move plan:")
-# println(next_plan)
-
-
-# println("old formulation:")
-# # 1. Create the model
-# routing_model = create_index_routing_model(
-#     risk_pertime_file,
-#     n_drones,
-#     ChargingStations,
-#     GroundStations,
-#     optimization_horizon,
-#     max_battery_time
-# )
-
-# println("Model created successfully!")
-
-# # 2. Solve initial routing
-# init_plan = solve_index_init_routing(routing_model, reevaluation_step)
-# println("Initial plan:")
-# println(init_plan)
-
-# # 3. Prepare arguments for next-move routing
-# # Extract drone locations and states from the last step of the initial plan
-# last_step = init_plan[end]
-# drone_locations = [action[2] for action in last_step]  # [(x, y), ...]
-# drone_states = [action[1] for action in last_step]     # "charge" or "fly"
-# # For this example, set battery_level to max for all drones
-# battery_level = fill(max_battery_time, n_drones)
-
-# # 4. Solve next move routing
-# next_plan = solve_index_next_move_routing(
-#     routing_model,
-#     reevaluation_step,
-#     drone_locations,
-#     drone_states,
-#     battery_level
-# )
-# println("Next move plan:")
-# println(next_plan)

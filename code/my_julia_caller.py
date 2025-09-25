@@ -1,4 +1,3 @@
-# 1) PyJulia / Julia imports
 from julia.api import Julia
 import os
 

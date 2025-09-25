@@ -14,12 +14,10 @@ module_path = os.path.abspath(".") + "/code"
 if module_path not in sys.path:
     sys.path.append(module_path)
     
-from dataset import preprocess_sim2real_dataset, load_scenario_npy, compute_and_save_burn_maps_sim2real_dataset, load_scenario, combine_all_benchmark_results
-from wrappers import RandomSensorPlacementStrategyLogged, SensorPlacementMaxCoverageGaussianTimeLogged, DroneRoutingUniformCoverageResetStaticLogged, DroneRoutingMaxCoverageResetStaticLogged, RandomDroneRoutingStrategyLogged, DroneRoutingTOPwarmLogged
-from new_clustering import get_wrapped_clustering_strategy
-# from Strategy import RandomDroneRoutingStrategy, return_no_custom_parameters, RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageGrowingStatic, DroneRoutingMaxCoverageGrowingStatic, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, DroneRoutingUniformCoverageResetStatic
-from benchmark import run_benchmark_scenario,run_benchmark_scenarii_sequential, get_burnmap_parameters,run_benchmark_scenarii_sequential_precompute, benchmark_on_sim2real_dataset_precompute, benchmark_on_sim2real_dataset_precompute_parallel
-from displays import create_scenario_video
+from dataset import combine_all_benchmark_results
+from wrappers import RandomSensorPlacementStrategyLogged, SensorPlacementMaxCoverageGaussianTimeLogged
+from benchmark import benchmark_on_sim2real_dataset_precompute_parallel
+from Strategy import RandomDroneRoutingStrategy
 
 # shared parameters
 simulation_parameters =  {
@@ -34,22 +32,14 @@ simulation_parameters =  {
     "transmission_range": 50000,
     }
 
-custom_initialization_parameters = {
-    "load_from_logfile": False, 
-    "reevaluation_step": 5, 
-    "optimization_horizon":10,
-    "regularization_param": 1e5
-    } #"regularization_param": 0.0001}
 
-
-dataset_folder_name = "/home/gridsan/rpuech/WFDroneBench_shared/WideDataset"
+dataset_folder_name = "./WideDataset"
 
 # Mapping used to resolve burnmap filename
 BM_PREFIX_TO_NAME = {
     "whp": "static_risk_whp.npy",
     "bm": "burn_map.npy",
     "bp": "static_risk_bp2024.npy",
-    "ncbm": "burn_map_noncumulative.npy"
 }
 
 # === Custom Parameter Functions ===
@@ -61,17 +51,6 @@ def custom_initialization_parameters_function(input_dir: str, *, bm_prefix: str)
         "burnmap_type": "dynamic" if bm_file.endswith("burn_map.npy") else "static",
         "reevaluation_step": 5,
         "optimization_horizon": 10,
-        "regularization_param": 1
-    }
-
-def custom_initialization_parameters_function_greedy(input_dir: str, *, bm_prefix: str):
-    layout_dir = os.path.abspath(os.path.join(input_dir, ".."))
-    bm_file = os.path.join(layout_dir, BM_PREFIX_TO_NAME[bm_prefix])
-    return {
-        "burnmap_filename": bm_file,
-        "burnmap_type": "dynamic" if bm_file.endswith("burn_map.npy") else "static",
-        "reevaluation_step": 2,
-        "optimization_horizon": 2,
         "regularization_param": 1
     }
 
@@ -115,7 +94,7 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     print("running experiments with prefix", ss_prefix, bm_prefix)
 
     init_func = partial(custom_initialization_parameters_function, bm_prefix=bm_prefix)
-    init_func_greedy = partial(custom_initialization_parameters_function_greedy, bm_prefix=bm_prefix)
+    
 
     
     #housekeeping : delete temporary burn maps
@@ -123,12 +102,11 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     #     for file in os.listdir("tmp_burnmaps"):
     #         os.remove("tmp_burnmaps/" + file)
 
-    #run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, "DroneRoutingTOPwarm", init_func, f"{ss_prefix}TOPwarm{bm_prefix}_parallel")
+    run_one_drone_strategy(sensor_strategy, "RandomDroneRoutingStrategy", custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
+    run_one_drone_strategy(sensor_strategy, "DroneRoutingTOP", init_func, f"{ss_prefix}TOP{bm_prefix}_parallel")
     run_one_drone_strategy(sensor_strategy, "DroneRoutingUniformCoverageResetStatic", init_func, f"{ss_prefix}U{bm_prefix}_parallel")
     run_one_drone_strategy(sensor_strategy, "DroneRoutingMaxCoverageResetStatic", init_func, f"{ss_prefix}M{bm_prefix}_parallel")
-    #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
-        
+     
     
 
 if __name__ == "__main__":
@@ -139,8 +117,8 @@ if __name__ == "__main__":
     parser.add_argument('--ss_prefix', type=str, required=True, 
                         help='Sensor strategy prefix (e.g., "S" for sensor)')
     parser.add_argument('--bm_prefix', type=str, required=True, 
-                        choices=['whp', 'bm', 'bp', 'ncbm'],
-                        help='Burn map prefix: "whp" for static_risk_whp.npy, "bm" for burn_map.npy, "ncbm" for noncumulative burn_map.npy, "bp" for static_risk_bp2024.npy')
+                        choices=['whp', 'bm', 'bp'],
+                        help='Burn map prefix: "whp" for static_risk_whp.npy, "bm" for burn_map.npy, "bp" for static_risk_bp2024.npy')
     
     args = parser.parse_args()
     if args.ss_prefix == "R":
@@ -151,13 +129,3 @@ if __name__ == "__main__":
         sensor_strategy = SensorPlacementMaxCoverageGaussianTimeLogged
 
     run_all_drone_strategies(sensor_strategy, args.ss_prefix, args.bm_prefix)
-    # print size of the following layouts: 265, 319, 320, 321, 323, 337 
-    # print(load_scenario("WideDataset/0111_03612/Satellite_Images_Mask/0111_00013", extension = ".jpg").shape)
-    # print(load_scenario("WideDataset/0265_02487/Satellite_Images_Mask/0265_01500", extension = ".jpg").shape)
-    # print(load_scenario("WideDataset/0319_04796/Satellite_Images_Mask/0319_04119", extension = ".jpg").shape)
-    # print(load_scenario("WideDataset/0320_02378/Satellite_Images_Mask/0320_00682", extension = ".jpg").shape)
-    # print(load_scenario("WideDataset/0321_03136/Satellite_Images_Mask/0321_01452", extension = ".jpg").shape)
-    # print(load_scenario("WideDataset/0323_01406/Satellite_Images_Mask/0323_00195", extension = ".jpg").shape)
-    # print(load_scenario("WideDataset/0337_02831/Satellite_Images_Mask/0337_01635", extension = ".jpg").shape)
-
-

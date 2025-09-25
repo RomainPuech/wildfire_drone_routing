@@ -1,5 +1,3 @@
-# By Romain Puech
-
 import os
 import tqdm
 import shutil
@@ -417,22 +415,7 @@ def load_burn_map(filename, extension = ".npy"):
 
 ####### Prepocess the sim2real dataset #######
 
-# def compute_and_save_burn_maps_sim2real_dataset(dataset_folder_name, extension = ".npy", n_max_layouts = None):
-#     """
-#     Compute the burn map for all scenarios in the sim2real dataset and save them as NPY files.
-#     Args:
-#         dataset_folder_name (str): Path to the dataset folder
-#     """
-#     if not dataset_folder_name.endswith("/"):
-#         dataset_folder_name += "/"
-#     n_layout = 0
-#     for layout_folder in os.listdir(dataset_folder_name):
-#         if n_max_layouts is not None and n_layout >= n_max_layouts:
-#             break
-#         if not os.path.exists(dataset_folder_name + layout_folder + "/scenarii/"):continue
-#         burn_map = compute_burn_map(dataset_folder_name + layout_folder + "/scenarii/", extension)
-#         save_burn_map(burn_map, dataset_folder_name + layout_folder + "/burn_map.npy")
-#         n_layout += 1
+
 def preprocess_sim2real_dataset(dataset_folder_name, n_max_scenarii_per_layout = None, n_max_layouts = None, mismatch_threshold = None, config_file = None):
     """
     Preprocess the sim2real dataset by converting JPG scenarios to NPY files and computing burn maps.
@@ -583,10 +566,3 @@ def clean_logs_folder(root_folder):
             #print(f"Removing: {os.path.join(logs_path, file)}")
             os.remove(os.path.join(logs_path, file))
         
-
-if __name__ == "__main__":
-    pass
-    #clean_logs_folder("WideDataset/")
-    # combine_all_benchmark_results("WideDataset/", suffix = "SensorPlacementOptimization_DroneRoutingMaxCoverageResetStaticGreedy")
-    #0058_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic
-    #WideDataset/0058_03866/Satellite_Images_Mask/0058_03866_benchmark_resultsRandomSensorPlacementStrategy_DroneRoutingMaxCoverageResetStatic.csv

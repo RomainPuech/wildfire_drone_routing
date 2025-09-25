@@ -1,4 +1,5 @@
-# println("installing packages")
+# uncomment to install the Julia packages the first time you run the code
+
 # import Pkg
 # Pkg.add("IJulia")
 # Pkg.add("CSV")
@@ -13,6 +14,8 @@
 # Pkg.add("NPZ")
 # Pkg.add("NearestNeighbors")
 # Pkg.add("Statistics")
+
+
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ, Statistics
 
 include("helper_functions.jl")

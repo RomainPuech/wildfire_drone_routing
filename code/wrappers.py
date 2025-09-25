@@ -307,7 +307,7 @@ def make_loggable_drone_strategy(strategy_cls):
 
 
 from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy, DroneRoutingTOP, TestStrategy, DroneRoutingTOPwarm, DroneRoutingTOPGrowing
-from new_clustering import get_wrapped_clustering_strategy
+from clustering import get_wrapped_clustering_strategy
 
 # Register statically at module load
 
@@ -330,11 +330,9 @@ TestStrategyLogged = make_loggable_drone_strategy(ClusteredTestStrategy)
 DroneRoutingTOPwarmLogged = make_loggable_drone_strategy(ClusteredTOPwarm)
 DroneRoutingTOPGrowingLogged = make_loggable_drone_strategy(ClusteredTOPGrowing)
 
+# register here the strategies you'd like to use in parallell benchmark 
 globals()["DroneRoutingUniformCoverageResetStatic"] = DroneRoutingUniformCoverageResetStaticLogged
 globals()["DroneRoutingMaxCoverageResetStatic"] = DroneRoutingMaxCoverageResetStaticLogged
-globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategyLogged
+# globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategyLogged
 globals()["DroneRoutingTOP"] = DroneRoutingTOPLogged
-globals()["DroneRoutingTOPwarm"] = DroneRoutingTOPwarmLogged
-globals()["DroneRoutingTOPGrowing"] = DroneRoutingTOPGrowingLogged
-globals()["TestStrategy"] = TestStrategyLogged
 globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategy # we do not log the random drone routing strategy

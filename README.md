@@ -212,7 +212,7 @@ The log files (JSON format) contain:
 For large scenarios, use clustering wrappers to decompose the problem:
 
 ```python
-from new_clustering import get_wrapped_clustering_strategy
+from clustering import get_wrapped_clustering_strategy
 
 # Wrap your drone routing strategy with clustering
 ClusteredDroneStrategy = get_wrapped_clustering_strategy(MyDroneStrategy)

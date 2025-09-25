@@ -1,8 +1,4 @@
-# Romain Puech, 2024
-# Drone class
-
 import numpy as np
-#TODO out of battery not implemented yet
 class Drone():
     """
     A class representing a drone in the wildfire detection system.
@@ -97,9 +93,6 @@ class Drone():
         self.y = max(0,min(self.y,self.M-1))
         self.distance_battery -= (abs(dx) + abs(dy)) # manhathan distance for the moment
         self.time_battery -= 1
-        # if not self._check_battery():
-        #     print(f"Drone is dead at ({self.x}, {self.y})")
-        #     return self.x, self.y, self.distance_battery, self.time_battery, "dead" #TODO FIGURE THIS OUT
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
     def fly(self, x,y):
@@ -118,9 +111,6 @@ class Drone():
         self.y = y
         self.distance_battery -= (abs(self.x-x) + abs(self.y-y))
         self.time_battery -= 1
-        # if not self._check_battery():
-        #     print(f"Drone is dead at ({self.x}, {self.y})")
-        #     return self.x, self.y, self.distance_battery, self.time_battery, "dead" #TODO FIGURE THIS OUT
         return self.x, self.y, self.distance_battery, self.time_battery, self.state
     
     def recharge(self,x,y):
@@ -167,16 +157,14 @@ class Drone():
         else:
             raise ValueError(f"Invalid action: {action}")
 
-    def _check_battery(self):
-        """
-        Checks if the drone's battery levels are sufficient.
+    # def _check_battery(self):
+    #     """
+    #     Checks if the drone's battery levels are sufficient.
         
-        Returns:
-            bool: True if battery levels are sufficient, False otherwise
-        """
-        #TODO FIGURE THIS OUT
-        return True
-        if self.time_battery <= 0:
-            self.alive = False
-            return False
-        return True
+    #     Returns:
+    #         bool: True if battery levels are sufficient, False otherwise
+    #     """
+    #     if self.time_battery <= 0:
+    #         self.alive = False
+    #         return False
+    #     return True

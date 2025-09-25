@@ -1,5 +1,3 @@
-# Romain Puech, 2024
-# Displays
 import numpy as np
 import os
 import cv2
@@ -150,7 +148,6 @@ def save_grid_image(grid, smoke_grid, drones, display, timestep, output_dir="ima
     plt.savefig(image_path, bbox_inches="tight")
     plt.close()
 
-
 def save_ignition_map_image(ignition_map, timestep, output_dir="images", is_burn_map=False):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -190,8 +187,6 @@ def save_ignition_map_image(ignition_map, timestep, output_dir="images", is_burn
     plt.savefig(image_path, bbox_inches="tight")
     plt.close()
 
-
-
 def create_video_from_images(image_dir="images", output_filename="simulation.mp4", frames_per_image=1):
     """
     Combine all images in the directory into an MP4 video.
@@ -228,8 +223,6 @@ def create_video_from_images(image_dir="images", output_filename="simulation.mp4
 
     video_writer.release()
     print(f"Video saved at: {video_path}")
-
-
 
 def create_scenario_video(scenario_or_filename, drone_locations_history = None, is_burn_map = False, out_filename = "simulation", starting_time = 0, ground_sensor_locations = [], charging_stations_locations = [], substeps_per_timestep = 1, coverage_cell_width = 3, maxframes = np.inf, burn_map_background = None):
     """
@@ -355,7 +348,7 @@ def create_video_scenario_burnmap(
     cmap=None,
     vmin=None,
     vmax=None
-):
+    ):
     """
     Create a video visualization of a burn map with drones, sensors, and charging stations overlaid.
 
