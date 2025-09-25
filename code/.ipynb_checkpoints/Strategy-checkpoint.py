@@ -3230,8 +3230,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         self.current_burnmap = self.initial_burnmap.copy()
         if self.burnmap_type == "static":
             # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
-            self.current_burnmap = np.tile(self.current_burnmap, (200, 1, 1))
-            self.initial_burnmap = np.tile(self.initial_burnmap, (200, 1, 1))
+            self.current_burnmap = np.tile(self.initial_burnmap, (200, 1, 1))
         else:
             print(f"careful: burnmap_type is not static, it is {self.burnmap_type}")
         
@@ -3406,9 +3405,6 @@ class DroneRoutingTOP(DroneRoutingStrategy):
 
         return self.current_solution[idx]
 
-class DroneRoutingTOPwarm(DroneRoutingTOP):
-    strategy_name = "DroneRoutingTOPwarm"
-    
 class DroneRoutingTOPGrowing(DroneRoutingTOP):
     strategy_name = "DroneRoutingTOPGrowing"
     burnmap_handeling_type = "growing"

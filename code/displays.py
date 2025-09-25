@@ -395,7 +395,7 @@ def create_video_scenario_burnmap(
     T = min(T, len(drone_locations_history))
 
     for t in range(min(T, maxframes)):
-        fig, ax = plt.subplots(figsize=(M/10, N/10), dpi=100)
+        fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
         im = ax.imshow(burn_map[t].T, cmap=cmap, norm=LogNorm(vmin=vmin, vmax=vmax), alpha=1.0, origin='lower')
 
         # Drones
@@ -417,8 +417,13 @@ def create_video_scenario_burnmap(
         ax.set_ylabel('Y coordinate')
         plt.colorbar(im, ax=ax, label="Burn Probability")
         ax.axis("on")
+        
+        # Set consistent limits to ensure same image size
+        ax.set_xlim(-0.5, M-0.5)
+        ax.set_ylim(-0.5, N-0.5)
+        
         image_path = os.path.join(output_dir, f"grid_timestep_{t:03d}.png")
-        plt.savefig(image_path, bbox_inches=None)
+        plt.savefig(image_path, bbox_inches='tight', dpi=100)
         plt.close()
 
     # Create video from saved images
