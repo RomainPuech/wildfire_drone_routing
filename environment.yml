@@ -65,4 +65,4 @@ dependencies:
       - tomlkit==0.13.3
       - tqdm==4.67.1
       - tzdata==2025.2
-prefix: /home/gridsan/atrisovic/.conda/envs/juliaenv
+prefix: .conda/envs/juliaenv
