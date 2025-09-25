@@ -9,9 +9,8 @@
 # module load mpi/openmpi-5.0.5
 # module load gurobi
 
-LLsub runparaRbm.sh
-LLsub runparaRbp.sh
-LLsub runparaRwhp.sh
-LLsub runparaKbm.sh
-LLsub runparaKbp.sh
-LLsub runparaKwhp.sh
+sbatch runparaRbm.sh # All drone routing strategies with Random sensor placement on the "ground-truth" burn map
+sbatch runparaRbp.sh # All drone routing strategies with Random sensor placement on the BP risk map
+
+sbatch runparaKbm.sh # All drone routing strategies with Gaussian Coverage sensor placement on the "ground-truth" burn map
+sbatch runparaKbp.sh # All drone routing strategies with Gaussian Coverage sensor placement on the BP risk map

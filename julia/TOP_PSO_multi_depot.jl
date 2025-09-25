@@ -1,9 +1,8 @@
+# File that implements a PSO algorithm inspired by Dang et. al. (2014) to solve our TOP-based problem
+
 using Random
 using DataStructures
 using Plots
-
-# Include the existing TOP.jl for sample generation and plotting
-# include("TOP.jl")
 
 mutable struct Particle
     position::Vector{Int}          # Current permutation (giant tour)
@@ -33,145 +32,6 @@ mutable struct PSOiA_TOP_multiple_depots
     accessible_customers::Vector{Int}  # Indices of accessible customers
     depot_coord::Vector{Tuple{Int,Int}}    # Depot coordinates
     closest_depot_distance::Vector{Float64}  # Pre-computed min return distance to closest depot (Chebyshev)
-end
-
-
-"""
-Fast split procedure for multiple depots
-"""
-function fast_split_with_routes_multiple_depots_XX(permutation::Vector{Int}, pso_multiple_depots::PSOiA_TOP_multiple_depots)
-    n = length(permutation)
-    m = pso_multiple_depots.n_drones
-    L = pso_multiple_depots.max_battery_time
-    
-    if n == 0
-        return 0.0, Vector{Vector{Int}}()
-    end
-
-    start_time_phase_1 = time()
-    
-    # Calculate saturated tours P[i] and first successor succ[i]
-    P = zeros(n)  # Profit of saturated tour starting at position i
-    succ = zeros(Int, n)  # First successor of saturated tour starting at position i
-    tour_lengths = zeros(Int, n)  # Length of each saturated tour
-    
-    for i in 1:n
-        current_cost = 0.0
-        current_profit = 0.0
-        j = i
-        
-        # Build maximal feasible tour starting from position i
-        while j <= n
-            customer_idx = permutation[j]
-            
-            # Add travel cost to this customer
-            if j == i
-                # Cost from depot to first customer
-                travel_cost = get(pso_multiple_depots.costs, (0, customer_idx), L*4)
-            else
-                prev_customer = permutation[j-1]
-                travel_cost = get(pso_multiple_depots.costs, (prev_customer, customer_idx), L*4)
-            end
-            
-            # Feasibility: ensure we can still return to the closest depot using precomputed distance
-            return_distance = pso_multiple_depots.closest_depot_distance[customer_idx]
-            if current_cost + travel_cost + return_distance > L
-                break
-            end
-            
-            current_cost += travel_cost
-            current_profit += pso_multiple_depots.profits[customer_idx]
-            j += 1
-        end
-        
-        P[i] = current_profit
-        tour_lengths[i] = j - i
-        
-        # Apply Equation 3: succ[i] = i + l_i^max + 1 if i + l_i^max + 1 ≤ n, else 0
-        # Here, l_i^max = j - i, so i + l_i^max + 1 = i + (j - i) + 1 = j + 1
-        if j <= n
-            succ[i] = j
-        else
-            succ[i] = 0  # According to Equation 3
-        end
-    end
-    time_phase_1 = time() - start_time_phase_1
-    # println("time to run phase 1: $time_phase_1")
-
-    start_time_phase_2 = time()
-    # Dynamic programming table Γ[i,j] = max profit using j drones from position i onwards
-    # Using (n+1) × (m+1) to handle boundary conditions as per Equation 4
-    Γ = zeros(n + 1, m + 1)
-    
-    # Fill DP table in reverse order (as shown in Figure 1c)
-    for i in n:-1:1
-        for j in 0:m
-            if j == 0
-                # No drones left, no profit possible
-                Γ[i, j + 1] = 0.0
-            else
-                # Option 1: Don't use tour starting at i
-                Γ[i, j + 1] = Γ[i + 1, j + 1]
-                
-                # Option 2: Use saturated tour starting at i
-                # According to Equation 4: max{Γ(succ[i], j-1) + P[i], Γ(i+1, j)}
-                if succ[i] == 0
-                    # When succ[i] = 0, Γ(succ[i], j-1) = 0 according to Equation 4
-                    profit_with_tour = P[i] + 0.0
-                else
-                    # Normal case: access Γ[succ[i], j] which corresponds to Γ(succ[i], j-1) in paper notation
-                    profit_with_tour = P[i] + Γ[succ[i], j]
-                end
-                
-                Γ[i, j + 1] = max(Γ[i, j + 1], profit_with_tour)
-            end
-        end
-    end
-    time_phase_2 = time() - start_time_phase_2
-    # println("time to run phase 2: $time_phase_2")
-
-    start_time_phase_3 = time()
-    # Backtrack to find the optimal routes (as described in the paper)
-    routes = Vector{Vector{Int}}()
-    i = 1
-    j = m
-    
-    while i <= n && j > 0 && length(routes) < m
-        # Check which option was chosen in the DP
-        option1 = Γ[i + 1, j + 1]  # Don't use tour starting at i
-        
-        option2 = 0.0
-        if succ[i] == 0
-            option2 = P[i] + 0.0
-        else
-            option2 = P[i] + Γ[succ[i], j]
-        end
-        
-        if abs(option2 - Γ[i, j + 1]) < 1e-10  # Use saturated tour starting at i
-            # Extract the saturated tour starting at position i
-            tour_end = i + tour_lengths[i] - 1
-            route = permutation[i:tour_end]
-            push!(routes, route)
-            
-            i = succ[i] > 0 ? succ[i] : n + 1
-            j -= 1
-        else  # Skip this position
-            i += 1
-        end
-    end
-    time_phase_3 = time() - start_time_phase_3
-    # println("time to run phase 3: $time_phase_3")
-    total_time = time_phase_1 + time_phase_2 + time_phase_3
-    if total_time > 0.01
-        println("total time: $(time_phase_1 + time_phase_2 + time_phase_3)")
-        # relative time
-        println("relative time: $(time_phase_1 / (time_phase_1 + time_phase_2 + time_phase_3))")
-        println("relative time: $(time_phase_2 / (time_phase_1 + time_phase_2 + time_phase_3))")
-        println("relative time: $(time_phase_3 / (time_phase_1 + time_phase_2 + time_phase_3))")
-        println("n: $n")
-    end
-
-    return Γ[1, m + 1], routes
 end
 
 
@@ -306,8 +166,6 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
 
     return Γ[1, m + 1], routes
 end
-
-
 
 # Update the original fast_split to use the new function
 function fast_split_multiple_depots(permutation::Vector{Int}, pso_multiple_depots::PSOiA_TOP_multiple_depots)
@@ -975,7 +833,7 @@ function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     
     while improved
         improved = false
-        neighborhoods = [1, 2]#, 3]  # shift, swap, destruction/repair
+        neighborhoods = [1, 2]#, 3]  # shift, swap, destruction/repair. We don't use the destruction/repair operator  as it did not improve the performance according to our experiments
         shuffle!(neighborhoods)
         
         for neighborhood in neighborhoods
@@ -1009,7 +867,6 @@ function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
     end
     return total_time_shift, total_time_swap, total_time_destruction_repair
 end
-
 
 """
 Move element from position i to position j in one pass with no extra copy
@@ -1282,10 +1139,6 @@ function calculate_travel_cost(permutation::Vector{Int}, pso::PSOiA_TOP_multiple
     return total_cost
 end
 
-
-
-
-
 """
 Main PSO algorithm adapted for multiple depots
 """
@@ -1437,14 +1290,6 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
     
     return pso.global_best, pso.global_best_profit, pso
 end
-
-
-
-
-
-
-
-
 
 """
 Convert giant tour to actual routes using the optimal split procedure from the paper

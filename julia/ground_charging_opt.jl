@@ -36,7 +36,8 @@ function load_parameters(risk_pertime_file)
     return (risk_pertime=risk_pertime, T=T, N=N, M=M, I=I, I_prime=I_prime, I_second=I_second)
 end
 
-function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
+# Max Coverage based sensor placement strategy
+function SENSOR_MAXCOV_STRATEGY(risk_pertime_file, N_grounds, N_charging)
 
     time_start = time_ns() / 1e9 
 
@@ -104,7 +105,7 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
 end
 
 
-
+# Gaussian Coverage sensor placement strategy
 function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y) # next variant: we add how many drones are in the area
 
     # kernel is a map (dx,dy) -> value that gives you the coverage if you are dx,dy away from the charging station, |dx| <= kernel_size_x, |dy| <= kernel_size_y

@@ -17,7 +17,6 @@ if module_path not in sys.path:
 from dataset import combine_all_benchmark_results
 from wrappers import RandomSensorPlacementStrategyLogged, SensorPlacementMaxCoverageGaussianTimeLogged
 from benchmark import benchmark_on_sim2real_dataset_precompute_parallel
-from Strategy import RandomDroneRoutingStrategy
 
 # shared parameters
 simulation_parameters =  {

@@ -30,7 +30,7 @@ include("TOP_PSO_multi_depot.jl")
 
 
 
-function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
+function compute_variables(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
 
     # ---------- parameters ----------
     
@@ -83,61 +83,8 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
     c[(Begin_CS,End_CS)] = L*4
 
     return GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints
-    # what comes after, we don't need it anymore since we don't use the model
-
-    model = Model(Gurobi.Optimizer)
-    set_silent(model)
-
-    # ---------- variables ----------
-
-    x = @variable(model, [i in GridpointsDrones, j in GridpointsDrones, s = 1:n_drones], Bin)
-    y = @variable(model, [i in TransitGridpoints, s = 1:n_drones], Bin)
-
-    # ---------- constraints ----------
-
-    #Each gridpoint is visited at most once by one drone
-    @constraint(model, [i in TransitGridpoints], sum(y[i,s] for s in 1:n_drones) <= 1) # (2)
-
-    #Each vehicle starts its path at charging station and ends at charging station, modeled as different charging stations
-    @constraint(model, [s=1:n_drones], sum(x[Begin_CS,i,s] for i in GridpointsDrones_end) == 1) # (3)
-    @constraint(model, [s=1:n_drones], sum(x[i,End_CS,s] for i in GridpointsDrones_begin) == 1) # (3)
-
-    # No incoming arc to Begin_CS
-    @constraint(model, [j in GridpointsDrones, s in 1:n_drones], x[j, Begin_CS, s] == 0) # (?)
-
-    # No outgoing arc from End_CS
-    @constraint(model, [j in GridpointsDrones, s in 1:n_drones], x[End_CS, j, s] == 0) # (?)
-
-
-    # #Ensure connectivity of each tour            
-    @constraint(model, [k in TransitGridpoints, s=1:n_drones], 
-                sum(x[k,i,s] for i in setdiff(GridpointsDrones_end,[k])) == y[k,s]) # (4)
-    @constraint(model, [k in TransitGridpoints, s=1:n_drones], 
-                sum(x[j,k,s] for j in setdiff(GridpointsDrones_begin,[k])) == y[k,s]) # (4)
-
-    #Impose travel length restriction
-    for s in 1:n_drones
-        @constraint(model,
-            sum(
-                c[(i, j)] * x[i, j, s]
-                for i in GridpointsDrones_begin
-                for j in GridpointsDrones_end
-                if i != j && haskey(c, (i, j))
-            ) <= L # (5)
-        )
-    end
-
-    # symmetry breaking constraints: we order the drones by decreasing profit
-    @constraint(model, [s in 1:n_drones-1], sum(risk_pertime[1,GridpointsDronesDetecting[k]...]*(y[k,s+1]) for k in TransitGridpoints) <= sum(risk_pertime[1,GridpointsDronesDetecting[k]...]*(y[k,s]) for k in TransitGridpoints)) # (11)
-    
-    # @objective(model, Max, 0)
-    @objective(model, Max, sum(risk_pertime[1,GridpointsDronesDetecting[k]...]*(y[k,s]) for k in TransitGridpoints for s in 1:n_drones)) # (1)
-
-    return GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints
 end
 
-# model, x, GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints, y = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
-# optimize!(model)
 
 function solve_TOP_init_routing(model)
     optimize!(model)
@@ -175,176 +122,6 @@ function solve_TOP_next_move_routing(model, drone_locations, t)
     # update the model with the new initial drone locations
     optimize!(model)
     return solution
-end
-
-
-# --------------- FIND SUBTOURS ---------------
-function subtours(n_drones, GridpointsDrones, Begin_CS, End_CS, x)
-    subtours_per_drone = OrderedDict{Int, Vector{Vector{Int}}}()
-
-    for s in 1:n_drones
-        used_nodes = Set{Int}()
-        edges_s = Tuple{Int, Int}[]
-        for i in GridpointsDrones, j in GridpointsDrones
-            if value(x[i, j, s]) > 0.8
-                push!(edges_s, (i, j))
-                push!(used_nodes, i)
-                push!(used_nodes, j)
-            end
-        end
-
-        node_map = Dict(node => idx for (idx, node) in enumerate(sort(collect(used_nodes))))
-        reverse_map = Dict(v => k for (k, v) in node_map)
-
-        G = DiGraph(length(node_map))
-        for (i, j) in edges_s
-            add_edge!(G, node_map[i], node_map[j])
-        end
-
-        components = strongly_connected_components(G)
-        subtours = Vector{Vector{Int}}()
-
-        for comp in components
-            node_ids = [reverse_map[v] for v in comp]
-            if !(Begin_CS in node_ids || End_CS in node_ids) && length(node_ids) > 1
-                push!(subtours, node_ids)
-            end
-        end
-
-        subtours_per_drone[s] = subtours
-    end
-
-    return subtours_per_drone
-end
-
-# subtours_per_drone = subtours(n_drones, GridpointsDrones, Begin_CS, End_CS,x)
-# sorted_subtours = OrderedDict(k => v for (k, v) in sort(collect(subtours_per_drone)))
-
-
-
-
-
-# --------------- INITIAL GREEDY SOLUTION ---------------
-function greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
-
-    #track all visited nodes so no two drones visit the same one
-    visited = Set{Int}()
-
-    #initialize route storage for each drone
-    routes = Vector{Vector{Int}}(undef, n_drones)
-
-    #loop over each drone 
-    for s in 1:n_drones
-        current_node = Begin_CS         #start at charging station
-        battery = max_battery_time      #initialize battery
-        route = [current_node]          #start route with depot
-
-        while true
-            best_node = nothing         #best candidate for next node
-            best_reward = -Inf          #max reward so far
-            best_cost = Inf             #cost to reach best candidate
-
-            #try all available nodes to find the best next one 
-            for (j_idx, j_coords) in enumerate(coords)
-                #skip if already visited, same as current, or is the end depot
-                if j_idx in visited || j_idx == current_node || j_idx == End_CS
-                    continue
-                end
-
-                #check if rachable and if the drone can still return afterward
-                if haskey(c, (current_node, j_idx)) && c[(current_node, j_idx)] <= battery
-                    reward = risk_pertime[1, j_coords...]
-                    cost_to_end = haskey(c, (j_idx, End_CS)) ? c[(j_idx, End_CS)] : Inf
-                    total_cost = c[(current_node, j_idx)] + cost_to_end
-
-                    # Select node if reward is better and it's feasible to return
-                    if reward > best_reward && total_cost <= battery
-                        best_reward = reward
-                        best_node = j_idx
-                        best_cost = c[(current_node, j_idx)]
-                    end
-                end
-            end
-
-            # If no feasible node to visit, break the loop
-            if best_node === nothing
-                break
-            end
-
-            # Visit selected node
-            push!(route, best_node)
-            union!(visited, [best_node])    #mark as visited
-            battery -= best_cost            #reduce battery
-            current_node = best_node        #move to new node 
-        end
-
-        # Always return to End_CS
-        if haskey(c, (current_node, End_CS)) && c[(current_node, End_CS)] <= battery
-            push!(route, End_CS)
-        else
-            println("Drone $s could not return to End_CS")
-        end
-
-        routes[s] = route
-    end
-
-    return routes
-end
-
-function compute_objective_greedy(routes, coords, risk_pertime, Begin_CS, End_CS)
-    total_reward = 0.0
-    for route in routes
-        for node in route
-            if node != Begin_CS && node != End_CS  # exclude depots
-                coord = coords[node]
-                total_reward += risk_pertime[1, coord...]
-            end
-        end
-    end
-    return total_reward
-end
-
-
-
-# --------------- CUTTING PLANE ALGORITHM ---------------
-
-function extract_tours_from_solution(x, drones, GridpointsDrones, Begin_CS, End_CS)
-    tours = Dict{Int, Vector{Int}}()
-
-    for s in drones
-        # check if the drone has a tour, i.e. a path that starts at Begin_CS and ends at End_CS
-        if sum(x[Begin_CS, j, s] for j in GridpointsDrones) == 0 || sum(x[j, End_CS, s] for j in GridpointsDrones) == 0
-            continue
-        end
-
-        route = Int[]
-        current_node = Begin_CS
-
-        while true
-            push!(route, current_node)
-            next_nodes = [j for j in GridpointsDrones if value(x[current_node, j, s]) > 0.5]
-            
-            if isempty(next_nodes)
-                break
-            end
-            if length(next_nodes) > 1
-                println("PROBLEM !! Drone $s has multiple next nodes")
-                break
-            end
-
-            current_node = next_nodes[1]
-
-            # Stop if we reached the End_CS
-            if current_node == End_CS
-                push!(route, current_node)
-                break
-            end
-        end
-
-        tours[s] = route
-    end
-
-    return tours
 end
 
 
@@ -569,68 +346,6 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
 end
 
 
-"""
-Warm start the MILP model with a given solution
-"""
-function warm_start_with_solution!(model, x, y, routes, n_drones, GridpointsDrones, TransitGridpoints)
-    try
-        # Reset all variables to 0 first (using JuMP DenseAxisArray syntax)
-        for i in GridpointsDrones, j in GridpointsDrones, s in 1:n_drones
-            try
-                set_start_value(x[i, j, s], 0.0)
-            catch
-                # Variable may not exist, continue
-            end
-        end
-        
-        for k in TransitGridpoints, s in 1:n_drones
-            try
-                set_start_value(y[k, s], 0.0)
-            catch
-                # Variable may not exist, continue
-            end
-        end
-        
-        # Set variables based on the PSO solution routes
-        for s in 1:n_drones
-            if s <= length(routes) && length(routes[s]) >= 2
-                route = routes[s]
-                
-                # Set x variables for transitions in this route
-                for idx in 1:(length(route)-1)
-                    i = route[idx]
-                    j = route[idx+1]
-                    
-                    try
-                        set_start_value(x[i, j, s], 1.0)
-                        println("  Setting x[$i,$j,$s] = 1.0")
-                    catch e
-                        println("  Could not set x[$i,$j,$s]: $e")
-                    end
-                end
-                
-                # Set y variables for visited transit points
-                for node in route
-                    # Only set y for transit gridpoints (not depots)
-                    if node in TransitGridpoints
-                        try
-                            set_start_value(y[node, s], 1.0)
-                            println("  Setting y[$node,$s] = 1.0")
-                        catch e
-                            println("  Could not set y[$node,$s]: $e")
-                        end
-                    end
-                end
-            end
-        end
-        
-        println("Warm start completed successfully")
-        
-    catch e
-        println("Warning: Could not set warm start values: $e")
-        println("Continuing without warm start...")
-    end
-end
 
 function print_routes(routes, coords, n_drones, filename_suffix="")
     println("\n=== Routes $filename_suffix ===")
@@ -1136,17 +851,15 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     return final_route
 end
 
-function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
+
+function solve_TOP_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
     # Create plural version for function calls that expect plural
     ChargingStations = ChargingStation
     
-    # println("Starting CPA...")
-    # Initial upper bound (UB) and initial PSO lower bound (LB)
-    GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
-    # UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
+    GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints = compute_variables(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
-    # Create cost matrix c for greedy comparison
+
     n_nodes = length(coords)
     c = Dict{Tuple{Int,Int}, Float64}()
     
@@ -1165,31 +878,11 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     # Prevent direct connection between Begin_CS and End_CS
     c[(Begin_CS, End_CS)] = L*4
     
-    # Use PSO instead of greedy for initialization
     # ALWAYS CALL THE MULTI-DEPOT VERSION
     routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions)
-    # if length(ChargingStation) == 1
-    #     routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
-    # else
-    #     routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
-    # end
-
     
-    # Also compute greedy for comparison
-    #greedy_routes = greedy_TOP_multiple_drones(risk_pertime, coords, Begin_CS, End_CS, max_battery_time, n_drones, c)
-    #greedy_LB = compute_objective_greedy(greedy_routes, coords, risk_pertime, Begin_CS, End_CS)
-
-    # println("Initial LB from PSO = $best_LB, LB from greedy = $greedy_LB, UB = $UB")
-    # println("PSO improvement over greedy: $(round(((best_LB - greedy_LB) / greedy_LB) * 100, digits=2))%")
-    
-
-    # print GridpointsDronesDetecting
-    # println("GridpointsDronesDetecting: $(GridpointsDronesDetecting)")
-    # println("length(GridpointsDronesDetecting): $(length(GridpointsDronesDetecting))")
-
 
     # Print the initial PSO solution routes
-    # print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
     tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations,n_drones)
     # fallback mechanism: if one of the tours is empty, we use a greedy solution
     for s in 1:n_drones
@@ -1205,29 +898,9 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
         println("Plotting initial PSO solution...")
         plot_routes(routes, coords, Begin_CS, End_CS, GridpointsDronesDetecting, n_drones, "pso_initial", verbose)
     end
-    # also log these routes to a file, append if the file already exists   
-    # open("pso_initial_routes.txt", "a") do f
-    #     for s in 1:n_drones
-    #         write(f, "Drone $s: ")
-    #         for (i, route_idx) in enumerate(routes[s])
-    #             coord = get(GridpointsDronesDetecting, route_idx, (-1, -1))
-    #             write(f, "$coord")
-    #             if i < length(routes[s])
-    #                 write(f, " -> ")
-    #             end
-    #         end
-    #         write(f, "\n")
-    #     end
-    # end
-
-    # RETURN THE PSO SOLUTION DIRECTLY (bypassing CPA algorithm)
-    # println("\n=== RETURNING PSO SOLUTION DIRECTLY ===")
-    # println("Final PSO objective value: $best_LB")
-    # println("Skipping CPA algorithm")
+    
     return routes, tours_coordinates
 
-    # CDELETED: The rest of the CPA algorithm
-    # ...
 end
 
 
@@ -1275,7 +948,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
    # 1) Solve the Team-Orienteering Problem via CPA (returns routes)
    # ------------------------------------------------------------------
    time_before_cpa = time()
-   routes, tours_coordinates = CPA_multiple_depots(risk_pertime, n_drones,
+   routes, tours_coordinates = solve_TOP_multiple_depots(risk_pertime, n_drones,
                           ChargingStations,
                           GroundStations,
                           max_battery_time,
@@ -1330,15 +1003,6 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     return movement_plan
 
 end
-
-
-
-
-
-
-
-
-
 
 
 # Overloaded method to handle Vector{Any} for ground stations (empty case from PyCall)

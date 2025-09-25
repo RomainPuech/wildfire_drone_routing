@@ -1,28 +1,16 @@
 # WILDFIRE-DRONE-BENCH
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/b5653f58-ff62-40d8-a422-4af13cd0ccd0" width="40%">
+  <img src="WFDroneBench_logo.png" width="40%">
 </div>
 
-A comprehensive benchmarking library for evaluating sensor placement and drone routing strategies in wildfire detection scenarios. This library provides tools for testing, visualizing, and comparing different strategies using the "sim2real" dataset.
-
-## 🚀 Features
-
-- **Strategy Development**: Implement and test custom sensor placement and drone routing strategies
-- **Dataset Integration**: Seamless integration with the Sim2Real-Fire dataset
-- **Benchmarking**: Comprehensive evaluation of strategies with multiple metrics
-- **Visualization**: Generate videos and plots of drone movements, fire spread, and sensor placements
-- **Performance Optimization**: Support for both JPEG and NPY formats for memory/speed trade-offs
+A comprehensive benchmarking library for evaluating sensor placement and drone routing strategies in wildfire detection scenarios. This library provides tools for testing, visualizing, and comparing different strategies using our associated dataset.
 
 ## 🛠️ Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/RomainPuech/wildfire_drone_routing.git
-cd wildfire_drone_routing
-```
+1. Unzip the supplementary material code zip fie.
 
-2. We use Python 3.10. Install Python dependencies with:
+2. Install Python (we use Python 3.10) dependencies with:
 ```bash
 conda env create -f environment.yml
 conda activate juliaenv
@@ -37,11 +25,31 @@ Pkg.instantiate()
 
 This tells Julia to use the environment located at ./julia_env, which contains `Project.toml` and `Manifest.toml`, and install all exact versions of the packages.
 
-1. Download the modified Sim2Real dataset:
-```bash
-# Download from Hugging Face
-https://huggingface.co/datasets/MasterYoda293/DroneBench/tree/main
+4. Download/unzip our dataset from the supplementary material.
+
+## ✅ **Reproducing the paper's results**:
+
+### 1. Preprocessing Dataset
+```python
+from dataset import preprocess_sim2real_dataset
+
+# Convert JPEG scenarios to NPY format
+preprocess_sim2real_dataset(
+    "./path_to_dataset",
+    n_max_scenarii_per_layout=100,  # Optional: limit scenarios per layout
+    n_max_layouts=10  # Optional: limit number of layouts
+)
 ```
+This makes the code execution faster, but requires Gigabytes of storage for each layout.
+
+### 2. Running the experiments
+
+All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
+
+`all_experiments_parallell` takes as input two parameters:
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
+
 
 ## 📚 Dataset Structure
 
@@ -84,6 +92,14 @@ layout_folder/
 - Multiple drones can charge simultaneously
 - Charging takes 1 timestep
 
+## 🚀 Features
+
+- **Strategy Development**: Implement and test custom sensor placement and drone routing strategies
+- **Dataset Integration**: Seamless integration with the Sim2Real-Fire dataset
+- **Benchmarking**: Comprehensive evaluation of strategies with multiple metrics
+- **Visualization**: Generate videos and plots of drone movements, fire spread, and sensor placements
+- **Performance Optimization**: Support for both JPEG and NPY formats for memory/speed trade-offs
+
 ## 💻 Usage
 
 ### 1. Preprocessing Dataset
@@ -97,10 +113,11 @@ preprocess_sim2real_dataset(
     n_max_layouts=10  # Optional: limit number of layouts
 )
 ```
+This makes the code execution faster, but requires Gigabytes of storage for each layout.
 
 ### 2. Implementing Strategies
 
-Create a new sensor placement strategy:
+Create a new sensor placement strategy by extending the `SensorPlacementStrategy` class (see Strategy.py for some examples):
 ```python
 from Strategy import SensorPlacementStrategy
 
@@ -115,7 +132,7 @@ class MySensorStrategy(SensorPlacementStrategy):
         return ground_locations, charging_locations
 ```
 
-Create a new drone routing strategy:
+Create a new drone routing strategy by extending the `DroneRoutingStrategy` class (see Strategy.py):
 ```python
 from Strategy import DroneRoutingStrategy
 
@@ -155,14 +172,15 @@ class MyDroneStrategy(DroneRoutingStrategy):
 The library includes several pre-implemented strategies:
 
 1. **Sensor Placement Strategies**:
-   - `SensorPlacementOptimization`: Uses Julia optimization to find optimal sensor locations
-   - `LoggedSensorPlacementStrategy`: Caches optimization results for faster repeated runs
-   - `RandomSensorPlacementStrategy`: Places sensors randomly (for testing)
+   - `SensorPlacementOptimization`: Calls the Max Coverage strategy in Julia to find optimal sensor locations
+   - `SensorPlacementMaxCoverageGaussianTime`: Uses the Gaussian Coverage strategy described in the paper
+   - `RandomSensorPlacementStrategy`: Places sensors randomly
 
 2. **Drone Routing Strategies**:
-   - `DroneRoutingLinearMinTime`: Uses linear programming to minimize detection time
-   - `GREEDY_DRONE_STRATEGY`: A heuristic approach for quick routing
-   - `RandomDroneRoutingStrategy`: Random drone movements (for testing)
+   - `RandomDroneRoutingStrategy`: Random Brownian drone movements
+   - `DroneRoutingMaxCoverageResetStatic`: Max Coverage strategy mentioned in the paper
+   - `DroneRoutingUniformCoverageResetStatic`: Uniform Coverage strategy mentioned in the paper
+   - `DroneRoutingTOP`: TOP-based strategy mentioned in the paper
 
 ### Custom Parameters
 
@@ -226,6 +244,14 @@ The clustering wrapper:
 
 ### 3. Running Benchmarks
 
+All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
+
+`all_experiments_parallell` takes as input two parameters:
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
+
+You can also use the library to run custom tests:
+
 Benchmark a single scenario:
 ```python
 from benchmark import run_benchmark_scenario
@@ -239,14 +265,6 @@ results = run_benchmark_scenario(
     return_history=True  # Optional: Get drone movement history for visualization
 )
 
-# results is a dictionary containing metrics:
-# - delta_t: Time to fire detection
-# - device: Which device detected the fire
-# - execution_time: Strategy computation time
-# - fire_size_cells: Fire size at detection
-# - fire_percentage: Percentage of area burned
-# - map_explored: Percentage of area explored
-# - total_distance: Total distance traveled by drones
 ```
 
 Benchmark multiple scenarios:
@@ -295,25 +313,13 @@ The library collects the following metrics:
 - `drone_entropies`: Entropy of drone positions
 - `sensor_entropies`: Entropy of sensor positions
 
-## ⚠️ Limitations and Error Handling
+## ⚠️ Error Handling
 
-- No parallel processing support
-- Rectangular coverage areas (Manhattan distance)
-- No built-in battery warning system
-- No recovery from illegal positions
 - Invalid actions from strategies will be flagged during benchmarking
-- No validation checks for sensor placement
 - Errors during benchmarking are raised as exceptions:
   - Invalid drone positions (outside grid or not starting at charging station)
   - Invalid action types
   - Other strategy-specific errors
-
-## 🔍 Additional Resources
-
-For more details about the library and its implementation, refer to:
-- Paper: "WFDroneBench: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection"
-- Dataset: [Sim2Real-Fire](https://github.com/TJU-IDVLab/Sim2Real-Fire)
-- Modified Dataset: [DroneBench](https://huggingface.co/datasets/MasterYoda293/DroneBench/tree/main)
 
 ## 📝 Notes
 
@@ -321,26 +327,7 @@ For more details about the library and its implementation, refer to:
 - Users can add their own scenarios by following the Sim2Real dataset format
 - Custom parameters can be added to strategies through `custom_initialization_parameters` and `custom_step_parameters`
 - Drone movement history can be obtained by setting `return_history=True` in `run_benchmark_scenario`
-- Runtime performance varies by strategy - see our paper for detailed benchmarks
-- No specific memory usage considerations for large datasets
 
 ## 📄 License
 
 This project is licensed under the MIT License.
-
-## 📧 Contact
-
-For questions, issues, or collaboration, contact Romain Puech at puech@mit.edu.
-
-## 📑 Citation
-
-If you use this library in your research, please cite:
-```bibtex
-@misc{wildfire_drone_routing,
-  author = {Romain Puech, Joseph Ye, Danique De Moor, Ana Trisovic},
-  title = {Wildfire Drone Routing},
-  year = {2025},
-  howpublished = {\url{https://github.com/RomainPuech/wildfire_drone_routing}},
-  note = {Accessed: YYYY-MM-DD}
-}
-```
