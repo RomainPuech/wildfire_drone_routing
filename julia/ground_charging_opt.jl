@@ -57,15 +57,13 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
         avg_risk[i,j] = (1/T) * sum(risk_pertime[t,i,j] for t in 1:T)
     end
 
-    # prefilter: keep only cells with risk > 90% of other cells
+    # prefilter: keep only cells with risk > x% of other cells
     #first_quartile_risk = quantile(vec(avg_risk), 0.0)
     # I_prime = [(i, j) for i in 1:N, j in 1:M if avg_risk[i,j] > 0.0] # >first_quartile_risk
     
     I_prime = [(i, j) for i in 1:N, j in 1:M if avg_risk[i,j] > 0.0] # Feasible grid points for ground stations
     I_second = I_prime #Feasible grid points for charging stations
 
-    # print how many cells are discarded
-    # println("Number of cells discarded: ", length(I) - length(I_prime))
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
@@ -167,14 +165,6 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
     @constraint(model, [i in I_ground_only], theta[i] >= xg[i]) # coverage constraint on ground sensors
     
     # HERE WE ASSUME I = I_prime for efficiency, just change how the sum is indexed on depending on what is the most efficient in your case.
-    # coverage = zeros(N,M)
-    # for (i_point,j_point) in I
-    #     for dx in max(-i_point+1,-kernel_size_x):min(N-i_point+1,kernel_size_x), dy in max(-j_point+1,-kernel_size_y):min(M-j_point+1,kernel_size_y)
-    #         coverage_percentage = kernel[(-dx,-dy)] # - because here we compte the delta from point to the charging station and kernel is from charging station to point
-    #         coverage[i_point, j_point] += coverage_percentage * xc[i_point]
-    #     end
-    # end
-    # @constraint(model, [i in I], theta[i] >= coverage[i]) # coverage constraint on charging stations
     # Single constraint for charging station coverage
     @constraint(model, [(i_point,j_point) in I], 
         theta[(i_point,j_point)] <= sum(
@@ -193,93 +183,7 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
     selected_x_indices = [(i[1]-1, i[2]-1) for i in I_prime if value(xg[i]) > 0.5] 
     selected_y_indices = [(i[1]-1, i[2]-1) for i in I_second if value(xc[i]) > 0.5]
 
-    # println("selected_x_indices=", selected_x_indices)
-    # println("selected_y_indices=", selected_y_indices)
-
     println("Took ", (time_ns() / 1e9) - time_start, " seconds total")
     
     return selected_x_indices, selected_y_indices
 end
-
-
-
-# using ImageFiltering  # For the equivalent of scipy.ndimage.convolve
-
-# function count_paths_convolution(N, M, origin, n)
-#     # Initialize the dynamic programming array
-#     dp = zeros(Float64, N, M)
-#     dp[origin[1], origin[2]] = 1.0  # Note: Julia is 1-based indexing
-
-#     # Create the 3x3 kernel
-#     kernel = centered(ones(Float64, 3, 3))  # Use centered kernel
-
-#     # Apply convolution n times
-#     for _ in 1:n
-#         dp = imfilter(dp, kernel, Fill(0.0))  # Use Fill(0.0) instead of "constant"
-#     end
-
-#     # Get the origin value for normalization
-#     origin_value = dp[origin[1], origin[2]]
-
-#     # Create the mapping dictionary
-#     mapping = Dict{Tuple{Int,Int}, Float64}()
-#     for x in 1:N, y in 1:M
-#         mapping[(x - origin[1], y - origin[2])] = dp[x,y]/origin_value
-#     end
-
-#     return mapping
-# end
-
-
-# # Test parameters
-# N = 60  # Grid size
-# M = 60
-# N_grounds = 5  # Number of ground stations
-# N_charging = 3  # Number of charging stations
-
-# # Generate the kernel using the translated function
-# origin = (N÷2, M÷2)  # Center point
-# n = 20  # Number of steps for the convolution
-# kernel = count_paths_convolution(N, M, origin, n)
-# println("kernel=", kernel)
-
-# # Get kernel size
-# kernel_size_x = 20
-# kernel_size_y = 20
-
-# println("kernel_size_x=", kernel_size_x)
-# println("kernel_size_y=", kernel_size_y)
-
-# # Call the optimization function
-# ground_locations, charging_locations = Max_Coverage_Kernel(
-#     "WideDataset/0016_03070/burn_map_rescaled_26x30_substeps_63.npy",
-#     N_grounds,
-#     N_charging,
-#     kernel,
-#     kernel_size_x,
-#     kernel_size_y
-# )
-
-# # Print results
-# println("Ground station locations: ", ground_locations)
-# println("Charging station locations: ", charging_locations)
-
-# # Optional: Visualize the results
-# using Plots
-
-# # Create a heatmap of the static map
-# static_map = load_burn_map("WideDataset/0016_03070/burn_map_rescaled_26x30_substeps_63.npy")
-# heatmap(static_map[1,:,:], title="Burn Map with Station Placements")
-
-# # Add ground stations
-# for (x, y) in ground_locations
-#     scatter!([x+1], [y+1], label="Ground Station", color=:blue, markersize=8)
-# end
-
-# # Add charging stations
-# for (x, y) in charging_locations
-#     scatter!([x+1], [y+1], label="Charging Station", color=:red, markersize=8)
-# end
-
-# # Save the plot
-# savefig("station_placements.png")

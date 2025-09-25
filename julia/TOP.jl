@@ -1166,7 +1166,7 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     c[(Begin_CS, End_CS)] = L*4
     
     # Use PSO instead of greedy for initialization
-    # TODO TEMPORARY: ALWAYS CALL THE MULTI-DEPOT VERSION
+    # ALWAYS CALL THE MULTI-DEPOT VERSION
     routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions)
     # if length(ChargingStation) == 1
     #     routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
@@ -1329,79 +1329,6 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     println("total time without CPA: $(total_time - cpa_time)")
     return movement_plan
 
-#    # ------------------------------------------------------------------
-#    # 2) Re-build the coordinate vector that maps node indices → (x,y)
-#    #    so we can convert the integer routes into explicit actions
-#    # ------------------------------------------------------------------
-#    _, N, M = size(risk_pertime)
-#    I = [(x, y) for x in 1:N for y in 1:M]            # all grid cells
-#    Grid_set  = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
-#    Grid_det  = setdiff(Grid_set, ChargingStations)
-#    Grid_det_vec = convert(Vector{Tuple{Int,Int}}, collect(Grid_det))
-
-#    coords = deepcopy(Grid_det_vec)
-#    push!(coords, ChargingStations[1])  # Begin_CS
-#    push!(coords, ChargingStations[1])  # End_CS
-
-#    Begin_CS = length(Grid_det_vec) + 1
-#    End_CS   = length(Grid_det_vec) + 2
-
-#    # ------------------------------------------------------------------
-#    # 3) Build the time-indexed movement plan expected by Python
-#    # ------------------------------------------------------------------
-#    horizon = max_battery_time                    # optimization horizon
-#    movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:horizon+1]
-
-#    for s in 1:n_drones
-#        route = s <= length(routes) && !isempty(routes[s]) ? routes[s] : [Begin_CS, End_CS]
-#        movement_plan[1][s] = ("charge", ChargingStations[1])
-#        t = 1
-#        for node_idx in route[2:end-1]  # skip initial and final depots
-#            t += 1
-#            if t > horizon
-#                break
-#            end
-
-           
-#            next_node = coords[node_idx]
-#            current_node = get(coords, route[t-1], (0,0)) # 0,0 here for the python plot
-           
-#            # Check if we can fly directly (Chebyshev distance = 1)
-#            if t >=3 && max(abs(next_node[1] - current_node[1]), abs(next_node[2] - current_node[2])) != 1
-#                # We need to "patch" the path with intermediate steps
-#                current_pos = (current_node[1], current_node[2])  # Create a copy to avoid mutating original
-               
-#                while max(abs(next_node[1] - current_pos[1]), abs(next_node[2] - current_pos[2])) > 1
-#                    # Move one step toward the target
-#                    new_x = current_pos[1]
-#                    new_y = current_pos[2]
-#                    if abs(next_node[1] - current_pos[1]) > 0
-#                        new_x += sign(next_node[1] - current_pos[1])
-#                    end
-#                    if abs(next_node[2] - current_pos[2]) > 0
-#                        new_y += sign(next_node[2] - current_pos[2])
-#                    end
-#                    current_pos = (new_x, new_y)
-                   
-#                    movement_plan[t][s] = ("fly", current_pos)
-#                    t += 1
-                   
-#                    # Safety check to prevent infinite loops
-#                    if t > horizon
-#                        break
-#                    end
-#                end
-#            end
-#            movement_plan[t][s] = ("fly", next_node)
-#        end
-#     #    if t < horizon + 1 # we include the final depot manually
-#     #        t += 1
-#     #        movement_plan[t][s] = ("charge", ChargingStations[1])
-#     #    end
-#    end
-
-#    return movement_plan[2:end] # no need to include starting depot in the movement plan
-#    # return movement_plan[2:end] # no need to include starting depot in the movement plan
 end
 
 

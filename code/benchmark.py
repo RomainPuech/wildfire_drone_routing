@@ -332,7 +332,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
             }
             start_time = time.time()
             actions_opt_scale = Routing_Strat.next_actions(automatic_step_parameters_opt_scale, custom_step_parameters)
-            new_position_opt_scale = [] # THIS IS TEMPORARY! WE NEED TO PROPERLY RESCALE BACK FROM DRONE.ROUTE BUT FOR THE INTEREST OF TIME WE FEED BACK THE OUTPUT /!\ TODO
+            new_position_opt_scale = [] 
             for drone_index, action in enumerate(actions_opt_scale):
                 if action[0] in ['charge', 'fly']:
                     new_position_opt_scale.append(action[1])
@@ -358,22 +358,19 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
                 else:
                     action_type, coords_opt_scale = action
                     coords_data_scale = operational_space_to_dataspace_coordinates(coords_opt_scale, coverage=coverage_radius_m, datacell_size_m=cell_size_m)
-                    actions_data_scale.append((action_type, coords_data_scale)) #TODO check that for charging mode
+                    actions_data_scale.append((action_type, coords_data_scale))
             
             execution_times.append(time.time() - start_time)
 
             # === Move drones and check detection ===
             for drone_index, (drone, action) in enumerate(zip(drones, actions_data_scale)):
                 if not drone.is_alive():
-                    # continue  # Skip dead drones #TODO figure out battery rescaling for dead drones
+                    print("WARNING: Drone is out of battery")
                     pass
 
                 old_x_data_scale, old_y_data_scale = drone_locations_data_scale[drone_index]
                 new_x_data_scale, new_y_data_scale, new_distance_battery, new_time_battery, new_state = drone.route(action)
                 
-                # new_x_opt_scale = math.ceil((new_x_data_scale-coverage_width_cells//2)/coverage_width_cells)
-                # new_y_opt_scale = math.ceil((new_y_data_scale-coverage_width_cells//2)/coverage_width_cells)
-                # ABOVE IS WHAT WE SHOULD USE BUT WE DONT. SEE COMMENTS ABOVE /!\ TODO
 
                 drone_locations_data_scale[drone_index] = (new_x_data_scale, new_y_data_scale)
                 drone_locations_opt_scale[drone_index] = new_position_opt_scale[drone_index]
@@ -802,7 +799,7 @@ def run_benchmark_scenarii_sequential(input_dir, sensor_placement_strategy:Senso
         scenario = load_scenario_fn(file)
         if automatic_initialization_parameters is None:
             # Compute initialization parameters
-            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters, scenario_name) #TODO compute them once only per layout rather than per scenario..
+            automatic_initialization_parameters = get_automatic_layout_parameters(scenario, input_dir, simulation_parameters, scenario_name)
         results, _ = run_benchmark_scenario(
             scenario,
             sensor_placement_strategy,

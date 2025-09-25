@@ -124,7 +124,6 @@ class Drone():
         Returns:
             tuple: (x, y, distance_battery, time_battery, state) after recharging
         """
-        #if (self.x, self.y) in self.charging_stations_locations:#TODO CHECK IF IT IS FROM NEIGHBORING CELL!
         self.x = x
         self.y = y
         self.state = "charge"

@@ -195,7 +195,7 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
     succ = zeros(Int, n)  # First successor of saturated tour starting at position i
     tour_lengths = zeros(Int, n)  # Length of each saturated tour
     
-    for i in 1:n # HERE! instead of 1:n, you could i += (j-i)... (but then you say can never go from a node to a depot (which is fine?)) #TODO
+    for i in 1:n # HERE! instead of 1:n, you could i += (j-i)... (but then you say can never go from a node to a depot (which is fine?))
         # if i is a not a depot, skip
         #println("n_pure_customers: $(pso_multiple_depots.n_pure_customers)")
         #error("STOP")
@@ -275,7 +275,7 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
 
     # start_time_phase_3 = time()
     # Backtrack to find the optimal routes (as described in the paper)
-    # routes actually never used as output!! but we keep it for now #TODO
+    # routes actually never used as output!! but we keep it for now
     routes = Vector{Vector{Int}}()
     i = 1
     j = m
@@ -303,17 +303,6 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
             i += 1
         end
     end
-    # time_phase_3 = time() - start_time_phase_3
-    # println("time to run phase 3: $time_phase_3")
-    # total_time = time_phase_1 + time_phase_2 + time_phase_3
-    # if total_time > 0.01
-    #     println("total time: $(time_phase_1 + time_phase_2 + time_phase_3)")
-    #     # relative time
-    #     println("relative time: $(time_phase_1 / (time_phase_1 + time_phase_2 + time_phase_3))")
-    #     println("relative time: $(time_phase_2 / (time_phase_1 + time_phase_2 + time_phase_3))")
-    #     println("relative time: $(time_phase_3 / (time_phase_1 + time_phase_2 + time_phase_3))")
-    #     println("n: $n")
-    # end
 
     return Γ[1, m + 1], routes
 end
@@ -1018,12 +1007,6 @@ function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
             end
         end
     end
-    # println("total time shift / call count shift: $(total_time_shift / max(call_count_shift, 1))")
-    # println("total time swap / call count swap: $(total_time_swap / max(call_count_swap, 1))")
-    # println("total time destruction repair / call count destruction repair: $(total_time_destruction_repair / max(call_count_destruction_repair, 1))")
-    # println("improved count shift / call count shift: $(improved_count_shift / max(call_count_shift, 1))")
-    # println("improved count swap / call count swap: $(improved_count_swap / max(call_count_swap, 1))")
-    # println("improved count destruction repair / call count destruction repair: $(improved_count_destruction_repair / max(call_count_destruction_repair, 1))")
     return total_time_shift, total_time_swap, total_time_destruction_repair
 end
 
@@ -1130,23 +1113,6 @@ function shift_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
                 # then we don't try it
                 continue
             end
-            # slightly more complex strategy: TODO implement it just after you improved the swap prcedure.
-            ##########
-            # # if it blocks there, but there was already blocked, the only thing that matters is here.
-            # if is_blocking(particle, j, pso) && is_blocking_once_inserted(particle, i, j, pso)
-            #     # the only thing that matters is here.
-            #     if !is_blocking_once_removed(particle, i, pso) && !is_blocking(particle, i, pso)
-            #         # then we need to know if it increaes profits. if not, no need to try it.
-            #         #it increases profits if it connects to a part that increases profits OR if it doesn't connect but has better own profit.
-            #         # if the new one is blocking on the right, then we need to check if its profit is less than the old one's profit (eventuellement + ceux du node a droite). If so, we skip.
-
-            #         continue
-            #     end
-            # end
-            ##########
-
-
-
 
 
             ## Try moving customer from position i to position j
@@ -1315,114 +1281,6 @@ function calculate_travel_cost(permutation::Vector{Int}, pso::PSOiA_TOP_multiple
     
     return total_cost
 end
-# """
-# Main PSO algorithm - following Algorithm 1 from the paper exactly
-# """
-# function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profits::Vector{Float64}, 
-#                        costs::Dict{Tuple{Int,Int}, Float64}, n_drones::Int, 
-#                        max_battery_time::Int, depot_coord::Tuple{Int,Int} = (0, 0);
-#                        swarm_size::Int = 50, max_iterations::Int = 1000,
-#                        w::Float64 = 0.3, c1::Float64 = 0.5, c2::Float64 = 0.3,
-#                        ph::Float64 = 0.1, pm::Float64 = 0.3)
-    
-#     # Start timing the algorithm execution
-#     start_time = time()
-    
-#     # Determine accessible customers using L-infinity distance instead of cost matrix
-#     accessible_customers = Int[]
-#     println("Customers: $(customers)")
-#     println("See, we have the depots above...")
-#     for i in 1:length(customers)
-#         # Calculate L-infinity distance (minimum hops) to visit customer and return
-#         customer_coord = customers[i]
-#         depot_x, depot_y = depot_coord
-#         customer_x, customer_y = customer_coord
-        
-#         # L-infinity distance: max(|x1-x2|, |y1-y2|)
-#         distance_to = max(abs(customer_x - depot_x), abs(customer_y - depot_y))
-#         distance_from = max(abs(customer_x - depot_x), abs(customer_y - depot_y))  # Same for return
-        
-#         # Check if customer can be visited and returned within battery limit
-#         total_distance = distance_to + distance_from
-#         if total_distance <= max_battery_time
-#             push!(accessible_customers, i)
-#         end
-#     end
-    
-#     # Initialize PSO
-#     pso = PSOiA_TOP_multiple_depots(
-#         Particle[], Int[], -Inf, swarm_size, max_iterations,
-#         w, c1, c2, ph, pm, n_drones, max_battery_time,
-#         customers, profits, costs, accessible_customers, depot_coord
-#     )
-    
-#     # println("=== PSO SETUP ===")
-#     # println("Total customers: $(length(customers))")
-#     # println("Accessible customers: $(length(accessible_customers))")
-#     # println("Max battery time: $max_battery_time")
-#     # println("Number of drones: $n_drones")
-#     # println("==================")
-    
-#     # Initialize and evaluate each particle in swarm (see Section 2.3)
-#     initialize_swarm(pso)
-
-#     iter = 1
-#     itermax = max_iterations #* length(accessible_customers) * n_drones  # As mentioned in paper
-    
-#     # println("Starting PSO with $(pso.swarm_size) particles, initial best: $(pso.global_best_profit)")
-#     # Main algorithm loop following Algorithm 1
-#     while iter <= itermax
-#         improvement_found = false
-        
-#         for x in 1:pso.swarm_size
-#             # Random move with probability ph
-#             if rand() < pso.ph
-#                 # Move S[x] to a new position (see Section 2.3)
-#                 pso.swarm[x].position = idch_heuristic(pso, false)  # Fast version
-#             else
-#                 # Update S[x].pos (see Section 2.5)
-#                 update_position!(pso.swarm[x], pso.global_best, pso)
-#             end
-            
-#             # Local search with probability pm
-#             if rand() < pso.pm
-#                 # Apply local search on S[x].pos (see Section 2.4)
-#                 local_search!(pso.swarm[x], pso)
-#             end
-            
-#             # Evaluate S[x].pos (see Section 2.2)
-#             pso.swarm[x].current_profit = fast_split_multiple_depots(pso.swarm[x].position, pso)
-            
-#             # Update lbest of S (see Section 2.6)
-#             prev_global_best = pso.global_best_profit
-#             update_local_bests!(pso)
-
-#             # Check if update Rule 3 is applied (new local best discovered)
-#             if pso.global_best_profit > prev_global_best
-#                 improvement_found = true
-#                 println("Iter $iter: New best = $(round(pso.global_best_profit, digits=3)), Solution: $(pso.global_best)")
-#             end
-#         end
-
-#         if improvement_found
-#             iter = 1  # Reset counter when improvement found
-#         else
-#             iter += 1  # Increment counter when no improvement
-#         end
-#     end
-    
-#     # Calculate and print execution time
-#     end_time = time()
-#     execution_time = end_time - start_time
-#     println("=== PSO ALGORITHM COMPLETED ===")
-#     println("Final best profit: $(round(pso.global_best_profit, digits=3))")
-#     println("Total execution time: $(round(execution_time, digits=3)) seconds")
-#     println("==============================")
-    
-#     return pso.global_best, pso.global_best_profit, pso
-# end
-
-
 
 
 
@@ -1487,28 +1345,20 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
         customers, profits, costs, accessible_customers, depot_coord, closest_depot_distance
     )
     
-    # println("=== PSO SETUP ===")
-    # println("Total customers: $(length(customers))")
-    # println("Accessible customers: $(length(accessible_customers))")
-    # println("Max battery time: $max_battery_time")
-    # println("Number of drones: $n_drones")
-    # println("==================")
 
     time_to_initialize_pso = time() - start_time
     println("time to initialize pso: $(time_to_initialize_pso)")
     time_before_swarm_sampling = time()
     
-    # Initialize and evaluate each particle in swarm (see Section 2.3)
+    # Initialize and evaluate each particle in swarm 
     initialize_swarm(pso, use_greedy_init)
     time_after_swarm_sampling = time()
     println("time to initialize swarm: $(time_after_swarm_sampling - time_before_swarm_sampling)")
     
 
     iter = 1
-    itermax = max_iterations #* length(accessible_customers) * n_drones  # As mentioned in paper
+    itermax = max_iterations #* length(accessible_customers) * n_drones 
     
-    # println("Starting PSO with $(pso.swarm_size) particles, initial best: $(pso.global_best_profit)")
-    # Main algorithm loop following Algorithm 1
     total_time_local_search = 0.0
     total_time_swap = 0.0
     total_time_shift = 0.0
@@ -1527,19 +1377,19 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
         for x in 1:pso.swarm_size
             # Random move with probability ph
             if rand() < pso.ph
-                # Move S[x] to a new position (see Section 2.3)
+                # Move S[x] to a new position (see Section 2.3 in Dang et al.)
                 time_before_idch = time()
                 pso.swarm[x].position = idch_heuristic(pso, false)  # Fast version
                 time_after_idch = time()
-                #println("time to run idch: $(time_after_idch - time_before_idch)")
+                
             else
-                # Update S[x].pos (see Section 2.5)
+                # Update S[x].pos (see Section 2.5 in Dang et al.)
                 update_position!(pso.swarm[x], pso.global_best, pso)
             end
             
             # Local search with probability pm
             if rand() < pso.pm
-                # Apply local search on S[x].pos (see Section 2.4)
+                # Apply local search on S[x].pos (see Section 2.4 in Dang et al.)
                 time_before_local_search = time()
                 time_shift, time_swap, time_destruction_repair = local_search!(pso.swarm[x], pso)
                 time_after_local_search = time()
@@ -1547,14 +1397,14 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
                 total_time_shift += time_shift
                 total_time_swap += time_swap
                 total_time_destruction_repair += time_destruction_repair
-                #println("time to run local search: $(time_after_local_search - time_before_local_search)")
+                
             end
             
             # Evaluate S[x].pos (see Section 2.2)
             time_before_split = time()
             pso.swarm[x].current_profit = fast_split_multiple_depots(pso.swarm[x].position, pso)
             time_after_split = time()
-            #println("time to run split: $(time_after_split - time_before_split)")
+            
             # Update lbest of S (see Section 2.6)
             prev_global_best = pso.global_best_profit
             update_local_bests!(pso)

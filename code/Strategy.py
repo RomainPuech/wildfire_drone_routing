@@ -912,7 +912,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
             # Solve next move with the existing model
             julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
             print("current drone locations in julia indexing are:", julia_drone_locations)
-            # if drone are not on charging stations, we raise an error # TODO, put this in julia instead of here
+            # if drone are not on charging stations, we raise an error
             for drone_location in julia_drone_locations:
                 if drone_location not in self.julia_charging_stations_locations:
                     raise ValueError(f"Drone is not on a charging station: {drone_location}")
@@ -963,7 +963,7 @@ class DroneRoutingTOP(DroneRoutingStrategy):
         # if t is a multiple of the data time resolution, we update the whole burn map
         if self.t % self.data_time_resolution == 0:
             if self.burnmap_handeling_type == "growing":
-                self.current_burnmap[self.t:] += self.initial_burnmap[self.t] #TODO adapt to dynamic map
+                self.current_burnmap[self.t:] += self.initial_burnmap[self.t] 
             elif self.burnmap_handeling_type == "growing_proba": # this is assuming independence though
                 self.current_burnmap[self.t:] = 1 - (1 - self.current_burnmap[self.t]) * (1 - self.initial_burnmap[self.t])
             save_burn_map(self.current_burnmap, self.current_burnmap_filename)

@@ -1041,8 +1041,6 @@ function new_solve_index_init_routing(routing_model::NewIndexRoutingModel, reeva
     end
 
     # Extract results
-    # println("Solver Status: ", termination_status(model))
-    # println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
     
     # Generate movement plan using integer indices
     movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
@@ -1074,17 +1072,13 @@ function new_solve_index_init_routing(routing_model::NewIndexRoutingModel, reeva
 end
 
 function new_solve_index_next_move_routing(routing_model::NewIndexRoutingModel, reevaluation_step, drone_locations, drone_states, battery_level, offset=0)
-    # println("Solving index next move routing")
-    # println("Reevaluation step: ", reevaluation_step)
-    # println("Drone locations: ", drone_locations)
-    # println("Drone states: ", drone_states)
-    #println("Battery level: ", battery_level)
+    
     model = routing_model.model
     a = routing_model.a
     c = routing_model.c
     b = routing_model.b
     theta = routing_model.theta
-    #println("in new_solve_index_next_move_routing axes(b): ", axes(b))
+    
     ChargingStations = routing_model.ChargingStations
     GridpointsDrones = routing_model.GridpointsDrones
     grid_to_idx = routing_model.grid_to_idx
@@ -1158,13 +1152,7 @@ function new_solve_index_next_move_routing(routing_model::NewIndexRoutingModel, 
     t2 = time_ns() / 1e9
     optimize!(model)
     t3 = time_ns() / 1e9
-    #println("Creating next_move constraints took ", t2 - t1, " seconds")
-    #println("Optimizing model took ", t3 - t2, " seconds")
-    
-    # Extract results
-    # println("Solver Status: ", termination_status(model))
-    # println("Objective Value: ", has_values(model) ? objective_value(model) : "No solution found")
-    
+   
     # Generate movement plan using integer indices
     movement_plan = [[("stay", (0, 0)) for _ in 1:n_drones] for _ in 1:reevaluation_step]
     
@@ -1185,7 +1173,6 @@ function new_solve_index_next_move_routing(routing_model::NewIndexRoutingModel, 
             end
         end
     end
-    # println("movement_plan: ", movement_plan)
     return movement_plan[1:reevaluation_step]
 end
 
