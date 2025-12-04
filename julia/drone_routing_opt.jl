@@ -72,6 +72,21 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Precomputing the closest distance to a charging station for each gridpoint
     precomputed_closest_distance_to_charging_station = closest_distances(ChargingStations, GridpointsDrones)
     
+    #If using BFS
+    # Provide your obstacle set (no-fly cells)
+    # Blocked = routing_model.blocked_cells   
+
+    # precomputed_closest_distance_to_charging_station =
+    # BFS(routing_model.GridpointsDrones,
+    #                   routing_model.ChargingStations,
+    #                   Blocked, N,M)
+
+    # Then add constraints:
+    # unreachable = findall(isinf, precomputed_closest_distance_to_charging_station)
+    # @constraint(model, [i in unreachable],
+    # sum(a[i, t, s] for t in 1:T, s in 1:n_drones) == 0)
+
+
     model = Model(Gurobi.Optimizer)
     set_silent(model)
     

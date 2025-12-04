@@ -322,3 +322,48 @@ function closest_distance(neighbors, point, metric="linf")
     end
     return min_dist
 end
+
+using DataStructures: Queue
+
+function BFS(points, stations, blocked, W, H)
+    """
+    Computes the shortest (fewest steps) distance from every point in a grid to the nearest charging station, using 8-neighborhood BFS.
+
+    Arguments:
+    - points: list of grid points where you want to know the distance 
+    - stations: list of grid points that are charging stations
+    - blocked: set of cells the drone cannot fly over
+    - W, H: grid width and height (number of columns and rows)
+
+    Returns:
+    - A vector of minimum step distances (same order as 'points'), or Inf if unreachable.
+    """
+
+    neighbors(x,y) = (x+1,y), (x-1,y), (x, y+1), (x, y-1), (x+1,y+1), (x+1,y-1), (x-1,y+1), (x-1,y-1)
+
+    dist = fill(Inf, W, H)
+    Q = Queue{Tuple{Int,Int}}()
+
+    #initialize all stations as sources
+    for (sx,sy) in stations
+        if inbounds(sx,sy) && !((sx,sy) in blocked)
+            dist[sx,sy] = 0
+            enqueue!(Q, (sx,sy))
+        end
+    end
+
+    # BFS
+    while !isempty(Q)
+        (x,y) = dequeue!(Q)
+        dxy = dist[x,y]
+        for (nx,ny) in neighbors(x,y)
+            if inbounds(nx,ny) && !((nx,ny) in blocked) && isinf(dist[nx,ny])
+                dist[nx,ny] = dxy + 1
+                enqueue!(Q, (nx,ny))
+            end
+        end
+    end
+
+    return [ inbounds(x,y) ? dist[x,y] : Inf for (x,y) in points ]
+end
+
