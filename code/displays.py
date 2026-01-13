@@ -354,7 +354,8 @@ def create_video_scenario_burnmap(
     maxframes=np.inf,
     cmap=None,
     vmin=None,
-    vmax=None
+    vmax=None,
+    display_zones=False
 ):
     """
     Create a video visualization of a burn map with drones, sensors, and charging stations overlaid.
@@ -370,8 +371,10 @@ def create_video_scenario_burnmap(
         cmap: Colormap to use (optional)
         vmin: Minimum value for colormap (optional)
         vmax: Maximum value for colormap (optional)
+        display_zones: If True, display squares of length 60 centered on charging stations (default: False)
     """
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
     import os
     from matplotlib.colors import LinearSegmentedColormap
     import cv2
@@ -411,6 +414,26 @@ def create_video_scenario_burnmap(
         if charging_stations_locations:
             ax.scatter([xy[0] for xy in charging_stations_locations], [xy[1] for xy in charging_stations_locations],
                        c="blue", s=30, marker="*", label="Charging Station" if t == 0 else None)
+            
+            # Display zones (squares of length 60 centered on charging stations)
+            if display_zones:
+                zone_length = 60
+                half_length = zone_length / 2
+                for i, (x, y) in enumerate(charging_stations_locations):
+                    # Calculate square corners (centered on charging station)
+                    x_min = x - half_length
+                    y_min = y - half_length
+                    rect = Rectangle(
+                        (x_min, y_min), 
+                        zone_length, 
+                        zone_length,
+                        linewidth=2,
+                        edgecolor='cyan',
+                        facecolor='none',
+                        linestyle='--',
+                        label="Drone Zone" if t == 0 and i == 0 else None
+                    )
+                    ax.add_patch(rect)
 
         ax.set_title(f"Burn Probability Map at t={t}")
         ax.set_xlabel('X coordinate')

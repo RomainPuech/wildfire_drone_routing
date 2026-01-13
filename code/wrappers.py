@@ -306,13 +306,14 @@ def make_loggable_drone_strategy(strategy_cls):
     return Wrapped
 
 
-from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy, DroneRoutingTOP, TestStrategy, DroneRoutingTOPwarm, DroneRoutingTOPGrowing
+from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, SensorPlacementMaxCoverageGaussianTimeMasked, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy, DroneRoutingTOP, TestStrategy, DroneRoutingTOPwarm, DroneRoutingTOPGrowing, DroneRoutingMaxCoverageResetStaticMasked
 from new_clustering import get_wrapped_clustering_strategy
 
 # Register statically at module load
 
 RandomSensorPlacementStrategyLogged = make_loggable_sensor_strategy(RandomSensorPlacementStrategy)
 SensorPlacementMaxCoverageGaussianTimeLogged = make_loggable_sensor_strategy(SensorPlacementMaxCoverageGaussianTime)
+SensorPlacementMaxCoverageGaussianTimeMaskedLogged = make_loggable_sensor_strategy(SensorPlacementMaxCoverageGaussianTimeMasked)
 
 ClusteredUniformCoverage = get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)
 ClusteredMaxCoverage = get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)
@@ -321,6 +322,7 @@ ClusteredTOP = get_wrapped_clustering_strategy(DroneRoutingTOP)
 ClusteredTOPwarm = get_wrapped_clustering_strategy(DroneRoutingTOPwarm)
 ClusteredTOPGrowing = get_wrapped_clustering_strategy(DroneRoutingTOPGrowing)
 ClusteredTestStrategy = get_wrapped_clustering_strategy(TestStrategy)
+ClusteredDroneRoutingMaxCoverageResetStaticMasked = get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticMasked)
 
 DroneRoutingUniformCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredUniformCoverage)
 DroneRoutingMaxCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredMaxCoverage)
@@ -329,6 +331,8 @@ DroneRoutingTOPLogged = make_loggable_drone_strategy(ClusteredTOP)
 TestStrategyLogged = make_loggable_drone_strategy(ClusteredTestStrategy)
 DroneRoutingTOPwarmLogged = make_loggable_drone_strategy(ClusteredTOPwarm)
 DroneRoutingTOPGrowingLogged = make_loggable_drone_strategy(ClusteredTOPGrowing)
+DroneRoutingMaxCoverageResetStaticMaskedLogged = make_loggable_drone_strategy(ClusteredDroneRoutingMaxCoverageResetStaticMasked)
+
 
 globals()["DroneRoutingUniformCoverageResetStatic"] = DroneRoutingUniformCoverageResetStaticLogged
 globals()["DroneRoutingMaxCoverageResetStatic"] = DroneRoutingMaxCoverageResetStaticLogged
@@ -338,3 +342,4 @@ globals()["DroneRoutingTOPwarm"] = DroneRoutingTOPwarmLogged
 globals()["DroneRoutingTOPGrowing"] = DroneRoutingTOPGrowingLogged
 globals()["TestStrategy"] = TestStrategyLogged
 globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategy # we do not log the random drone routing strategy
+globals()["DroneRoutingMaxCoverageResetStaticMasked"] = DroneRoutingMaxCoverageResetStaticMaskedLogged

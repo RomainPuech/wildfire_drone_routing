@@ -2108,8 +2108,6 @@ class DroneRoutingExhaustiveSearch(DroneRoutingStrategy):
 
 
 
-
-
 class DroneRoutingMaxCoverageResetStatic(DroneRoutingStrategy):
     strategy_name = "DroneRoutingMaxCoverageResetStatic"
     """
@@ -2698,7 +2696,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def count_paths_convolution(N, M, n, time_steps=1):
-    N_prime, M_prime = min(2*N+1,2*n), min(2*M+1,2*n)
+    """
+    N: Grid height
+    M: Grid width
+    n: max size of the grid to consider / max reach of the drones
+    time_steps: Number of time steps to consider
+    Returns:
+        mapping: Dictionary mapping (x,y) to the probability of the cell being covered at time t
+    """
+    N_prime, M_prime = min(2*N+1,2*n), min(2*M+1,2*n) #TODO think about these
     dp = np.zeros((N_prime, M_prime), dtype=np.float64)
     origin = (N_prime//2, M_prime//2) # origin is the middle of the grid
     dp[origin[0], origin[1]] = 1
@@ -2750,7 +2756,7 @@ class SensorPlacementMaxCoverageGaussianTime(SensorPlacementStrategy):
 
         # Call the Julia optimization function
         # print("calling julia optimization model")
-        x_vars, y_vars = jl.Max_Coverage_Kernel(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"], automatic_initialization_parameters["n_drones"], kernel, kernel_size_x, kernel_size_y)
+        x_vars, y_vars = jl.Max_Coverage_Kernel(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"], automatic_initialization_parameters["n_drones"], kernel, kernel_size_x, kernel_size_y, custom_initialization_parameters["mask_filename"])
         # print("optimization finished")
         
         self.ground_sensor_locations = list(x_vars)
@@ -2762,6 +2768,74 @@ class SensorPlacementMaxCoverageGaussianTime(SensorPlacementStrategy):
         print(self.charging_station_locations)
 
 
+class SensorPlacementMaxCoverageGaussianTimeMasked(SensorPlacementStrategy):
+    strategy_name = "SensorPlacementMaxCoverageGaussianTimeMasked"
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        Initialize the ground placement strategy using Julia's optimization model with mask-aware coverage.
+        
+        Args:
+            automatic_initialization_parameters: dict with keys:
+                "n_ground_stations": Target number of ground stations
+                "n_charging_stations": Target number of charging stations
+                "n_drones": Target number of drones
+                "N": Grid height
+                "M": Grid width
+            custom_initialization_parameters: dict with keys:
+                "burnmap_filename": burn map file name
+                "mask_filename": mask file name (cells with mask=0 are blocked)
+                "recompute_kernel": If True, compute per-location kernels using masked DP (slower but more accurate)
+                                    If False, use fixed kernel approximation (faster but less accurate near mask boundaries)
+                "n_steps": Number of DP steps for kernel computation (default 63, only used if recompute_kernel=True)
+        """
+        # Initialize empty lists (skip parent's random initialization)
+        self.ground_sensor_locations = []
+        self.charging_station_locations = []
+
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+
+        # Get mask filename
+        mask_filename = custom_initialization_parameters.get("mask_filename", None)
+        
+        # Get recompute_kernel flag (default False for efficiency)
+        recompute_kernel = custom_initialization_parameters.get("recompute_kernel", False)
+        
+        # Get n_steps for DP computation (default 63)
+        n_steps = custom_initialization_parameters.get("n_steps", 63)
+
+        # load the burnmap
+        burnmap = load_scenario(custom_initialization_parameters["burnmap_filename"])
+        T, N, M = burnmap.shape
+
+        # create the kernel (used if recompute_kernel=False)
+        kernel = count_paths_convolution(N, M, 63, 10)
+        kernel_size_x = 63
+        kernel_size_y = 63
+
+        print(f"SensorPlacementMaxCoverageGaussianTimeMasked: recompute_kernel={recompute_kernel}, n_steps={n_steps}")
+
+        # Call the Julia optimization function with masked kernel support
+        x_vars, y_vars = jl.Max_Coverage_Kernel_Masked(
+            custom_initialization_parameters["burnmap_filename"], 
+            automatic_initialization_parameters["n_ground_stations"], 
+            automatic_initialization_parameters["n_charging_stations"], 
+            automatic_initialization_parameters["n_drones"], 
+            kernel, 
+            kernel_size_x, 
+            kernel_size_y, 
+            mask_filename,
+            recompute_kernel,
+            n_steps
+        )
+        
+        self.ground_sensor_locations = list(x_vars)
+        self.charging_station_locations = list(y_vars)
+
+        print("ground sensor locations")
+        print(self.ground_sensor_locations)
+        print("charging station locations")
+        print(self.charging_station_locations)
 
 
 
@@ -3420,3 +3494,202 @@ class DroneRoutingTOPGrowingProba(DroneRoutingTOP):
 
 class TestStrategy(RandomDroneRoutingStrategy):
     strategy_name = "TestStrategy"
+
+
+#### Startegies with mask
+
+
+class DroneRoutingMaxCoverageResetStaticMasked(DroneRoutingStrategy):
+    strategy_name = "DroneRoutingMaxCoverageResetStaticMasked"
+    """
+    Drone routing strategy that uses a max coverage approach and resets the burn map at every reevaluation step.
+    """
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        automatic_initialization_parameters: dict with keys:
+            "N": Grid height
+            "M": Grid width
+            "max_battery_distance": int
+            "max_battery_time": int
+            "n_drones": int
+            "n_ground_stations": Target number of ground stations
+            "n_charging_stations": Target number of charging stations
+            "ground_sensor_locations": list of tuples (x,y)
+            "charging_stations_locations": list of tuples (x,y)
+        custom_initialization_parameters: dict with keys:
+            "burnmap_filename": burn map file name
+            "reevaluation_step": number of steps between calls to julia optimization model
+            "optimization_horizon": number of steps to optimize for
+        """
+        # Assign parameters
+        self.automatic_initialization_parameters = automatic_initialization_parameters
+        self.custom_initialization_parameters = custom_initialization_parameters
+        self.call_counter = 0  # Keeping track of how many times we call the function
+        self.t = 0 # current timestep
+        self.current_solution = None
+        self.routing_model = None  # Will store the reusable JuMP model
+        self.mask_filename = custom_initialization_parameters.get("mask_filename", None)
+        self.call_ID = random.randint(0, 1000000)
+        self.burnmap_type = custom_initialization_parameters.get("burnmap_type", "static")
+        # Validate required parameters
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+        self.initial_burnmap = load_scenario(self.custom_initialization_parameters["burnmap_filename"])
+        self.current_burnmap = self.initial_burnmap.copy()
+        if self.burnmap_type == "static":
+            # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
+            self.current_burnmap = np.tile(self.initial_burnmap, (90, 1, 1))
+        else:
+            print(f"careful: burnmap_type is not static, it is {self.burnmap_type}")
+        
+
+        self.len_burnmap = self.initial_burnmap.shape[0]
+        self.current_burnmap_filename = "./tmp_burnmaps/tmp_burnmap_" + str(self.call_ID) + ".npy"
+        # create the tmp_burnmaps folder if it doesn't exist
+        if not os.path.exists("./tmp_burnmaps"):
+            os.makedirs("./tmp_burnmaps")
+        self.automatic_initialization_parameters["burnmap_filename"] = self.current_burnmap_filename
+
+        self.current_burnmap+=1e-8
+        save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+        
+        if "reevaluation_step" not in custom_initialization_parameters:
+            raise ValueError("reevaluation_step is not defined")
+        self.reevaluation_step = custom_initialization_parameters["reevaluation_step"]
+        
+        if "optimization_horizon" not in custom_initialization_parameters:
+            raise ValueError("optimization_horizon is not defined")
+        self.optimization_horizon = custom_initialization_parameters["optimization_horizon"]
+
+       
+        self.reset_time = custom_initialization_parameters.get("reset_time", 2*63)
+        
+        # Store original charging stations as class attribute
+        self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
+        
+        # Convert to Julia indexing (Python 0-based → Julia 1-based)
+        self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
+        self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
+        self.execution_time = 0
+        self.saving_time = 0
+        
+    def get_initial_drone_locations(self):
+        """
+        Returns the initial locations of the drones after creating the optimization model
+        and solving the initial routing problem.
+        """
+        print("Creating initial routing model (reusable)")
+        print("--- parameters for julia (Julia indexing) ---")
+        print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
+        print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
+        print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
+        print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
+        print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
+
+        save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+
+        # Create the reusable routing model
+        start_time = time.time()
+        self.routing_model = jl.create_index_routing_model_masked(
+            self.current_burnmap_filename,
+            self.automatic_initialization_parameters["n_drones"],
+            self.julia_charging_stations_locations,
+            self.julia_ground_sensor_locations,
+            self.custom_initialization_parameters["optimization_horizon"],
+            self.automatic_initialization_parameters["max_battery_time"],
+            self.mask_filename,
+        )
+        self.execution_time += time.time() - start_time
+        # Solve the initial routing problem with the model
+        start_time = time.time()
+        self.current_solution = jl.solve_index_init_routing(
+            self.routing_model, 
+            self.custom_initialization_parameters["reevaluation_step"]
+        )
+        self.execution_time += time.time() - start_time
+        # print(f"current_solution (Julia indexing): {self.current_solution}")
+        
+        # Convert to Python indexing (Julia 1-based → Python 0-based)
+        self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
+                                 for code, (x, y) in plan] for plan in self.current_solution]
+        
+        # Extract initial positions from the first step of the solution
+        # Extract full action tuples from step 0
+        initial_plan = self.current_solution[0]  # list of (code, (x, y))
+
+        initial_positions = self.current_solution[0]
+        self.call_counter = 0
+        
+        print("Initial optimization finished")
+        print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
+
+
+        return initial_positions
+
+        
+        
+    def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
+        """
+        automatic_step_parameters: dict with keys:
+            "drone_locations": list of tuples (x,y)
+            "drone_batteries": list of tuples (distance,time)
+            "drone_states": list of strings "charge" or "fly"
+            "t": int
+        custom_step_parameters: dict 
+        Returns:
+            actions: list of tuples (action_type, action_parameters)
+        """
+        self.t += 1
+        # Every reevaluation_step calls, recompute the solution using the existing model
+        if self.call_counter == self.reevaluation_step-1:
+            self.call_counter = 0
+            # save the current burnmap
+            start_time = time.time()
+            save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+            self.saving_time += time.time() - start_time
+            # print("Solving next move with model reuse (integer indexing)")
+            
+            # Convert drone locations to Julia indexing
+            julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+            
+            # print("--- parameters for julia (Julia indexing) ---")
+            # print(f"drone_locations: {julia_drone_locations}")
+            # print(f"drone_states: {automatic_step_parameters['drone_states']}")
+            # print(f"drone_batteries: {automatic_step_parameters['drone_batteries']}")
+            # print("--- end of parameters ---")
+
+            # Solve next move with the existing model
+            start_time = time.time()
+            self.current_solution = jl.solve_index_next_move_routing(
+                self.routing_model,
+                self.custom_initialization_parameters["reevaluation_step"],
+                julia_drone_locations,
+                automatic_step_parameters["drone_states"],
+                automatic_step_parameters["drone_batteries"],
+                self.t
+            )
+            self.execution_time += time.time() - start_time
+            #print("Next move optimization finished")
+            # print("current solution (Julia indexing)")
+            # print(self.current_solution)
+
+            # Convert to Python indexing
+            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
+                                     for code, (x, y) in plan] for plan in self.current_solution]
+            # uopdate the burnmap
+
+            
+
+
+        # Return the appropriate step from the pre-computed plan
+        self.call_counter += 1
+        idx = self.call_counter
+        #assert idx < len(self.current_solution), f"idx={idx} is greater than the number of steps in the solution={len(self.current_solution)}"
+        # print(f"[debug] returning plan step {self.call_counter} of {len(self.current_solution)}")
+        # update the burnmap: set every visited cell to 0
+        for action in self.current_solution[idx]:
+            if action[0] == "fly":
+                #print(f"setting burnmap at {action[1]} to 0 at time {self.t}")
+                self.current_burnmap[self.t:min(self.t+self.reset_time,self.current_burnmap.shape[0]),action[1][0], action[1][1]] = 0
+                #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+        return self.current_solution[idx]

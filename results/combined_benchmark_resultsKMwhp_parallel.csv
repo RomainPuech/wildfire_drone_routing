@@ -1,0 +1,2 @@
+sensor_strategy,drone_strategy,layout,scenario,delta_t,device,execution_time,fire_size_cells,fire_percentage,map_explored,total_distance
+SensorPlacementMaxCoverageGaussianTime,DroneRoutingMaxCoverageResetStatic,LakeFire,scenario1,0,undetected,0.0153843561808268,1,7.115644883780172e-05,0.0487421674538941,47874

@@ -499,17 +499,21 @@ def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSe
     """
     if not dataset_folder.endswith('/'):
         dataset_folder += '/'
-
+    
+    print("dataset_folder", dataset_folder)
     all_dfs = []
 
     for layout in os.listdir(dataset_folder):
         layout_path = os.path.join(dataset_folder, layout)
+        print("layout_path", layout_path)
         if not os.path.isdir(layout_path):
+            print("not a directory", layout_path)
             continue    
 
         layout_shortened_name = layout.split("_")[0]
 
         csv_path = os.path.join(layout_path, f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
+        print("csv_path", csv_path)
         if os.path.exists(csv_path):
             print(f"✔ Found: {csv_path}")
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
@@ -525,6 +529,9 @@ def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSe
     if experiment_name is None:
         experiment_name = strategy_name
     combined_path = os.path.join("results", "combined_benchmark_results"+experiment_name+".csv")
+    # create the results folder if it doesn't exist
+    if not os.path.exists("results"):
+        os.makedirs("results")
     combined_df.to_csv(combined_path, index=False)
     print(f"\n✅ Combined results saved to: {combined_path}")
 

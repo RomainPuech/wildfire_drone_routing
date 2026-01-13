@@ -42,7 +42,7 @@ custom_initialization_parameters = {
     } #"regularization_param": 0.0001}
 
 
-dataset_folder_name = "/home/gridsan/rpuech/WFDroneBench_shared/WideDataset"
+dataset_folder_name = "./MiniTractDataset"#"/home/gridsan/rpuech/WFDroneBench_shared/WideDataset"
 
 # Mapping used to resolve burnmap filename
 BM_PREFIX_TO_NAME = {
@@ -124,8 +124,8 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     #         os.remove("tmp_burnmaps/" + file)
 
     #run_one_drone_strategy(sensor_strategy, RandomDroneRoutingStrategy, custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, "DroneRoutingTOPwarm", init_func, f"{ss_prefix}TOPwarm{bm_prefix}_parallel")
-    run_one_drone_strategy(sensor_strategy, "DroneRoutingUniformCoverageResetStatic", init_func, f"{ss_prefix}U{bm_prefix}_parallel")
+    #run_one_drone_strategy(sensor_strategy, "DroneRoutingTOPwarm", init_func, f"{ss_prefix}TOPwarm{bm_prefix}_parallel")
+    #run_one_drone_strategy(sensor_strategy, "DroneRoutingUniformCoverageResetStatic", init_func, f"{ss_prefix}U{bm_prefix}_parallel")
     run_one_drone_strategy(sensor_strategy, "DroneRoutingMaxCoverageResetStatic", init_func, f"{ss_prefix}M{bm_prefix}_parallel")
     #run_one_drone_strategy(sensor_strategy, wrap_log_drone_strategy(get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStaticGreedy)), custom_initialization_parameters_function_greedy, "KG")
         

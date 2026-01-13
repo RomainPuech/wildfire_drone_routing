@@ -51,6 +51,10 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
 
 def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simulation_parameters: dict, scenario_name: str = ""):
     #print("simulation_parameters", simulation_parameters)
+    layout_dir = os.path.abspath(os.path.join(input_dir, ".."))
+    mask_filename = os.path.join(layout_dir, "mask.npy")
+    if not os.path.exists(mask_filename):
+        mask_filename = None
     return {
         "N": scenario.shape[1],
         "M": scenario.shape[2],
@@ -65,6 +69,7 @@ def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simula
         "input_dir": input_dir,
         "transmission_range": simulation_parameters.get("transmission_range", DEFAULT_SIMULATION_PARAMETERS["transmission_range"]),
         "scenario_name": scenario_name or simulation_parameters.get("scenario_name", DEFAULT_SIMULATION_PARAMETERS["scenario_name"]),
+        "mask_filename": mask_filename,
     }
 
 
@@ -239,6 +244,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
 
     operational_substeps = compute_operational_substeps(cell_size_m, speed_m_per_min, coverage_radius_m)
     coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)
+    
 
     rescaled_N = automatic_initialization_parameters["N"] // coverage_width_cells
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
@@ -246,6 +252,12 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     # print("loading and preparing burnmap")
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
     rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
+
+    if automatic_initialization_parameters["mask_filename"] is not None:
+        rescaled_mask = np.load(automatic_initialization_parameters["mask_filename"])
+        rescaled_mask = pool_mask_min(rescaled_mask, coverage_width_cells)
+    else:
+        rescaled_mask = None
     # duplicate the burn map for the operationnal time scale: each grid is duplicated operational_substeps times
     rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
     # print("saving the pooled burnmap")
@@ -253,15 +265,21 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
 
+    rescaled_mask_filename = None
+    if rescaled_mask is not None:
+        rescaled_mask_filename = automatic_initialization_parameters["mask_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
+        np.save(rescaled_mask_filename, rescaled_mask)
+
     rescaled_automatic_initialization_parameters = automatic_initialization_parameters.copy()
     rescaled_automatic_initialization_parameters["N"] = rescaled_N
     rescaled_automatic_initialization_parameters["M"] = rescaled_M
     rescaled_automatic_initialization_parameters["max_battery_time"] = rescaled_max_battery_time
     rescaled_automatic_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
+    rescaled_automatic_initialization_parameters["mask_filename"] = rescaled_mask_filename
 
     rescaled_custom_initialization_parameters = custom_initialization_parameters.copy()
     rescaled_custom_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
-
+    rescaled_custom_initialization_parameters["mask_filename"] = rescaled_mask_filename
     # 2. Get ground sensor locations and convert them back to the original size
     # print("getting sensor locations")
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
@@ -456,6 +474,9 @@ def pool_burnmap_proba_at_least_one(burnmap, kernel_size):
     """
     Pool the burnmap to the new size by 1 - prod(1 - p) the values in the new cells, with a kernel_size x kernel_size window and a stride of kernel_size.
     """
+    # if burnmap is 2D, we make it 3D by repeating it 100 times
+    if burnmap.ndim == 2:
+        burnmap = np.repeat(burnmap, 100, axis=0)
     N, M = burnmap.shape[1:]
     N_new = N // kernel_size
     M_new = M // kernel_size
@@ -464,6 +485,19 @@ def pool_burnmap_proba_at_least_one(burnmap, kernel_size):
         for j in range(M_new):
             burnmap_pooled[:, i, j] = 1 - np.prod(1 - burnmap[:, i*kernel_size:(i+1)*kernel_size, j*kernel_size:(j+1)*kernel_size], axis=(1,2))
     return burnmap_pooled
+
+def pool_mask_min(mask, kernel_size):
+    """
+    Pool the mask to the new size by using a min operation with a kernel_size x kernel_size window and a stride of kernel_size.
+    """
+    N, M = mask.shape
+    N_new = N // kernel_size
+    M_new = M // kernel_size
+    mask_pooled = np.zeros((N_new, M_new))
+    for i in range(N_new):
+        for j in range(M_new):
+            mask_pooled[i, j] = np.min(mask[i*kernel_size:(i+1)*kernel_size, j*kernel_size:(j+1)*kernel_size])
+    return mask_pooled
 
 def listdir_folder_limited(input_dir, max_n_scenarii=None):
     """
@@ -583,22 +617,31 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rescaled_M = automatic_initialization_parameters["M"] // coverage_width_cells
     rescaled_max_battery_time = automatic_initialization_parameters["max_battery_time"] * operational_substeps
     
-    rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
-    
+    rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])    
     rescaled_burnmap = pool_burnmap_mean(rescaled_burnmap, coverage_width_cells)
     rescaled_burnmap = np.repeat(rescaled_burnmap, operational_substeps, axis=0)/operational_substeps # we also rescale the probabilities to time scale
     #rescaled_burnmap = rescaled_burnmap.astype(np.float32)
     rescaled_burnmap_filename = custom_initialization_parameters["burnmap_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
     np.save(rescaled_burnmap_filename, rescaled_burnmap)
 
+    rescaled_mask = None
+    rescaled_mask_filename = None
+    if automatic_initialization_parameters["mask_filename"] is not None:
+        rescaled_mask = np.load(automatic_initialization_parameters["mask_filename"])
+        rescaled_mask = pool_mask_min(rescaled_mask, coverage_width_cells)
+        rescaled_mask_filename = automatic_initialization_parameters["mask_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
+        np.save(rescaled_mask_filename, rescaled_mask)
+
     rescaled_automatic_initialization_parameters = automatic_initialization_parameters.copy()
     rescaled_automatic_initialization_parameters["N"] = rescaled_N
     rescaled_automatic_initialization_parameters["M"] = rescaled_M
     rescaled_automatic_initialization_parameters["max_battery_time"] = rescaled_max_battery_time
     rescaled_automatic_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
+    rescaled_automatic_initialization_parameters["mask_filename"] = rescaled_mask_filename
 
     rescaled_custom_initialization_parameters = custom_initialization_parameters.copy()
     rescaled_custom_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
+    rescaled_custom_initialization_parameters["mask_filename"] = rescaled_mask_filename
 
     # 2. Get ground sensor locations and convert them back to the original size
     ground_sensor_locations_opt_scale, charging_stations_locations_opt_scale =  sensor_placement_strategy(rescaled_automatic_initialization_parameters, rescaled_custom_initialization_parameters).get_locations()
@@ -1147,7 +1190,7 @@ def benchmark_on_sim2real_dataset_precompute(dataset_folder_name, ground_placeme
 
         # load the selected_scenarios.txt file and check the failed percentage
         print("checking if there is not too many discarded scenarios")
-        failed_percentage = 1
+        failed_percentage = 0
         selected_scenarios_file = layout_folder + "/selected_scenarios.txt"
         if os.path.exists(selected_scenarios_file):
             with open(selected_scenarios_file, "r") as f:
@@ -1278,7 +1321,7 @@ def benchmark_on_sim2real_dataset_precompute_parallel(dataset_folder_name, groun
 
             #  Check discarded scenario rate
             print("checking if there is not too many discarded scenarios")
-            failed_percentage = 1
+            failed_percentage = 0
             selected_scenarios_file = os.path.join(layout_folder, "selected_scenarios.txt")
             if os.path.exists(selected_scenarios_file):
                 try:

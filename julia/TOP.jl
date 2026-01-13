@@ -1434,16 +1434,18 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
 end
 
 function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
-    # Create plural version for function calls that expect plural
+    # TODO rename the parameter name in the function calls that expect plural
     ChargingStations = ChargingStation
     
     # println("Starting CPA...")
     # Initial upper bound (UB) and initial PSO lower bound (LB)
+    # TODO in this function, use BFS-based get_drone_gridpoints
     GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
     
     # UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
     
     # Create cost matrix c for greedy comparison
+    # TODO here compute the distance matrix using BFS / get it from the previous function call
     n_nodes = length(coords)
     c = Dict{Tuple{Int,Int}, Float64}()
     
@@ -1487,11 +1489,13 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
 
     # Print the initial PSO solution routes
     # print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
+    # TODO here the patching has to avoid blocked cells !
     tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations,n_drones)
     # fallback mechanism: if one of the tours is empty, we use a greedy solution
     for s in 1:n_drones
         if length(tours_coordinates[s]) < 3
             println("WARNING:We use the FALLBACK SOLUTION for drone $s")
+            # TODO here the fallback solution has to avoid blocked cells !
             tours_coordinates[s] = get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, max_battery_time, n_drones, initial_drone_positions)
         end
     end
@@ -2019,6 +2023,9 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
    # Create GridpointsDronesDetecting for use in extensions
    _, N, M = size(risk_pertime)
    I = [(x, y) for x in 1:N for y in 1:M] # All feasible grid points
+   # TODO add mask filtering here
+   # TODO Change here to use BFS--based get_drone_gridpoints
+   # TODO might not matter much given the small size of the grid, but we re-compute the following sets in the CPA_multiple_depots function...
    GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
    GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
    GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set))

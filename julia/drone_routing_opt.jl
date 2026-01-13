@@ -71,9 +71,11 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
 
     # Precomputing the closest distance to a charging station for each gridpoint
     precomputed_closest_distance_to_charging_station = closest_distances(ChargingStations, GridpointsDrones)
+
     
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+
     
     # Defining the variables using simple integers for position indices
     # Transform grid points to integer indices
@@ -141,7 +143,7 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     # Objective
     @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
 
-######
+
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
     next_move_constraints = ConstraintRef[]
@@ -1010,7 +1012,7 @@ function new_create_index_routing_model(risk_pertime_file, n_drones, ChargingSta
     # Objective
     @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
 
-######
+
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
     next_move_constraints = ConstraintRef[]
@@ -1336,3 +1338,154 @@ end
 # )
 # println("Next move plan:")
 # println(next_plan)
+
+
+
+##### MASKED VERSION #####
+
+struct IndexRoutingModel
+    model::Model
+    a::Array{VariableRef, 3}
+    c::Array{VariableRef, 3}
+    b::Array{VariableRef, 2}
+    theta::Array{VariableRef, 2}
+    init_constraints::Vector{ConstraintRef}
+    next_move_constraints::Vector{ConstraintRef}
+    GridpointsDrones::Vector{Tuple{Int,Int}}
+    ChargingStations::Vector{Tuple{Int,Int}}
+    GridpointsDronesDetecting::Vector{Tuple{Int,Int}}
+    risk_pertime_file::String
+    T::Int
+    n_drones::Int
+    grid_to_idx::Dict{Tuple{Int,Int}, Int}
+    charging_map::Dict{Int, Int}
+    max_battery_time::Int
+end
+
+function create_index_routing_model_masked(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time, mask_filename)
+    println("Creating index routing model")
+    t1 = time_ns() / 1e9
+
+    # Load burn map and extract dimensions
+    risk_pertime = load_burn_map(risk_pertime_file)
+    H, N, M = size(risk_pertime)
+    T = optimization_horizon
+    # println("N: ", N)
+    # println("M: ", M)
+    # println("T: ", T)
+    if H == 1 # we duplicate the risk per time for 100 time steps
+        println("Warning: risk_pertime has shape (1,N,M), we duplicate it for 100 time steps")
+        risk_pertime = repeat(risk_pertime, 100, 1, 1)
+        H = 100
+    end
+    for (x,y) in ChargingStations
+        println("risk_pertime[1,x,y]: ", risk_pertime[1,x,y])
+    end
+    # Convert Python lists of tuples to Julia Vector of tuples if needed
+    ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStations]
+    GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
+    GroundStationSet = Set(GroundStations)  # faster lookup
+
+    if mask_filename != nothing
+        mask = load_mask(mask_filename)
+    else
+        mask = ones(N, M)
+    end
+        
+    I = [(x, y) for x in 1:N for y in 1:M if mask[x,y] == 1] # All feasible grid points
+    
+    # Get grid points and convert from Set to Vector
+    # Use BFS-based get_drone_gridpoints that accounts for blocked cells
+    GridpointsDrones_set, distance_dict = get_drone_gridpoints_BFS(ChargingStations, floor(max_battery_time/2), I, N, M)
+    # print max value of distance_dict
+    println("max value of distance_dict: ", maximum(values(distance_dict)))
+    GridpointsDrones = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDrones_set)) # All feasible grid points for drones
+    GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
+    GridpointsDronesDetecting_set = setdiff(GridpointsDronesDetecting_set, GroundStations) 
+    GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set)) # All feasible grid points for drones minus the grid points in which a ground sensor or charging station is placed
+
+    # Precomputing the closest distance to a charging station for each gridpoint
+    # Use the distances computed during BFS instead of recomputing
+    precomputed_closest_distance_to_charging_station = [distance_dict[point] for point in GridpointsDrones]
+
+
+    
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    
+    # Defining the variables using simple integers for position indices
+    # Transform grid points to integer indices
+    grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
+    
+    # Create variables with integer indices
+    a = @variable(model, [i=1:length(GridpointsDrones), t=1:T, s=1:n_drones], Bin) # Variable denoting if drone s flies at grid point i at time t
+    c = @variable(model, [j=1:length(ChargingStations), t=1:T, s=1:n_drones], Bin) # Variable denoting if drnoe s charges at grid point i at time t
+    b = @variable(model, [t=1:T, s=1:n_drones], Int) # Variable denoting the battery of drone s at time t, defined as the # of time steps drone s can operate without recharging
+    theta = @variable(model, [t=1:T, k=1:length(GridpointsDronesDetecting)], Bin) # Variable denoting if grid point k is covered by a drone at time t    
+
+    # Constraints
+
+    # Each drone either charges or flies, not both
+    @constraint(model, [t=1:T, s=1:n_drones], sum(a[i,t,s] for i=1:length(GridpointsDrones)) + sum(c[j,t,s] for j=1:length(ChargingStations)) == 1)
+    
+    # Map each grid point to its neighbors using integer indices
+    neighbors_map = Dict()
+    for (i, point) in enumerate(GridpointsDrones)
+        neighbors_idx = [grid_to_idx[p] for p in GridpointsDrones if p in neighbors_and_point(point) && haskey(grid_to_idx, p)]
+        neighbors_map[i] = neighbors_idx
+    end
+    
+    # Charging stations map
+    charging_map = Dict()
+    for (i, point) in enumerate(ChargingStations)
+        charging_map[i] = grid_to_idx[point]
+    end
+    
+    # A drone can only fly or charge at location j at time t+1 if itw as charging already in the same location or the drnoe was in a neighboring location at time t
+    for (j, point) in enumerate(ChargingStations)
+        i = grid_to_idx[point]
+        for t in 1:T-1, s in 1:n_drones
+            @constraint(model, c[j,t+1,s] + a[i,t+1,s] <= sum(a[k,t,s] for k in neighbors_map[i]) + c[j,t,s])
+        end
+    end
+    
+    for i_idx in 1:length(GridpointsDrones)
+        point = GridpointsDrones[i_idx]
+        if !(point in ChargingStations)  # If not a charging station
+            for t in 1:T-1, s in 1:n_drones
+                @constraint(model, a[i_idx,t+1,s] <= sum(a[k,t,s] for k in neighbors_map[i_idx]))
+            end
+        end
+    end
+    
+    # Min/max battery level constraints
+    @constraint(model, [t=1:T, s=1:n_drones], 0 <= b[t,s] <= max_battery_time)
+    
+    # Battery dynamics
+    @constraint(model, [s in 1:n_drones, t in 1:T], b[t,s] >= max_battery_time*sum(c[i,t,s] for i in 1:length(ChargingStations)))
+    @constraint(model, [t in 1:T-1, s in 1:n_drones], 
+        b[t+1,s] <= b[t,s] - 1 + (max_battery_time+1) * sum(c[i,t+1,s] for i in 1:length(ChargingStations)))
+
+    # No suicide constraint
+    @constraint(model, [s=1:n_drones, i_idx=1:length(GridpointsDrones)], 
+                b[T,s] >= a[i_idx,T,s]*precomputed_closest_distance_to_charging_station[i_idx])
+
+    # Coverage constraints 
+    @constraint(model, [t=1:T, k=1:length(GridpointsDronesDetecting), s=1:n_drones], theta[t,k] >= a[grid_to_idx[GridpointsDronesDetecting[k]],t,s]) # it's not the same k! We link with the grid coordinates.
+    @constraint(model, [k=1:length(GridpointsDronesDetecting)], theta[1,k] <= sum(a[grid_to_idx[GridpointsDronesDetecting[k]],1,s] for s=1:n_drones))
+    @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] <= sum(a[grid_to_idx[GridpointsDronesDetecting[k]],t,s] for s=1:n_drones) + theta[t-1,k])
+    @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) 
+    
+    # Objective
+    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+
+
+    # Initialize constraint containers
+    init_constraints = ConstraintRef[]
+    next_move_constraints = ConstraintRef[]
+    t2 = time_ns() / 1e9
+    println("Model created in ", t2 - t1, " seconds")
+    println(ChargingStations)
+    return IndexRoutingModel(model, a, c, b, theta, init_constraints, next_move_constraints, 
+                        GridpointsDrones, ChargingStations, GridpointsDronesDetecting, risk_pertime_file, T, n_drones, grid_to_idx, charging_map, max_battery_time)
+end

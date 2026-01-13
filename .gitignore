@@ -39,3 +39,5 @@ tmp*
 experiments.ipynb
 experiments_2.ipynb
 experiments.py
+MiniTractDataset*
+notebooks/*Fire*

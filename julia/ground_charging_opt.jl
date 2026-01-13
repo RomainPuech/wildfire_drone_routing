@@ -13,12 +13,16 @@
 # Pkg.add("NPZ")
 # Pkg.add("NearestNeighbors")
 # Pkg.add("Statistics")
+# Pkg.add("AxisArrays")
+# Pkg.add("Cairo")
+
 using SparseArrays, Pkg, MAT, CSV, DataFrames, Distances, SparseArrays, Random, Plots, Gurobi, JuMP, NPZ, Statistics
 
 include("helper_functions.jl")
 
 function load_parameters(risk_pertime_file)
     risk_pertime, _ = load_burn_map(risk_pertime_file)
+    println("risk_pertime dimensions: ", size(risk_pertime), ndims(risk_pertime))
     T, N, _ = size(risk_pertime)
     M = N
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -104,7 +108,7 @@ end
 
 
 
-function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y) # next variant: we add how many drones are in the area
+function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y, mask_file) # next variant: we add how many drones are in the area
 
     # kernel is a map (dx,dy) -> value that gives you the coverage if you are dx,dy away from the charging station, |dx| <= kernel_size_x, |dy| <= kernel_size_y
 
@@ -126,10 +130,17 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
         static_map = static_map[1,:,:]
     end
 
+    if !isnothing(mask_file) && mask_file != ""
+        mask = load_mask(mask_file)
+    else
+        mask = ones(N, M)
+    end
+
     # Grid points
     I = [(x, y) for x in 1:N for y in 1:M]
     
-    I_prime = I # Feasible grid points for ground stations
+    I_prime = [(i[1], i[2]) for i in findall(mask .> 0.0)] # Feasible grid points for ground stations
+    println("I_prime number of points: ", length(I_prime))
     I_second = I_prime #Feasible grid points for charging stations
     I_common = intersect(I_prime, I_second)
     I_charging_only = setdiff(I_second, I_common)
@@ -173,13 +184,22 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
     # end
     # @constraint(model, [i in I], theta[i] >= coverage[i]) # coverage constraint on charging stations
     # Single constraint for charging station coverage
-    @constraint(model, [(i_point,j_point) in I], 
+    # Split into two cases: points in I_prime and points not in I_prime
+    @constraint(model, [(i_point,j_point) in I; (i_point,j_point) in I_prime], 
         theta[(i_point,j_point)] <= sum(
-            kernel[(-dx,-dy)] * xc[(i_point+dx,j_point+dy)]
+            get(kernel, (-dx,-dy), 0.0) * xc[(i_point+dx,j_point+dy)]
             for dx in max(-i_point+1,-kernel_size_x):min(N-i_point,kernel_size_x)
             for dy in max(-j_point+1,-kernel_size_y):min(M-j_point,kernel_size_y)
-            #if (i_point+dx,j_point+dy) in I_second
+            if (i_point+dx,j_point+dy) in I_second && haskey(kernel, (-dx,-dy))
         ) + xg[(i_point,j_point)]
+    )
+    @constraint(model, [(i_point,j_point) in I; (i_point,j_point) ∉ I_prime], 
+        theta[(i_point,j_point)] <= sum(
+            get(kernel, (-dx,-dy), 0.0) * xc[(i_point+dx,j_point+dy)]
+            for dx in max(-i_point+1,-kernel_size_x):min(N-i_point,kernel_size_x)
+            for dy in max(-j_point+1,-kernel_size_y):min(M-j_point,kernel_size_y)
+            if (i_point+dx,j_point+dy) in I_second && haskey(kernel, (-dx,-dy))
+        )
     )
 
     println("Took ", (time_ns() / 1e9) - time_start, " seconds to create model")
@@ -198,6 +218,271 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
     return selected_x_indices, selected_y_indices
 end
 
+
+"""
+Compute coverage kernel from a single starting point using iterative DP that respects the mask.
+Returns a dictionary mapping (target_x, target_y) -> coverage_probability
+"""
+function compute_masked_kernel_from_point(start_x, start_y, n_steps, mask, N, M)
+    # Initialize DP array
+    dp = zeros(Float64, N, M)
+    dp[start_x, start_y] = 1.0
+    
+    # 8-neighborhood offsets
+    neighbor_offsets = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
+    
+    # Run DP for n_steps iterations
+    for _ in 1:n_steps
+        dp_new = zeros(Float64, N, M)
+        for i in 1:N, j in 1:M
+            if mask[i, j] > 0  # Only process valid cells
+                # Collect valid neighbors
+                valid_neighbors = []
+                for (di, dj) in neighbor_offsets
+                    ni, nj = i + di, j + dj
+                    if 1 <= ni <= N && 1 <= nj <= M && mask[ni, nj] > 0
+                        push!(valid_neighbors, (ni, nj))
+                    end
+                end
+                # Include staying in place
+                push!(valid_neighbors, (i, j))
+                
+                # Accumulate probability from valid neighbors
+                for (ni, nj) in valid_neighbors
+                    dp_new[i, j] += dp[ni, nj] / length(valid_neighbors)
+                end
+            end
+        end
+        dp = dp_new
+    end
+    
+    # Normalize by the value at the origin (for consistency with convolution approach)
+    origin_value = dp[start_x, start_y]
+    if origin_value > 0
+        dp = dp ./ origin_value
+    end
+    
+    # Return as dictionary mapping (x, y) -> coverage
+    result = Dict{Tuple{Int,Int}, Float64}()
+    for i in 1:N, j in 1:M
+        if dp[i, j] > 1e-10  # Only store non-negligible values
+            result[(i, j)] = min(dp[i, j], 1.0)
+        end
+    end
+    
+    return result
+end
+
+
+"""
+Max_Coverage_Kernel_Masked: Sensor placement optimization with mask-aware coverage kernels.
+
+Arguments:
+- static_map_file: Path to the risk/static map file
+- N_grounds: Number of ground sensors to place
+- N_charging: Number of charging stations to place
+- n_drones: Number of drones
+- kernel: Pre-computed kernel (used if recompute_kernel=false)
+- kernel_size_x, kernel_size_y: Kernel dimensions
+- mask_file: Path to mask file (cells with mask=0 are blocked)
+- recompute_kernel: If true, compute per-location kernels using masked DP
+- n_steps: Number of DP steps for kernel computation (only used if recompute_kernel=true)
+"""
+function Max_Coverage_Kernel_Masked(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=63)
+
+    time_start = time_ns() / 1e9 
+    time_preprocessing_start = time_ns() / 1e9
+
+    # Load burn map and extract dimensions
+    static_map = load_burn_map(static_map_file)
+    T, N, M = size(static_map)
+
+    println("static_map_file=", static_map_file)
+    println("recompute_kernel=", recompute_kernel)
+    
+    if T != 1 
+        println("static_map_file must be a single time step, averaging first 10 steps")
+        avg_risk = zeros(N, M)
+        for i in 1:N, j in 1:M
+            avg_risk[i,j] = (1/min(10,T)) * sum(static_map[t,i,j] for t in 1:min(10,T))
+        end
+        static_map = avg_risk
+    else
+        static_map = static_map[1,:,:]
+    end
+
+    # Load mask
+    if !isnothing(mask_file) && mask_file != ""
+        mask = load_mask(mask_file)
+    else
+        mask = ones(N, M)
+    end
+
+    # Grid points
+    I = [(x, y) for x in 1:N for y in 1:M]
+    
+    # All feasible grid points (where mask > 0)
+    I_all_feasible = [(i[1], i[2]) for i in findall(mask .> 0.0)]
+    println("Total feasible points: ", length(I_all_feasible))
+    
+    # ========== PRE-FILTERING FOR EFFICIENCY ==========
+    # Keep top 20% candidates to reduce problem size
+    candidate_percentile = 0.80  # Keep top 20% (above 80th percentile)
+    
+    # --- Filter ground sensor candidates by immediate cell risk (top 20%) ---
+    ground_risks = [(loc, static_map[loc...]) for loc in I_all_feasible]
+    ground_risk_values = [r for (_, r) in ground_risks]
+    ground_risk_threshold = length(ground_risk_values) > 0 ? quantile(ground_risk_values, candidate_percentile) : 0.0
+    I_prime = [loc for (loc, risk) in ground_risks if risk >= ground_risk_threshold]
+    println("Ground sensor candidates (top 20% by immediate risk): ", length(I_prime), " / ", length(I_all_feasible))
+    
+    # --- Filter charging station candidates by coverage potential (top 20%) ---
+    # Coverage potential = sum of (kernel_weight × risk) for all reachable cells
+    charging_potentials = Dict{Tuple{Int,Int}, Float64}()
+    for (cx, cy) in I_all_feasible
+        coverage_potential = 0.0
+        # Sum kernel-weighted risk over all cells reachable from this location
+        for dx in max(-cx + 1, -kernel_size_x):min(N - cx, kernel_size_x)
+            for dy in max(-cy + 1, -kernel_size_y):min(M - cy, kernel_size_y)
+                target_x, target_y = cx + dx, cy + dy
+                if 1 <= target_x <= N && 1 <= target_y <= M
+                    kernel_weight = get(kernel, (dx, dy), 0.0)
+                    if kernel_weight > 0
+                        coverage_potential += kernel_weight * static_map[target_x, target_y]
+                    end
+                end
+            end
+        end
+        charging_potentials[(cx, cy)] = coverage_potential
+    end
+    
+    charging_potential_values = collect(values(charging_potentials))
+    charging_potential_threshold = length(charging_potential_values) > 0 ? quantile(charging_potential_values, candidate_percentile) : 0.0
+    I_second = [loc for (loc, potential) in charging_potentials if potential >= charging_potential_threshold]
+    println("Charging station candidates (top 20% by coverage potential): ", length(I_second), " / ", length(I_all_feasible))
+    
+    # Safety check: ensure we have enough candidates
+    if length(I_prime) < N_grounds
+        println("WARNING: Not enough ground sensor candidates ($(length(I_prime))) for N_grounds=$N_grounds. Using all feasible points.")
+        I_prime = I_all_feasible
+    end
+    if length(I_second) < N_charging
+        println("WARNING: Not enough charging station candidates ($(length(I_second))) for N_charging=$N_charging. Using all feasible points.")
+        I_second = I_all_feasible
+    end
+    
+    # Compute set intersections (use Sets for faster membership checking)
+    I_prime_set = Set(I_prime)
+    I_second_set = Set(I_second)
+    I_common = [loc for loc in I_prime if loc in I_second_set]
+    I_ground_only = [loc for loc in I_prime if !(loc in I_second_set)]
+    
+    println("Common candidates: ", length(I_common))
+    println("Ground-only candidates: ", length(I_ground_only))
+
+    # If recompute_kernel is true, compute per-location kernels using masked DP
+    # Now only for the filtered I_second candidates
+    per_location_kernels = Dict{Tuple{Int,Int}, Dict{Tuple{Int,Int}, Float64}}()
+    if recompute_kernel
+        println("Computing per-location kernels using masked DP (n_steps=$n_steps)...")
+        kernel_start_time = time_ns() / 1e9
+        for (idx, (cx, cy)) in enumerate(I_second)
+            per_location_kernels[(cx, cy)] = compute_masked_kernel_from_point(cx, cy, n_steps, mask, N, M)
+            if idx % 100 == 0
+                println("  Computed kernel for $idx / $(length(I_second)) locations")
+            end
+        end
+        println("Kernel computation took ", (time_ns() / 1e9) - kernel_start_time, " seconds")
+    end
+
+    time_preprocessing_end = time_ns() / 1e9
+    println("Preprocessing took ", time_preprocessing_end - time_preprocessing_start, " seconds")
+    
+    time_model_creation_start = time_ns() / 1e9
+
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    
+    # Variables 
+    xg = @variable(model, [i in I_prime], Bin) # ground sensor variables
+    xc = @variable(model, [i in I_second], Bin) # charging station variables
+    nc = @variable(model, [i in I_second], Int) # number of drones from charging station i
+    theta = @variable(model, [i in I]) # coverage variables
+
+    # Objective - maximize coverage
+    @objective(model, Max, 
+        sum(static_map[point...] * theta[point] for point in I))
+
+    # Placement constraints
+    @constraint(model, [i in I_common], xg[i] + xc[i] <= 1) # exclusion constraint
+    @constraint(model, sum(xg) == N_grounds) # Capacity constraint on the ground sensors
+    @constraint(model, sum(xc) == N_charging) # Capacity constraint on the charging stations   
+    @constraint(model, sum(nc) == n_drones) # we use all the drones
+
+    # linking constraint
+    @constraint(model, [i in I_second], nc[i] <= n_drones * xc[i])
+
+    # Coverage constraints
+    @constraint(model, [i in I], 0 <= theta[i] <= 1)
+    @constraint(model, [i in I_ground_only], theta[i] >= xg[i])
+    
+    if recompute_kernel
+        # Use per-location kernels computed with masked DP
+        @constraint(model, [(i_point, j_point) in I; (i_point, j_point) in I_prime_set], 
+            theta[(i_point, j_point)] <= sum(
+                get(per_location_kernels[(cx, cy)], (i_point, j_point), 0.0) * xc[(cx, cy)]
+                for (cx, cy) in I_second
+                if haskey(per_location_kernels[(cx, cy)], (i_point, j_point))
+            ) + xg[(i_point, j_point)]
+        )
+        @constraint(model, [(i_point, j_point) in I; (i_point, j_point) ∉ I_prime_set], 
+            theta[(i_point, j_point)] <= sum(
+                get(per_location_kernels[(cx, cy)], (i_point, j_point), 0.0) * xc[(cx, cy)]
+                for (cx, cy) in I_second
+                if haskey(per_location_kernels[(cx, cy)], (i_point, j_point))
+            )
+        )
+    else
+        # Use the provided fixed kernel (same as original Max_Coverage_Kernel)
+        @constraint(model, [(i_point, j_point) in I; (i_point, j_point) in I_prime_set], 
+            theta[(i_point, j_point)] <= sum(
+                get(kernel, (-dx, -dy), 0.0) * xc[(i_point + dx, j_point + dy)]
+                for dx in max(-i_point + 1, -kernel_size_x):min(N - i_point, kernel_size_x)
+                for dy in max(-j_point + 1, -kernel_size_y):min(M - j_point, kernel_size_y)
+                if (i_point + dx, j_point + dy) in I_second_set && haskey(kernel, (-dx, -dy))
+            ) + xg[(i_point, j_point)]
+        )
+        @constraint(model, [(i_point, j_point) in I; (i_point, j_point) ∉ I_prime_set], 
+            theta[(i_point, j_point)] <= sum(
+                get(kernel, (-dx, -dy), 0.0) * xc[(i_point + dx, j_point + dy)]
+                for dx in max(-i_point + 1, -kernel_size_x):min(N - i_point, kernel_size_x)
+                for dy in max(-j_point + 1, -kernel_size_y):min(M - j_point, kernel_size_y)
+                if (i_point + dx, j_point + dy) in I_second_set && haskey(kernel, (-dx, -dy))
+            )
+        )
+    end
+
+    time_model_creation_end = time_ns() / 1e9
+    println("Model creation took ", time_model_creation_end - time_model_creation_start, " seconds")
+
+    time_solve_start = time_ns() / 1e9
+    optimize!(model)
+    time_solve_end = time_ns() / 1e9
+    println("Solving took ", time_solve_end - time_solve_start, " seconds")
+
+    # Extract selected sensor and charging station placements
+    selected_x_indices = [(i[1] - 1, i[2] - 1) for i in I_prime if value(xg[i]) > 0.5] 
+    selected_y_indices = [(i[1] - 1, i[2] - 1) for i in I_second if value(xc[i]) > 0.5]
+
+    println("\n=== TIMING SUMMARY ===")
+    println("  Preprocessing:   ", round(time_preprocessing_end - time_preprocessing_start, digits=2), " seconds")
+    println("  Model creation:  ", round(time_model_creation_end - time_model_creation_start, digits=2), " seconds")
+    println("  Solving:         ", round(time_solve_end - time_solve_start, digits=2), " seconds")
+    println("  TOTAL:           ", round((time_ns() / 1e9) - time_start, digits=2), " seconds")
+    println("======================\n")
+    
+    return selected_x_indices, selected_y_indices
+end
 
 
 # using ImageFiltering  # For the equivalent of scipy.ndimage.convolve

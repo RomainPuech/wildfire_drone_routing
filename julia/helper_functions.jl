@@ -17,6 +17,17 @@ function load_burn_map(filename, static_map=false)
     end
 end
 
+function load_mask(filename)
+    try
+        mask = npzread(filename)
+        mask_bool = mask .> 0.0
+        return mask_bool
+    catch e
+        error("Error loading mask: $e for filename $filename")
+    end
+end
+
+
 function L_inf_distance(a,b)
     """
     Returns the L-infinity distance between a and b in R^n
@@ -202,6 +213,81 @@ function get_drone_gridpoints(charging_stations, n, I)
     return covered_points
 end
 
+function get_drone_gridpoints_BFS(charging_stations, n, I, N, M)
+    """
+    Returns the set of points in I that are within BFS distance n from any charging station,
+    along with their closest distances to charging stations.
+    Uses BFS to compute distances, accounting for blocked cells (points not in I).
+    Optimized to stop BFS early when distances exceed n.
+
+    Arguments:
+    - charging_stations: List of tuples representing the (x, y) locations of charging stations.
+    - n: Maximum BFS distance for coverage.
+    - I: Set of all feasible grid points (where mask[x,y] == 1).
+    - N, M: Grid dimensions (number of rows and columns).
+
+    Returns:
+    - Tuple of (covered_points, distance_dict) where:
+      - covered_points: Set of (x, y) points in I that are within BFS distance n from any charging station.
+      - distance_dict: Dictionary mapping each point in covered_points to its BFS distance to the nearest charging station.
+    """
+    inbounds(x, y) = 1 <= x <= N && 1 <= y <= M
+    neighbors(x,y) = (x+1,y), (x-1,y), (x, y+1), (x, y-1), (x+1,y+1), (x+1,y-1), (x-1,y+1), (x-1,y-1)
+    
+    # Compute blocked cells: all points in the grid that are not in I
+    all_grid_points = Set([(x, y) for x in 1:N for y in 1:M])
+    blocked = setdiff(all_grid_points, I)
+    
+    # Initialize distance array and queue
+    dist = fill(Inf, N, M)
+    Q = Queue{Tuple{Int,Int}}()
+    covered_points = Set()
+    distance_dict = Dict{Tuple{Int,Int}, Float64}()
+    
+    # Initialize all stations as sources
+    for (sx,sy) in charging_stations
+        if inbounds(sx,sy) && !((sx,sy) in blocked)
+            dist[sx,sy] = 0
+            enqueue!(Q, (sx,sy))
+            if (sx,sy) in I
+                push!(covered_points, (sx,sy))
+                distance_dict[(sx,sy)] = 0.0
+            end
+        end
+    end
+    
+    # BFS with early stopping
+    # Since BFS processes points in non-decreasing distance order, we can stop
+    # expanding once we reach points at distance > n
+    while !isempty(Q)
+        (x,y) = dequeue!(Q)
+        dxy = dist[x,y]
+        
+        # Only process neighbors if current distance is less than n
+        # (neighbors of points at distance n would be at distance n+1, which we don't need)
+        if dxy < n
+            # Process neighbors
+            for (nx,ny) in neighbors(x,y)
+                if inbounds(nx,ny) && !((nx,ny) in blocked) && isinf(dist[nx,ny])
+                    new_dist = dxy + 1
+                    # Only enqueue and record points at distance <= n
+                    if new_dist <= n
+                        dist[nx,ny] = new_dist
+                        enqueue!(Q, (nx,ny))
+                        if (nx,ny) in I
+                            push!(covered_points, (nx,ny))
+                            distance_dict[(nx,ny)] = Float64(new_dist)
+                        end
+                    end
+                    # If new_dist > n, we don't enqueue it, effectively stopping BFS expansion
+                end
+            end
+        end
+    end
+    
+    return (covered_points, distance_dict)
+end
+
 function get_drone_gridpoints_using_neighbors(charging_stations, n, I)
     """
     Returns the set of points covered by charging stations within L-infinity distance n.
@@ -321,4 +407,51 @@ function closest_distance(neighbors, point, metric="linf")
         end
     end
     return min_dist
+end
+
+
+
+using DataStructures: Queue
+
+function BFS(points, stations, blocked, W, H)
+    """
+    Computes the shortest (fewest steps) distance from every point in a grid to the nearest charging station, using 8-neighborhood BFS.
+
+    Arguments:
+    - points: list of grid points where you want to know the distance 
+    - stations: list of grid points that are charging stations
+    - blocked: set of cells the drone cannot fly over
+    - W, H: grid width and height (number of columns and rows)
+
+    Returns:
+    - A vector of minimum step distances (same order as 'points'), or Inf if unreachable.
+    """
+
+    inbounds(x, y) = 1 <= x <= W && 1 <= y <= H
+    neighbors(x,y) = (x+1,y), (x-1,y), (x, y+1), (x, y-1), (x+1,y+1), (x+1,y-1), (x-1,y+1), (x-1,y-1)
+
+    dist = fill(Inf, W, H)
+    Q = Queue{Tuple{Int,Int}}()
+
+    #initialize all stations as sources
+    for (sx,sy) in stations
+        if inbounds(sx,sy) && !((sx,sy) in blocked)
+            dist[sx,sy] = 0
+            enqueue!(Q, (sx,sy))
+        end
+    end
+
+    # BFS
+    while !isempty(Q)
+        (x,y) = dequeue!(Q)
+        dxy = dist[x,y]
+        for (nx,ny) in neighbors(x,y)
+            if inbounds(nx,ny) && !((nx,ny) in blocked) && isinf(dist[nx,ny])
+                dist[nx,ny] = dxy + 1
+                enqueue!(Q, (nx,ny))
+            end
+        end
+    end
+
+    return [ inbounds(x,y) ? dist[x,y] : Inf for (x,y) in points ]
 end
