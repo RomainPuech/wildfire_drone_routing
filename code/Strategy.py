@@ -3492,6 +3492,229 @@ class DroneRoutingTOPGrowingProba(DroneRoutingTOP):
     burnmap_handeling_type = "growing_proba"
 
 
+class DroneRoutingTOPMasked(DroneRoutingStrategy):
+    strategy_name = "DroneRoutingTOPMasked"
+    burnmap_handeling_type = "fixed_reset"
+    """
+    Drone routing strategy that uses a Team Orienteering Problem (TOP) approach with mask support.
+    Blocked cells (where mask == 0) are avoided during routing.
+    """
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        automatic_initialization_parameters: dict with keys:
+            "N": Grid height
+            "M": Grid width
+            "max_battery_distance": int
+            "max_battery_time": int
+            "n_drones": int
+            "n_ground_stations": Target number of ground stations
+            "n_charging_stations": Target number of charging stations
+            "ground_sensor_locations": list of tuples (x,y)
+            "charging_stations_locations": list of tuples (x,y)
+        custom_initialization_parameters: dict with keys:
+            "burnmap_filename": burn map file name
+            "mask_filename": mask file name (optional, points where mask == 0 are blocked)
+            "reevaluation_step": number of steps between calls to julia optimization model
+            "optimization_horizon": number of steps to optimize for
+        """
+        # Assign parameters
+        self.automatic_initialization_parameters = automatic_initialization_parameters
+        self.custom_initialization_parameters = custom_initialization_parameters
+        self.call_counter = 0  # Keeping track of how many times we call the function
+        self.t = 0 # current timestep
+        self.current_solution = None
+        self.routing_model = None  # Will store the reusable JuMP model
+        self.mask_filename = custom_initialization_parameters.get("mask_filename", None)
+        self.call_ID = random.randint(0, 1000000)
+        self.burnmap_type = custom_initialization_parameters.get("burnmap_type", "static")
+    
+        # Validate required parameters
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+        self.initial_burnmap = load_scenario(self.custom_initialization_parameters["burnmap_filename"])
+        self.current_burnmap = self.initial_burnmap.copy()
+        if self.burnmap_type == "static":
+            # duplicate the data to go from shape (1,N,M) to shape (100,N,M)
+            self.current_burnmap = np.tile(self.current_burnmap, (200, 1, 1))
+            self.initial_burnmap = np.tile(self.initial_burnmap, (200, 1, 1))
+        else:
+            print(f"careful: burnmap_type is not static, it is {self.burnmap_type}")
+        
+
+        self.len_burnmap = self.initial_burnmap.shape[0]
+        self.current_burnmap_filename = "./tmp_burnmaps/tmp_burnmap_" + str(self.call_ID) + ".npy"
+        # create the tmp_burnmaps folder if it doesn't exist
+        if not os.path.exists("./tmp_burnmaps"):
+            os.makedirs("./tmp_burnmaps")
+        self.automatic_initialization_parameters["burnmap_filename"] = self.current_burnmap_filename
+
+        self.current_burnmap+=1e-8
+        save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+
+        # reevaluation step is equal to the max battery time
+        self.reevaluation_step = self.automatic_initialization_parameters["max_battery_time"]
+
+       
+        self.reset_time = custom_initialization_parameters.get("reset_time", 2*63)
+        self.reset_time_periods = self.reset_time // self.reevaluation_step
+        print(f"reset_time_periods: {self.reset_time_periods}")
+        self.data_time_resolution = automatic_initialization_parameters.get("data_time_resolution", 1)
+        
+        # Store original charging stations as class attribute
+        self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
+        
+        # Convert to Julia indexing (Python 0-based → Julia 1-based)
+        self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
+        self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
+        self.execution_time = 0
+        self.saving_time = 0
+        
+    def get_initial_drone_locations(self):
+        """
+        Returns the initial locations of the drones after creating the optimization model
+        and solving the initial routing problem.
+        """
+        print("Creating initial TOP plan via Julia CPA solver (with mask support)")
+        print("--- parameters for Julia (1-based indexing) ---")
+        print(f"burnmap_filename: {self.current_burnmap_filename}")
+        print(f"mask_filename: {self.mask_filename}")
+        print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
+        print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
+        print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
+
+        start_time = time.time()
+        self.current_solution = jl.compute_TOP_plan_multiple_depots(
+            self.current_burnmap_filename,
+            self.automatic_initialization_parameters["n_drones"],
+            self.julia_charging_stations_locations,
+            self.julia_ground_sensor_locations,
+            self.automatic_initialization_parameters["max_battery_time"],
+            0, # t = 0 for the initial plan
+            False,  # verbose=False to disable Julia plots
+            [], # initial_drone_positions
+            self.mask_filename  # Pass mask filename to Julia
+        )
+        #print(f"current solution: {self.current_solution}")
+        self.execution_time += time.time() - start_time
+        print(f"execution time for initial plan: {self.execution_time}")
+        # print(f"current_solution (Julia indexing): {self.current_solution}")
+        
+        # Convert to Python indexing (Julia 1-based → Python 0-based)
+        self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
+                                 for code, (x, y) in plan] for plan in self.current_solution]
+        
+        # Extract initial positions from the first step of the solution
+        # Extract full action tuples from step 0
+
+        initial_positions = self.current_solution[0]
+        self.call_counter = 0
+        
+        print("Initial optimisation finished")
+        print(f"initial_positions: {initial_positions}")
+        #print(f"current solution: {self.current_solution}")
+
+        print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
+
+
+        return initial_positions#, self.current_burnmap_filename
+    
+
+        
+        
+    def next_actions(self, automatic_step_parameters:dict, custom_step_parameters:dict):
+        """
+        automatic_step_parameters: dict with keys:
+            "drone_locations": list of tuples (x,y)
+            "drone_batteries": list of tuples (distance,time)
+            "drone_states": list of strings "charge" or "fly"
+            "t": int
+        custom_step_parameters: dict 
+        Returns:
+            actions: list of tuples (action_type, action_parameters)
+        """
+        self.t += 1
+        # Every reevaluation_step calls, recompute the solution using the existing model
+        if self.call_counter == self.reevaluation_step:
+            self.call_counter = 0
+            # save the current burnmap
+            start_time = time.time()
+            save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+            self.saving_time += time.time() - start_time
+            # print("Solving next move with model reuse (integer indexing)")
+            
+            # Convert drone locations to Julia indexing
+            #julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+            
+            # print("--- parameters for julia (Julia indexing) ---")
+            # print(f"drone_locations: {julia_drone_locations}")
+            # print(f"drone_states: {automatic_step_parameters['drone_states']}")
+            # print(f"drone_batteries: {automatic_step_parameters['drone_batteries']}")
+            # print("--- end of parameters ---")
+
+            # Solve next move with the existing model
+            julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+            print("current drone locations in julia indexing are:", julia_drone_locations)
+            # if drone are not on charging stations, we raise an error # TODO, put this in julia instead of here
+            for drone_location in julia_drone_locations:
+                if drone_location not in self.julia_charging_stations_locations:
+                    raise ValueError(f"Drone is not on a charging station: {drone_location}")
+            
+            start_time = time.time()
+            self.current_solution = jl.compute_TOP_plan_multiple_depots(
+                self.current_burnmap_filename,
+                self.automatic_initialization_parameters["n_drones"],
+                self.julia_charging_stations_locations,
+                self.julia_ground_sensor_locations,
+                self.automatic_initialization_parameters["max_battery_time"],
+                self.t,
+                False,  # verbose=False to disable Julia plots
+                julia_drone_locations,
+                self.mask_filename  # Pass mask filename to Julia
+            )
+            print(f"execution time for next move: {time.time() - start_time}")
+            self.execution_time += time.time() - start_time
+            #print("Next move optimization finished")
+            # print("current solution (Julia indexing)")
+            # print(self.current_solution)
+
+            # Convert to Python indexing
+            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
+                                     for code, (x, y) in plan] for plan in self.current_solution]
+            # uopdate the burnmap
+
+            
+
+
+        # Return the appropriate step from the pre-computed plan
+        self.call_counter += 1
+        idx = self.call_counter
+        assert idx < len(self.current_solution), f"idx={idx} is greater than the number of steps in the solution={len(self.current_solution)}. reevaluation_step={self.reevaluation_step}"
+        # print(f"[debug] returning plan step {self.call_counter} of {len(self.current_solution)}")
+        # update the burnmap: set every visited cell to 0
+        for action in self.current_solution[idx]:
+            if action[0] == "fly":
+                # What we do here with the burn map depends on `burnmap_handeling_type`. If it is "fixed_reset", we reset the burn map to 0 for the next reset_time steps. If it is "growing", we set it to 0 forever and add the initial burnmap to the current burnmap.
+                if self.burnmap_handeling_type == "fixed_reset":
+                    # in the case of TOP, we don't reset for the next reset_time steps, but rather reset for the time left until the next reevaluation (as the only time steps of the burn map actually used are the ones on the re-optimization times)
+                    time_left_until_next_reevaluation = self.reevaluation_step - self.t % self.reevaluation_step
+                    self.current_burnmap[self.t:min(self.t+time_left_until_next_reevaluation + (self.reset_time_periods-1)*self.reevaluation_step,self.current_burnmap.shape[0]),action[1][0], action[1][1]] = 0
+                elif self.burnmap_handeling_type == "growing" or self.burnmap_handeling_type == "growing_proba":
+                    self.current_burnmap[self.t:,action[1][0], action[1][1]] = 0
+                else:
+                    raise ValueError(f"Invalid burnmap_handeling_type: {self.burnmap_handeling_type}")
+                #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+        # if t is a multiple of the data time resolution, we update the whole burn map
+        if self.t % self.data_time_resolution == 0:
+            if self.burnmap_handeling_type == "growing":
+                self.current_burnmap[self.t:] += self.initial_burnmap[self.t] #TODO adapt to dynamic map
+            elif self.burnmap_handeling_type == "growing_proba": # this is assuming independence though
+                self.current_burnmap[self.t:] = 1 - (1 - self.current_burnmap[self.t]) * (1 - self.initial_burnmap[self.t])
+            save_burn_map(self.current_burnmap, self.current_burnmap_filename)
+
+
+        return self.current_solution[idx]
+
+
 class TestStrategy(RandomDroneRoutingStrategy):
     strategy_name = "TestStrategy"
 

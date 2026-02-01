@@ -30,6 +30,8 @@ mutable struct PSOiA_TOP_multiple_depots
     customers::Vector{Tuple{Int,Int}}  # Customer coordinates
     profits::Vector{Float64}       # Customer profits
     costs::Dict{Tuple{Int,Int}, Float64}  # Travel costs
+    left_neighbors::Dict{Int, Vector{Int}}  # Left neighbors
+    node_to_position::Vector{Dict{Int, Int}}  # For each particle, maps node to its position in the permutation
     accessible_customers::Vector{Int}  # Indices of accessible customers
     depot_coord::Vector{Tuple{Int,Int}}    # Depot coordinates
     closest_depot_distance::Vector{Float64}  # Pre-computed min return distance to closest depot (Chebyshev)
@@ -187,6 +189,11 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
     if n == 0
         return 0.0, Vector{Vector{Int}}()
     end
+    
+    # Debug: log when fast_split is called with large permutations
+    # if n > 50
+    #     println("[FAST_SPLIT-DEBUG] Called with large permutation: n=$n, first 10=$(permutation[1:min(10, n)]), costs_dict_size=$(length(pso_multiple_depots.costs))")
+    # end
 
     # start_time_phase_1 = time()
     
@@ -194,6 +201,10 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
     P = zeros(n)  # Profit of saturated tour starting at position i
     succ = zeros(Int, n)  # First successor of saturated tour starting at position i
     tour_lengths = zeros(Int, n)  # Length of each saturated tour
+    
+    # Debug: track missing costs
+    missing_costs_count = 0
+    missing_costs_pairs = Tuple{Int,Int}[]
     
     for i in 1:n # HERE! instead of 1:n, you could i += (j-i)... (but then you say can never go from a node to a depot (which is fine?)) #TODO
         # if i is a not a depot, skip
@@ -214,7 +225,14 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
         # Build maximal feasible tour starting from position i
         while j <= n
             customer_idx = permutation[j]
-            travel_cost = get(pso_multiple_depots.costs, (prev_customer, customer_idx), L*4)
+            cost_key = (prev_customer, customer_idx)
+            if !haskey(pso_multiple_depots.costs, cost_key)
+                missing_costs_count += 1
+                if missing_costs_count <= 5  # Only store first 5 for logging
+                    push!(missing_costs_pairs, cost_key)
+                end
+            end
+            travel_cost = get(pso_multiple_depots.costs, cost_key, L*4)
             # Feasibility: ensure we can still return to the closest depot using precomputed distance
             return_distance = pso_multiple_depots.closest_depot_distance[customer_idx]
             current_cost += travel_cost
@@ -314,6 +332,14 @@ function fast_split_with_routes_multiple_depots(permutation::Vector{Int}, pso_mu
     #     println("relative time: $(time_phase_3 / (time_phase_1 + time_phase_2 + time_phase_3))")
     #     println("n: $n")
     # end
+    
+    # Log missing costs if any
+    if missing_costs_count > 0
+        println("[FAST_SPLIT-DEBUG] WARNING: $missing_costs_count missing cost entries (using default L*4=$(L*4))")
+        if !isempty(missing_costs_pairs)
+            println("[FAST_SPLIT-DEBUG] First few missing pairs: $(missing_costs_pairs[1:min(5, length(missing_costs_pairs))])")
+        end
+    end
 
     return Γ[1, m + 1], routes
 end
@@ -327,9 +353,26 @@ function fast_split_multiple_depots(permutation::Vector{Int}, pso_multiple_depot
 end
 
 """
+Compute node-to-position mapping for a given permutation
+Returns a dictionary mapping each node to its position (1-indexed) in the permutation
+"""
+function compute_node_to_position(permutation::Vector{Int})
+    node_to_pos = Dict{Int, Int}()
+    for (pos, node) in enumerate(permutation)
+        node_to_pos[node] = pos
+    end
+    return node_to_pos
+end
+
+"""
 Initialize particle swarm
 """
-function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool = true)
+function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool = true; skip_idch::Bool = false)
+    total_start_time = time()
+    
+    # === Phase 1: Random Initialization ===
+    println("\n[SWARM INIT] Phase 1: Random initialization ($(pso.swarm_size) particles)")
+    random_start = time()
     for i in 1:pso.swarm_size
         # Create random permutation of accessible customers
         position = shuffle(pso.accessible_customers)
@@ -344,6 +387,10 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
         
         push!(pso.swarm, particle)
         
+        # Compute and store node-to-position mapping for this particle
+        node_to_pos = compute_node_to_position(position)
+        push!(pso.node_to_position, node_to_pos)
+        
         # Update global best
         if profit > pso.global_best_profit
             pso.global_best = copy(position)
@@ -351,51 +398,171 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
             # println("Initial swarm: New best = $(round(pso.global_best_profit, digits=3))")
         end
     end
+    random_time = time() - random_start
+    println("[SWARM INIT] Phase 1 completed in $(round(random_time, digits=3))s (best profit: $(round(pso.global_best_profit, digits=3)))")
     
-    # Initialize some particles with IDCH heuristic (better quality)
+    # === Phase 2: IDCH Heuristic Initialization ===
     n_idch = min(5, pso.swarm_size ÷ 2)
-    for i in 1:n_idch
-        position = idch_heuristic(pso, false)  # Fast version
-        profit = fast_split_multiple_depots(position, pso)
-        
-        pso.swarm[i].position = copy(position)
-        pso.swarm[i].local_best = copy(position)
-        pso.swarm[i].local_best_profit = profit
-        pso.swarm[i].current_profit = profit
-        
-        if profit > pso.global_best_profit
-            pso.global_best = copy(position)
-            pso.global_best_profit = profit
-            # println("IDCH initialization: New best = $(round(pso.global_best_profit, digits=3)), Solution: $(pso.global_best)")
+    if n_idch > 0 && !skip_idch
+        println("\n[SWARM INIT] Phase 2: IDCH heuristic initialization ($n_idch particles)")
+        idch_start = time()
+        for i in 1:n_idch
+            idch_particle_start = time()
+            position = idch_heuristic(pso, false)  # Fast version
+            profit, routes = fast_split_with_routes_multiple_depots(position, pso)
+            
+            # Calculate profit breakdown per route
+            route_profits = Float64[]
+            route_lengths = Int[]
+            route_customer_counts = Int[]
+            total_customers = 0
+            for (drone_idx, route) in enumerate(routes)
+                route_profit = 0.0
+                route_customers = 0
+                for customer_idx in route
+                    # Skip depot nodes (artificial node 0 and depot nodes > n_pure_customers)
+                    if customer_idx > 0 && customer_idx <= pso.n_pure_customers
+                        route_profit += pso.profits[customer_idx]
+                        route_customers += 1
+                    end
+                end
+                push!(route_profits, route_profit)
+                push!(route_lengths, length(route))
+                push!(route_customer_counts, route_customers)
+                total_customers += route_customers
+            end
+            
+            pso.swarm[i].position = copy(position)
+            pso.swarm[i].local_best = copy(position)
+            pso.swarm[i].local_best_profit = profit
+            pso.swarm[i].current_profit = profit
+            
+            # Update node-to-position mapping for this particle
+            pso.node_to_position[i] = compute_node_to_position(position)
+            
+            # Print detailed information
+            println("  [IDCH] Particle $i:")
+            println("    - Position length: $(length(position)), first 5 customers: $(position[1:min(5, length(position))])")
+            println("    - Total profit: $(round(profit, digits=6))")
+            println("    - Number of routes: $(length(routes))")
+            println("    - Total customers visited: $total_customers")
+            for (drone_idx, route_profit) in enumerate(route_profits)
+                println("    - Route $drone_idx: profit=$(round(route_profit, digits=6)), length=$(route_lengths[drone_idx]), customers=$(route_customer_counts[drone_idx])")
+                if length(routes[drone_idx]) <= 20
+                    println("      Path: $(routes[drone_idx])")
+                else
+                    println("      Path (first 10): $(routes[drone_idx][1:10]) ... (last 5): $(routes[drone_idx][(end-4):end])")
+                end
+            end
+            println("    - Time: $(round(time() - idch_particle_start, digits=3))s")
+            
+            if profit > pso.global_best_profit
+                pso.global_best = copy(position)
+                pso.global_best_profit = profit
+                println("    - Status: NEW BEST")
+            else
+                println("    - Status: Profit = $(round(profit, digits=6))")
+            end
         end
+        idch_time = time() - idch_start
+        println("[SWARM INIT] Phase 2 completed in $(round(idch_time, digits=3))s")
     end
     
-    # Initialize two particles with greedy fallback solutions (highest quality)
+    # === Phase 3: Greedy Fallback Initialization ===
     if pso.swarm_size >= 2 && use_greedy_init
-        positions = initialize_with_greedy_fallback_two(pso)
+        # Store best profit before greedy phase for comparison (from IDCH or random if IDCH skipped)
+        best_profit_before_greedy = pso.global_best_profit
+        
+        println("\n[SWARM INIT] Phase 3: Greedy fallback initialization (2 particles)")
+        greedy_start = time()
+        positions, expected_profits = initialize_with_greedy_fallback_two(pso)
+        greedy_compute_time = time() - greedy_start
+        println("[SWARM INIT] Greedy solutions computed in $(round(greedy_compute_time, digits=3))s")
         
         # Replace the last two particles with the greedy solutions
+        # IMPORTANT: Use expected_profits from greedy route building, NOT fast_split!
+        # This is because greedy routes use actual path distances, while fast_split uses L-infinity costs.
+        eval_start = time()
+        best_greedy_profit = -Inf
+        best_greedy_idx = 0
+        
         for (idx, position) in enumerate(positions)
             particle_index = pso.swarm_size - (2 - idx)  # Last two particles
-            profit = fast_split_multiple_depots(position, pso)
+            
+            # Use the expected profit from greedy route building directly
+            profit = expected_profits[idx]
+            
+            # Debug: Check position before evaluation
+            println("  [GREEDY-DEBUG] Particle $idx: position length = $(length(position)), first 5 = $(position[1:min(5, length(position))])")
+            println("  [GREEDY-DEBUG] Particle $idx: expected profit from greedy = $(round(profit, digits=6))")
+            
+            # Also compute fast_split profit for comparison (but don't use it)
+            fast_split_profit, routes = fast_split_with_routes_multiple_depots(position, pso)
+            println("  [GREEDY-DEBUG] Particle $idx: fast_split profit = $(round(fast_split_profit, digits=6)) (NOT USED)")
+            if fast_split_profit < profit * 0.5
+                println("  [GREEDY-DEBUG] Particle $idx: NOTE: fast_split gives much lower profit because it uses L-infinity costs,")
+                println("                               but greedy routes were built with actual path distances through intermediate cells.")
+            end
             
             pso.swarm[particle_index].position = copy(position)
             pso.swarm[particle_index].local_best = copy(position)
             pso.swarm[particle_index].local_best_profit = profit
             pso.swarm[particle_index].current_profit = profit
             
+            # Update node-to-position mapping for this particle
+            pso.node_to_position[particle_index] = compute_node_to_position(position)
+            
+            # Track best greedy solution
+            if profit > best_greedy_profit
+                best_greedy_profit = profit
+                best_greedy_idx = idx
+            end
+            
             if profit > pso.global_best_profit
                 pso.global_best = copy(position)
                 pso.global_best_profit = profit
-                println("Greedy fallback initialization $(idx): New best = $(round(pso.global_best_profit, digits=3))")
+                println("  [GREEDY] Particle $idx: New best = $(round(pso.global_best_profit, digits=6))")
             else
-                println("Greedy fallback initialization $(idx): No improvement, best profit: $(round(pso.global_best_profit, digits=3)), greedy profit: $(round(profit, digits=3))")
+                println("  [GREEDY] Particle $idx: Profit = $(round(profit, digits=6))")
             end
         end
+        
+        # Print summary comparison
+        println("\n  [GREEDY] === GREEDY SOLUTION SUMMARY ($(pso.n_drones) drones) ===")
+        println("  [GREEDY] Best greedy solution (particle $best_greedy_idx):")
+        println("    - Total profit: $(round(best_greedy_profit, digits=6))")
+        println("    - (Note: profit calculated from greedy route building, not fast_split)")
+        println("  [GREEDY] Comparison with previous best:")
+        println("    - Previous best profit: $(round(best_profit_before_greedy, digits=6))")
+        println("    - Greedy best profit: $(round(best_greedy_profit, digits=6))")
+        if best_greedy_profit > best_profit_before_greedy && best_profit_before_greedy > 0
+            improvement = best_greedy_profit - best_profit_before_greedy
+            improvement_pct = 100.0 * improvement / best_profit_before_greedy
+            println("    - Greedy is BETTER by $(round(improvement, digits=6)) ($(round(improvement_pct, digits=1))% improvement)")
+        elseif best_greedy_profit > best_profit_before_greedy
+            println("    - Greedy is BETTER (previous was 0)")
+        elseif best_greedy_profit < best_profit_before_greedy
+            gap = best_profit_before_greedy - best_greedy_profit
+            gap_pct = 100.0 * gap / best_profit_before_greedy
+            println("    - Previous best is BETTER by $(round(gap, digits=6)) ($(round(gap_pct, digits=1))% gap)")
+        else
+            println("    - Greedy and previous best are EQUAL")
+        end
+        println("  [GREEDY] ===========================================\n")
+        
+        eval_time = time() - eval_start
+        println("[SWARM INIT] Phase 3 evaluation completed in $(round(eval_time, digits=3))s")
+        println("[SWARM INIT] Phase 3 total time: $(round(greedy_compute_time + eval_time, digits=3))s")
     elseif pso.swarm_size >= 1 && use_greedy_init
-        # Fallback to single greedy initialization if swarm size is 1
+        println("\n[SWARM INIT] Phase 3: Greedy fallback initialization (1 particle)")
+        greedy_start = time()
         position = initialize_with_greedy_fallback(pso)
+        greedy_compute_time = time() - greedy_start
+        println("[SWARM INIT] Greedy solution computed in $(round(greedy_compute_time, digits=3))s")
+        
+        eval_start = time()
         profit = fast_split_multiple_depots(position, pso)
+        eval_time = time() - eval_start
         
         # Replace the last particle with the greedy solution
         pso.swarm[end].position = copy(position)
@@ -403,14 +570,22 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
         pso.swarm[end].local_best_profit = profit
         pso.swarm[end].current_profit = profit
         
+        # Update node-to-position mapping for this particle
+        pso.node_to_position[end] = compute_node_to_position(position)
+        
         if profit > pso.global_best_profit
             pso.global_best = copy(position)
             pso.global_best_profit = profit
-            println("Greedy fallback initialization: New best = $(round(pso.global_best_profit, digits=3))")
+            println("  [GREEDY] New best = $(round(pso.global_best_profit, digits=3)) (eval time: $(round(eval_time, digits=3))s)")
         else
-            println("Greedy fallback initialization: No improvement, best profit: $(round(pso.global_best_profit, digits=3)), greedy profit: $(round(profit, digits=3))")
+            println("  [GREEDY] Profit = $(round(profit, digits=3)) (eval time: $(round(eval_time, digits=3))s)")
         end
+        println("[SWARM INIT] Phase 3 total time: $(round(greedy_compute_time + eval_time, digits=3))s")
     end
+    
+    total_time = time() - total_start_time
+    println("\n[SWARM INIT] Total initialization time: $(round(total_time, digits=3))s")
+    println("[SWARM INIT] Final best profit: $(round(pso.global_best_profit, digits=3))\n")
 end
 
 """
@@ -418,6 +593,11 @@ Initialize two particles using greedy fallback solutions where the second takes 
 """
 function initialize_with_greedy_fallback_two(pso::PSOiA_TOP_multiple_depots)
     try
+        total_start = time()
+        
+        # === Setup: Create Risk Map ===
+        setup_start = time()
+        println("  [GREEDY] Step 1: Creating risk map from customer profits")
         # Create a synthetic risk map where profits correspond to risk values
         # The greedy fallback expects a 3D array with dimensions (time, x, y)
         # We'll create a simple grid based on customer coordinates
@@ -430,12 +610,31 @@ function initialize_with_greedy_fallback_two(pso::PSOiA_TOP_multiple_depots)
         risk_pertime = zeros(1, max_x, max_y)
         
         # Set risk values based on customer profits
+        test_point = (36, 46)  # The point the user added with high profit
+        test_point_found = false
+        test_point_profit = 0.0
+        test_point_customer_idx = 0
         for i in 1:pso.n_pure_customers
             if i <= length(pso.customers) && i <= length(pso.profits)
                 coord = pso.customers[i]
                 if coord[1] > 0 && coord[2] > 0 && coord[1] <= max_x && coord[2] <= max_y
                     risk_pertime[1, coord[1], coord[2]] = pso.profits[i]
+                    if coord == test_point
+                        test_point_found = true
+                        test_point_profit = pso.profits[i]
+                        test_point_customer_idx = i
+                        println("  [GREEDY-DEBUG] Test point $test_point found as customer $i with profit: $(test_point_profit)")
+                    end
                 end
+            end
+        end
+        if !test_point_found
+            println("  [GREEDY-DEBUG] WARNING: Test point $test_point is NOT in the customer list!")
+            println("  [GREEDY-DEBUG] Checking if it would be accessible if it were a customer...")
+            # Check if it would be accessible if it were a customer
+            if test_point[1] > 0 && test_point[1] <= max_x && test_point[2] > 0 && test_point[2] <= max_y
+                println("  [GREEDY-DEBUG] Test point $test_point is within grid bounds ($max_x, $max_y)")
+                # Check distance to charging stations (we'll get ChargingStation below)
             end
         end
         
@@ -445,131 +644,303 @@ function initialize_with_greedy_fallback_two(pso::PSOiA_TOP_multiple_depots)
         # Extract ChargingStation from depot coordinates
         ChargingStation = pso.depot_coord
         
+        # Check accessibility if point was found
+        if test_point_found
+            println("  [GREEDY-DEBUG] Checking accessibility of test point $test_point...")
+            for (idx, cs) in enumerate(ChargingStation)
+                dist = max(abs(test_point[1] - cs[1]), abs(test_point[2] - cs[2]))
+                return_dist = dist  # Same distance to return
+                total_dist = dist + return_dist
+                accessible = total_dist <= pso.max_battery_time
+                println("  [GREEDY-DEBUG] Distance from charging station $idx ($cs) to $test_point: $dist, round trip: $total_dist (battery limit: $(pso.max_battery_time), accessible: $accessible)")
+            end
+            # Check if it's in accessible_customers
+            if test_point_customer_idx in pso.accessible_customers
+                println("  [GREEDY-DEBUG] Test point IS in accessible_customers list")
+            else
+                println("  [GREEDY-DEBUG] WARNING: Test point is NOT in accessible_customers list!")
+            end
+        else
+            # Check distance to charging stations even if not a customer
+            for (idx, cs) in enumerate(ChargingStation)
+                dist = max(abs(test_point[1] - cs[1]), abs(test_point[2] - cs[2]))
+                return_dist = dist
+                total_dist = dist + return_dist
+                println("  [GREEDY-DEBUG] Distance from charging station $idx ($cs) to $test_point: $dist, round trip: $total_dist (battery limit: $(pso.max_battery_time))")
+            end
+        end
+        
         # Empty ground stations for this case
         GroundStations = Tuple{Int,Int}[]
+        setup_time = time() - setup_start
+        println("  [GREEDY] Step 1 completed in $(round(setup_time, digits=3))s")
         
         # === FIRST SOLUTION ===
-        # Empty existing tours for the first solution
+        println("  [GREEDY] Step 2: Computing first greedy solution for $(pso.n_drones) drones")
+        first_solution_start = time()
+        # Generate routes for all drones sequentially
+        greedy_routes_first = Vector{Vector{Tuple{Int,Int}}}()
         tours_coordinates_first = [Tuple{Int,Int}[] for _ in 1:pso.n_drones]
         
-        # Call greedy fallback solution for first particle
-        greedy_route_first = get_greedy_fallback_solution(
-            risk_pertime, 
-            tours_coordinates_first, 
-            GridpointsDronesDetecting, 
-            ChargingStation, 
-            GroundStations, 
-            pso.max_battery_time, 
-            1,  # Single drone for the greedy solution
-            ChargingStation  # Initial drone positions
-        )
-        
-        # Handle case where greedy_route_first is empty or nothing
-        if isempty(greedy_route_first) || all(coord in ChargingStation for coord in greedy_route_first)
-            println("Warning: First greedy route is empty or only contains depots")
-            greedy_route_first = [ChargingStation[1], ChargingStation[1]]  # Minimal valid route
-        end
-        
-        # Convert first coordinate-based route to customer indices
-        position_first = Int[]
-        for coord in greedy_route_first
-            # Skip depot coordinates - they shouldn't be in the customer list
-            if coord in ChargingStation
-                continue
+        for drone_idx in 1:pso.n_drones
+            println("    [GREEDY] Generating route for drone $drone_idx")
+            drone_start = time()
+            # Call greedy fallback solution for this drone
+            greedy_route = get_greedy_fallback_solution(
+                risk_pertime, 
+                tours_coordinates_first,  # Contains routes for previous drones
+                GridpointsDronesDetecting, 
+                ChargingStation, 
+                GroundStations, 
+                pso.max_battery_time, 
+                1,  # Single drone route
+                ChargingStation  # Initial drone positions
+            )
+            drone_time = time() - drone_start
+            
+            # Handle case where greedy_route is empty or nothing
+            if isempty(greedy_route) || all(coord in ChargingStation for coord in greedy_route)
+                println("    [GREEDY] Warning: Drone $drone_idx route is empty or only contains depots")
+                greedy_route = [ChargingStation[1], ChargingStation[1]]  # Minimal valid route
             end
             
-            # Find the customer index for this coordinate
-            for i in 1:pso.n_pure_customers
-                if i <= length(pso.customers) && pso.customers[i] == coord
-                    if i in pso.accessible_customers
-                        push!(position_first, i)
-                    end
-                    break
-                end
-            end
+            push!(greedy_routes_first, greedy_route)
+            tours_coordinates_first[drone_idx] = greedy_route  # Mark as visited for next drone
+            println("    [GREEDY] Drone $drone_idx route: length=$(length(greedy_route)), time=$(round(drone_time, digits=3))s")
+        end
+        first_solution_time = time() - first_solution_start
+        println("  [GREEDY] Step 2 completed in $(round(first_solution_time, digits=3))s")
+        println("  [GREEDY] First solution routes summary:")
+        for (drone_idx, route) in enumerate(greedy_routes_first)
+            route_customers = [coord for coord in route if !(coord in ChargingStation)]
+            println("    - Drone $drone_idx: $(length(route)) points, $(length(route_customers)) customers")
         end
         
-        # Remove duplicates while preserving order for first solution
-        unique_position_first = Int[]
-        seen_first = Set{Int}()
-        for customer in position_first
-            if !(customer in seen_first)
-                push!(unique_position_first, customer)
-                push!(seen_first, customer)
+        # Calculate expected profit from greedy routes directly (before conversion)
+        expected_profit_first = 0.0
+        customers_in_routes_first = Set{Int}()
+        for (drone_idx, greedy_route) in enumerate(greedy_routes_first)
+            route_profit = 0.0
+            for coord in greedy_route
+                if coord in ChargingStation
+                    continue
+                end
+                # Find customer index and add profit
+                for i in 1:pso.n_pure_customers
+                    if i <= length(pso.customers) && pso.customers[i] == coord
+                        if i in pso.accessible_customers
+                            route_profit += pso.profits[i]
+                            push!(customers_in_routes_first, i)
+                        end
+                        break
+                    end
+                end
             end
+            expected_profit_first += route_profit
+            println("    [GREEDY] Drone $drone_idx route expected profit: $(round(route_profit, digits=6))")
         end
+        println("    [GREEDY] Total expected profit from greedy routes: $(round(expected_profit_first, digits=6))")
+        
+        # Convert each drone's route to customer indices, keeping them separate
+        println("  [GREEDY] Step 3: Converting first solution to customer indices (per-drone)")
+        convert_first_start = time()
+        
+        # Get depot indices for separating routes
+        depot_indices = collect((pso.n_pure_customers + 1):length(pso.customers))
+        
+        # Build position with depot separators: [depot; drone1_customers; depot; drone2_customers; ...]
+        position_first_with_depots = Int[]
+        for (drone_idx, greedy_route) in enumerate(greedy_routes_first)
+            # Add a depot marker before each drone's customers
+            if !isempty(depot_indices)
+                # Use different depots if available, otherwise reuse
+                depot_idx = min(drone_idx, length(depot_indices))
+                push!(position_first_with_depots, depot_indices[depot_idx])
+            end
+            
+            # Add customers for this drone
+            drone_customers = Int[]
+            for coord in greedy_route
+                # Skip depot coordinates
+                if coord in ChargingStation
+                    continue
+                end
+                
+                # Find the customer index for this coordinate
+                for i in 1:pso.n_pure_customers
+                    if i <= length(pso.customers) && pso.customers[i] == coord
+                        if i in pso.accessible_customers
+                            push!(drone_customers, i)
+                        end
+                        break
+                    end
+                end
+            end
+            
+            # Remove duplicates within this drone's route while preserving order
+            seen_in_drone = Set{Int}()
+            for customer in drone_customers
+                if !(customer in seen_in_drone)
+                    push!(position_first_with_depots, customer)
+                    push!(seen_in_drone, customer)
+                end
+            end
+            
+            println("    [GREEDY] Drone $drone_idx: $(length(seen_in_drone)) unique customers")
+        end
+        
+        convert_first_time = time() - convert_first_start
+        
+        # Calculate profit from the converted position
+        position_profit_first = sum(pso.profits[c] for c in position_first_with_depots if c > 0 && c <= pso.n_pure_customers; init=0.0)
+        customer_count_first = sum(1 for c in position_first_with_depots if c > 0 && c <= pso.n_pure_customers)
+        println("  [GREEDY] Step 3 completed in $(round(convert_first_time, digits=3))s")
+        println("    [GREEDY] Converted position: $(length(position_first_with_depots)) total elements ($customer_count_first customers + $(length(depot_indices)) depots)")
+        println("    [GREEDY] Position profit (sum of customer profits): $(round(position_profit_first, digits=6))")
+        println("    [GREEDY] Customers in routes: $(length(customers_in_routes_first)), in position: $customer_count_first")
+        
+        unique_position_first = position_first_with_depots
         
         # === SECOND SOLUTION ===
-        # Now create tours_coordinates with the first solution to inform the second
-        tours_coordinates_second = [Tuple{Int,Int}[] for _ in 1:pso.n_drones]
-        if !isempty(greedy_route_first)
-            tours_coordinates_second[1] = greedy_route_first  # First drone uses the first solution
-        end
+        println("  [GREEDY] Step 4: Computing second greedy solution for $(pso.n_drones) drones (avoiding first)")
+        second_solution_start = time()
+        # Generate routes for all drones sequentially, avoiding first solution
+        greedy_routes_second = Vector{Vector{Tuple{Int,Int}}}()
+        tours_coordinates_second = deepcopy(tours_coordinates_first)  # Start with first solution marked as visited
         
-        # Call greedy fallback solution for second particle, taking first solution into account
-        greedy_route_second = get_greedy_fallback_solution(
-            risk_pertime, 
-            tours_coordinates_second,  # This now contains the first solution
-            GridpointsDronesDetecting, 
-            ChargingStation, 
-            GroundStations, 
-            pso.max_battery_time, 
-            1,  # Single drone for the greedy solution
-            ChargingStation  # Initial drone positions
-        )
-        
-        # Handle case where greedy_route_second is empty or nothing
-        if isempty(greedy_route_second) || all(coord in ChargingStation for coord in greedy_route_second)
-            println("Warning: Second greedy route is empty or only contains depots")
-            greedy_route_second = [ChargingStation[1], ChargingStation[1]]  # Minimal valid route
-        end
-        
-        # Convert second coordinate-based route to customer indices
-        position_second = Int[]
-        for coord in greedy_route_second
-            # Skip depot coordinates - they shouldn't be in the customer list
-            if coord in ChargingStation
-                continue
+        for drone_idx in 1:pso.n_drones
+            println("    [GREEDY] Generating route for drone $drone_idx (second solution)")
+            drone_start = time()
+            # Call greedy fallback solution for this drone
+            greedy_route = get_greedy_fallback_solution(
+                risk_pertime, 
+                tours_coordinates_second,  # Contains routes for previous drones and first solution
+                GridpointsDronesDetecting, 
+                ChargingStation, 
+                GroundStations, 
+                pso.max_battery_time, 
+                1,  # Single drone route
+                ChargingStation  # Initial drone positions
+            )
+            drone_time = time() - drone_start
+            
+            # Handle case where greedy_route is empty or nothing
+            if isempty(greedy_route) || all(coord in ChargingStation for coord in greedy_route)
+                println("    [GREEDY] Warning: Drone $drone_idx route (second) is empty or only contains depots")
+                greedy_route = [ChargingStation[1], ChargingStation[1]]  # Minimal valid route
             end
             
-            # Find the customer index for this coordinate
-            for i in 1:pso.n_pure_customers
-                if i <= length(pso.customers) && pso.customers[i] == coord
-                    if i in pso.accessible_customers
-                        push!(position_second, i)
+            push!(greedy_routes_second, greedy_route)
+            tours_coordinates_second[drone_idx] = greedy_route  # Mark as visited for next drone
+            println("    [GREEDY] Drone $drone_idx route (second): length=$(length(greedy_route)), time=$(round(drone_time, digits=3))s")
+        end
+        second_solution_time = time() - second_solution_start
+        println("  [GREEDY] Step 4 completed in $(round(second_solution_time, digits=3))s")
+        println("  [GREEDY] Second solution routes summary:")
+        for (drone_idx, route) in enumerate(greedy_routes_second)
+            route_customers = [coord for coord in route if !(coord in ChargingStation)]
+            println("    - Drone $drone_idx: $(length(route)) points, $(length(route_customers)) customers")
+        end
+        
+        # Calculate expected profit from greedy routes directly (before conversion)
+        expected_profit_second = 0.0
+        customers_in_routes_second = Set{Int}()
+        for (drone_idx, greedy_route) in enumerate(greedy_routes_second)
+            route_profit = 0.0
+            for coord in greedy_route
+                if coord in ChargingStation
+                    continue
+                end
+                # Find customer index and add profit
+                for i in 1:pso.n_pure_customers
+                    if i <= length(pso.customers) && pso.customers[i] == coord
+                        if i in pso.accessible_customers
+                            route_profit += pso.profits[i]
+                            push!(customers_in_routes_second, i)
+                        end
+                        break
                     end
-                    break
                 end
             end
+            expected_profit_second += route_profit
+            println("    [GREEDY] Drone $drone_idx route (second) expected profit: $(round(route_profit, digits=6))")
+        end
+        println("    [GREEDY] Total expected profit from greedy routes (second): $(round(expected_profit_second, digits=6))")
+        
+        # Convert each drone's route to customer indices, keeping them separate
+        println("  [GREEDY] Step 5: Converting second solution to customer indices (per-drone)")
+        convert_second_start = time()
+        
+        # Get depot indices for separating routes
+        depot_indices = collect((pso.n_pure_customers + 1):length(pso.customers))
+        
+        # Build position with depot separators: [depot; drone1_customers; depot; drone2_customers; ...]
+        position_second_with_depots = Int[]
+        for (drone_idx, greedy_route) in enumerate(greedy_routes_second)
+            # Add a depot marker before each drone's customers
+            if !isempty(depot_indices)
+                # Use different depots if available, otherwise reuse
+                depot_idx = min(drone_idx, length(depot_indices))
+                push!(position_second_with_depots, depot_indices[depot_idx])
+            end
+            
+            # Add customers for this drone
+            drone_customers = Int[]
+            for coord in greedy_route
+                # Skip depot coordinates
+                if coord in ChargingStation
+                    continue
+                end
+                
+                # Find the customer index for this coordinate
+                for i in 1:pso.n_pure_customers
+                    if i <= length(pso.customers) && pso.customers[i] == coord
+                        if i in pso.accessible_customers
+                            push!(drone_customers, i)
+                        end
+                        break
+                    end
+                end
+            end
+            
+            # Remove duplicates within this drone's route while preserving order
+            seen_in_drone = Set{Int}()
+            for customer in drone_customers
+                if !(customer in seen_in_drone)
+                    push!(position_second_with_depots, customer)
+                    push!(seen_in_drone, customer)
+                end
+            end
+            
+            println("    [GREEDY] Drone $drone_idx (second): $(length(seen_in_drone)) unique customers")
         end
         
-        # Remove duplicates while preserving order for second solution
-        unique_position_second = Int[]
-        seen_second = Set{Int}()
-        for customer in position_second
-            if !(customer in seen_second)
-                push!(unique_position_second, customer)
-                push!(seen_second, customer)
-            end
-        end
+        convert_second_time = time() - convert_second_start
+        
+        # Calculate profit from the converted position
+        position_profit_second = sum(pso.profits[c] for c in position_second_with_depots if c > 0 && c <= pso.n_pure_customers; init=0.0)
+        customer_count_second = sum(1 for c in position_second_with_depots if c > 0 && c <= pso.n_pure_customers)
+        println("  [GREEDY] Step 5 completed in $(round(convert_second_time, digits=3))s")
+        println("    [GREEDY] Converted position: $(length(position_second_with_depots)) total elements ($customer_count_second customers + $(length(depot_indices)) depots)")
+        println("    [GREEDY] Position profit (sum of customer profits): $(round(position_profit_second, digits=6))")
+        println("    [GREEDY] Customers in routes: $(length(customers_in_routes_second)), in position: $customer_count_second")
+        
+        unique_position_second = position_second_with_depots
         
         # === PROCESS BOTH SOLUTIONS ===
+        println("  [GREEDY] Step 6: Finalizing solutions")
+        finalize_start = time()
         final_positions = []
         
-        # Process first solution
+        # Process first solution (depot markers already included in conversion)
         if !isempty(unique_position_first) && length(unique_position_first) >= 1
-            println("Greedy fallback first generated position with $(length(unique_position_first)) customers")
-            # first 3 nodes:
-            println("first 3 nodes: $(unique_position_first[1:min(3, length(unique_position_first))])")
-            
-            # CRITICAL FIX: Insert depot nodes to make the permutation compatible with fast_split
-            depot_indices = collect((pso.n_pure_customers + 1):length(pso.customers))
-            if !isempty(depot_indices)
-                final_position_first = [depot_indices[1]; unique_position_first]
-                push!(final_positions, final_position_first)
-            else
-                push!(final_positions, unique_position_first)
-            end
+            customer_count = sum(1 for c in unique_position_first if c > 0 && c <= pso.n_pure_customers)
+            depot_count = sum(1 for c in unique_position_first if c > pso.n_pure_customers)
+            println("Greedy fallback first generated position with $(length(unique_position_first)) elements ($customer_count customers + $depot_count depots)")
+            # first 5 nodes:
+            println("first 5 nodes: $(unique_position_first[1:min(5, length(unique_position_first))])")
+            println("  [GREEDY-DEBUG] n_pure_customers: $(pso.n_pure_customers), total customers: $(length(pso.customers))")
+            push!(final_positions, unique_position_first)
         else
             println("Greedy fallback first failed, using random initialization")
             # Ensure we have a valid accessible customers list
@@ -586,20 +957,14 @@ function initialize_with_greedy_fallback_two(pso::PSOiA_TOP_multiple_depots)
             end
         end
         
-        # Process second solution
+        # Process second solution (depot markers already included in conversion)
         if !isempty(unique_position_second) && length(unique_position_second) >= 1
-            println("Greedy fallback second generated position with $(length(unique_position_second)) customers")
-            # first 3 nodes:
-            println("first 3 nodes: $(unique_position_second[1:min(3, length(unique_position_second))])")
-            
-            # CRITICAL FIX: Insert depot nodes to make the permutation compatible with fast_split
-            depot_indices = collect((pso.n_pure_customers + 1):length(pso.customers))
-            if !isempty(depot_indices)
-                final_position_second = [depot_indices[1]; unique_position_second]
-                push!(final_positions, final_position_second)
-            else
-                push!(final_positions, unique_position_second)
-            end
+            customer_count = sum(1 for c in unique_position_second if c > 0 && c <= pso.n_pure_customers)
+            depot_count = sum(1 for c in unique_position_second if c > pso.n_pure_customers)
+            println("Greedy fallback second generated position with $(length(unique_position_second)) elements ($customer_count customers + $depot_count depots)")
+            # first 5 nodes:
+            println("first 5 nodes: $(unique_position_second[1:min(5, length(unique_position_second))])")
+            push!(final_positions, unique_position_second)
         else
             println("Greedy fallback second failed, using random initialization")
             # Ensure we have a valid accessible customers list
@@ -615,8 +980,21 @@ function initialize_with_greedy_fallback_two(pso::PSOiA_TOP_multiple_depots)
                 end
             end
         end
+        finalize_time = time() - finalize_start
+        println("  [GREEDY] Step 6 completed in $(round(finalize_time, digits=3))s")
         
-        return final_positions
+        total_time = time() - total_start
+        println("  [GREEDY] Total greedy fallback time: $(round(total_time, digits=3))s")
+        println("    - Setup: $(round(setup_time, digits=3))s ($(round(100*setup_time/total_time, digits=1))%)")
+        println("    - First solution: $(round(first_solution_time, digits=3))s ($(round(100*first_solution_time/total_time, digits=1))%)")
+        println("    - First conversion: $(round(convert_first_time, digits=3))s ($(round(100*convert_first_time/total_time, digits=1))%)")
+        println("    - Second solution: $(round(second_solution_time, digits=3))s ($(round(100*second_solution_time/total_time, digits=1))%)")
+        println("    - Second conversion: $(round(convert_second_time, digits=3))s ($(round(100*convert_second_time/total_time, digits=1))%)")
+        println("    - Finalization: $(round(finalize_time, digits=3))s ($(round(100*finalize_time/total_time, digits=1))%)")
+        
+        # Return positions AND expected profits (from greedy route building, not fast_split)
+        expected_profits = [expected_profit_first, expected_profit_second]
+        return final_positions, expected_profits
         
     catch e
         println("Error in greedy fallback two initialization: $e")
@@ -636,7 +1014,8 @@ function initialize_with_greedy_fallback_two(pso::PSOiA_TOP_multiple_depots)
                 end
             end
         end
-        return fallback_positions
+        # Return zero expected profits for fallback
+        return fallback_positions, [0.0, 0.0]
     end
 end
 
@@ -675,42 +1054,50 @@ function initialize_with_greedy_fallback(pso::PSOiA_TOP_multiple_depots)
         # Empty ground stations for this case
         GroundStations = Tuple{Int,Int}[]
         
-        # Empty existing tours
+        # Generate routes for all drones sequentially
+        greedy_routes = Vector{Vector{Tuple{Int,Int}}}()
         tours_coordinates = [Tuple{Int,Int}[] for _ in 1:pso.n_drones]
         
-        # Call greedy fallback solution
-        greedy_route = get_greedy_fallback_solution(
-            risk_pertime, 
-            tours_coordinates, 
-            GridpointsDronesDetecting, 
-            ChargingStation, 
-            GroundStations, 
-            pso.max_battery_time, 
-            1,  # Single drone for the greedy solution
-            ChargingStation  # Initial drone positions
-        )
-        
-        # Handle case where greedy_route is empty or nothing
-        if isempty(greedy_route) || all(coord in ChargingStation for coord in greedy_route)
-            println("Warning: Greedy route is empty or only contains depots")
-            greedy_route = [ChargingStation[1], ChargingStation[1]]  # Minimal valid route
-        end
-        
-        # Convert coordinate-based route to customer indices
-        position = Int[]
-        for coord in greedy_route
-            # Skip depot coordinates - they shouldn't be in the customer list
-            if coord in ChargingStation
-                continue
+        for drone_idx in 1:pso.n_drones
+            # Call greedy fallback solution for this drone
+            greedy_route = get_greedy_fallback_solution(
+                risk_pertime, 
+                tours_coordinates,  # Contains routes for previous drones
+                GridpointsDronesDetecting, 
+                ChargingStation, 
+                GroundStations, 
+                pso.max_battery_time, 
+                1,  # Single drone route
+                ChargingStation  # Initial drone positions
+            )
+            
+            # Handle case where greedy_route is empty or nothing
+            if isempty(greedy_route) || all(coord in ChargingStation for coord in greedy_route)
+                println("Warning: Greedy route for drone $drone_idx is empty or only contains depots")
+                greedy_route = [ChargingStation[1], ChargingStation[1]]  # Minimal valid route
             end
             
-            # Find the customer index for this coordinate
-            for i in 1:pso.n_pure_customers
-                if i <= length(pso.customers) && pso.customers[i] == coord
-                    if i in pso.accessible_customers
-                        push!(position, i)
+            push!(greedy_routes, greedy_route)
+            tours_coordinates[drone_idx] = greedy_route  # Mark as visited for next drone
+        end
+        
+        # Convert all routes to customer indices and combine into single permutation
+        position = Int[]
+        for greedy_route in greedy_routes
+            for coord in greedy_route
+                # Skip depot coordinates - they shouldn't be in the customer list
+                if coord in ChargingStation
+                    continue
+                end
+                
+                # Find the customer index for this coordinate
+                for i in 1:pso.n_pure_customers
+                    if i <= length(pso.customers) && pso.customers[i] == coord
+                        if i in pso.accessible_customers
+                            push!(position, i)
+                        end
+                        break
                     end
-                    break
                 end
             end
         end
@@ -972,7 +1359,7 @@ end
 """
 Local search with three neighborhoods
 """
-function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
+function local_search!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_multiple_depots)
     improved = true
     total_time_shift = 0.0
     total_time_swap = 0.0
@@ -992,21 +1379,21 @@ function local_search!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
         for neighborhood in neighborhoods
             if neighborhood == 1  # Shift operator
                 time_before_shift = time()
-                improved = shift_operator!(particle, pso)
+                improved = shift_operator!(particle, particle_idx, pso)
                 time_after_shift = time()
                 total_time_shift += time_after_shift - time_before_shift
                 improved_count_shift += improved ? 1 : 0
                 call_count_shift += 1
             elseif neighborhood == 2  # Swap operator
                 time_before_swap = time()
-                improved = swap_operator!(particle, pso)
+                improved = swap_operator!(particle, particle_idx, pso)
                 time_after_swap = time()
-                total_time_swap += time_after_swap - time_before_swap
+                total_time_swap += time_after_swap - time_after_swap - time_before_swap
                 improved_count_swap += improved ? 1 : 0
                 call_count_swap += 1
             else  # Destruction/repair operator
                 time_before_destruction_repair = time()
-                improved = destruction_repair_operator!(particle, pso)
+                improved = destruction_repair_operator!(particle, particle_idx, pso)
                 time_after_destruction_repair = time()
                 total_time_destruction_repair += time_after_destruction_repair - time_before_destruction_repair
                 improved_count_destruction_repair += improved ? 1 : 0
@@ -1111,25 +1498,46 @@ function is_blocking_once_removed(particle::Particle, i::Int, pso::PSOiA_TOP_mul
 end
 
 """
-Shift operator: move customer to different position
+Shift operator: move node (customer or depot) to different position
+Note: Blocking optimization only applies to customer nodes, not depot nodes,
+since depot nodes are route separators and moving them can improve profit
+by restructuring routes even if they appear "blocking" in terms of cost.
+Updates node-to-position mapping incrementally for efficiency.
 """
-function shift_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
+function shift_operator!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_multiple_depots)
     time_split = 0.0
     start_time = time()
     n = length(particle.position)
     positions = shuffle(1:n)  # Random order evaluation
     
     for i in positions
-        for j in shuffle(setdiff(1:n, [i]))
+        node_i = particle.position[i]
+        is_depot = node_i > pso.n_pure_customers
+
+        # if it's a depot, we iterate over all customers. If not, only over the left neighbors.
+        candidates = Vector{Int}()
+        if is_depot
+            candidates = shuffle(1:n)
+        else
+            candidates = shuffle(pso.left_neighbors[node_i])
+        end
+        
+        for j in shuffle(setdiff(1:n, [i])) # already this is wasteful because the setdiff is not efficient. you can just skip if i ==j, which we do anyway in the is_blocking_once_inserted and is_blocking_once_removed functions. #TODO
             # GRID based optimization: is it worth trying this shift or not?
             # if the shift won't change the current tours, then we don't need to try it
             # easy version first: IF:
             
-            # simplified but equivalent: if moving it blocks both, then we don't try it
-            if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_removed(particle, i, pso)
-                # then we don't try it
-                continue
+            # Only apply blocking optimization to customer nodes (not depot nodes)
+            # Depot nodes are route separators, so moving them can improve profit by restructuring routes
+            # even if they appear "blocking" in terms of cost
+            if !is_depot
+                # simplified but equivalent: if moving it blocks both, then we don't try it
+                if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_removed(particle, i, pso)
+                    # then we don't try it
+                    continue
+                end
             end
+            # For depot nodes, always try the move (they affect route structure, not just cost feasibility)
             # slightly more complex strategy: TODO implement it just after you improved the swap prcedure.
             ##########
             # # if it blocks there, but there was already blocked, the only thing that matters is here.
@@ -1163,6 +1571,25 @@ function shift_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
             if new_profit > particle.current_profit
                 particle.position = new_position
                 particle.current_profit = new_profit
+                
+                # Update node-to-position mapping incrementally (more efficient than recomputing)
+                # When moving from position i to j, positions between min(i,j) and max(i,j) shift
+                node_moved = particle.position[j]
+                if i < j
+                    # Moving forward: positions from i+1 to j shift left by 1
+                    for pos in (i+1):j
+                        node_at_pos = particle.position[pos]
+                        pso.node_to_position[particle_idx][node_at_pos] = pos
+                    end
+                else  # i > j
+                    # Moving backward: positions from j to i-1 shift right by 1
+                    for pos in j:(i-1)
+                        node_at_pos = particle.position[pos]
+                        pso.node_to_position[particle_idx][node_at_pos] = pos
+                    end
+                end
+                pso.node_to_position[particle_idx][node_moved] = j
+                
                 ending_time = time()
                 #println("time to run split: $time_split")
                 #println("time to run shift without split: $(ending_time - start_time - time_split)")
@@ -1178,8 +1605,9 @@ end
 
 """
 Swap operator: exchange two customers
+Updates node-to-position mapping incrementally for efficiency (O(1) update).
 """
-function swap_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
+function swap_operator!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_multiple_depots)
     n = length(particle.position)
     positions = shuffle(1:n)
     pos = particle.position
@@ -1189,10 +1617,15 @@ function swap_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
             if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_inserted(particle, j, i, pso)
                 continue
             end
+            node_at_i = pos[i]
+            node_at_j = pos[j]
             pos[i], pos[j] = pos[j], pos[i]  # trial swap
             new_profit = fast_split_multiple_depots(pos, pso)
             if new_profit > particle.current_profit
                 particle.current_profit = new_profit
+                # Update node-to-position mapping incrementally (O(1) - just 2 updates)
+                pso.node_to_position[particle_idx][node_at_i] = j
+                pso.node_to_position[particle_idx][node_at_j] = i
                 return true  # keep swap; pos already updated
             else
                 pos[i], pos[j] = pos[j], pos[i]  # revert
@@ -1204,8 +1637,9 @@ end
 
 """
 Destruction/repair operator
+Since this creates a new permutation, we recompute the mapping (but only when accepting the change).
 """
-function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP_multiple_depots)
+function destruction_repair_operator!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_multiple_depots)
     n = length(particle.position)
     # Paper specifies: "between 1 and n/m" customers
     max_remove = max(1, n ÷ pso.n_drones)
@@ -1230,6 +1664,8 @@ function destruction_repair_operator!(particle::Particle, pso::PSOiA_TOP_multipl
     if new_profit > particle.current_profit
         particle.position = reconstructed
         particle.current_profit = new_profit
+        # Recompute mapping since we created a new permutation
+        pso.node_to_position[particle_idx] = compute_node_to_position(reconstructed)
         return true
     end
     
@@ -1261,6 +1697,7 @@ function update_local_bests!(pso::PSOiA_TOP_multiple_depots, δ::Float64 = 1e-6)
                     # Replace similar particle
                     pso.swarm[i].local_best = copy(particle.position)
                     pso.swarm[i].local_best_profit = particle.current_profit
+                    # Note: node_to_position tracks current position, not local_best, so no update needed here
                     similar_found = true
                     break
                 end
@@ -1270,6 +1707,7 @@ function update_local_bests!(pso::PSOiA_TOP_multiple_depots, δ::Float64 = 1e-6)
             if !similar_found
                 pso.swarm[worst_idx].local_best = copy(particle.position)
                 pso.swarm[worst_idx].local_best_profit = particle.current_profit
+                # Note: node_to_position tracks current position, not local_best, so no update needed here
             end
         end
         
@@ -1277,6 +1715,8 @@ function update_local_bests!(pso::PSOiA_TOP_multiple_depots, δ::Float64 = 1e-6)
         if particle.current_profit > particle.local_best_profit
             particle.local_best = copy(particle.position)
             particle.local_best_profit = particle.current_profit
+            # Note: node_to_position mapping tracks current position, not local_best
+            # So we don't need to update it here since it's already updated when position changes
         end
         
         # Update global best
@@ -1432,77 +1872,174 @@ end
 Main PSO algorithm adapted for multiple depots
 """
 function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profits::Vector{Float64}, 
-                       costs::Dict{Tuple{Int,Int}, Float64}, n_drones::Int, n_pure_customers::Int,
-                       max_battery_time::Int, depot_coord::Vector{Tuple{Int,Int}} = [(0, 0)];
+                       costs::Dict{Tuple{Int,Int}, Float64}, left_neighbors::Dict{Int, Vector{Int}}, 
+                       n_drones::Int, n_pure_customers::Int,
+                       max_battery_time::Int, depot_coord::Vector{Tuple{Int,Int}} = [(0, 0)],
+                       blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}();
                        swarm_size::Int = 50, max_iterations::Int = 1000, max_time::Float64 = 3600.0,
                        w::Float64 = 0.3, c1::Float64 = 0.5, c2::Float64 = 0.3,
                        ph::Float64 = 0.1, pm::Float64 = 0.3, use_greedy_init::Bool = true)
     # println("Starting solve_PSO_TOP_multiple_depots in TOP_PSO_multi_depot.jl...")
     # Start timing the algorithm execution
     start_time = time()
+    println("[TIME CHECK] Algorithm started: max_time=$(max_time)s")
     
-    # Determine accessible customers using L-infinity distance to closest depot instead of cost matrix
+    # Determine accessible customers
     accessible_customers = Int[]
-    # println("Customers: $(customers)")
-    # println("See, we have the depots above...")
-    for i in 1:length(customers)
-        # Calculate L-infinity distance (minimum hops) to visit customer and return
-        customer_coord = customers[i]
-        min_distance = max_battery_time*2
-        for depot in depot_coord
-            depot_x, depot_y = depot
-            customer_x, customer_y = customer_coord
-            # L-infinity distance: max(|x1-x2|, |y1-y2|)
-            distance_to = max(abs(customer_x - depot_x), abs(customer_y - depot_y)) #+ 4 # +4 because we have the artificial node
-            distance_from = max(abs(customer_x - depot_x), abs(customer_y - depot_y)) #+ 4 # +4 because we have the artificial node
-            if distance_to + distance_from < min_distance
-                min_distance = distance_to + distance_from
-            end
-        end
-            
-        # Check if customer can be visited and returned within battery limit
-        if min_distance <= max_battery_time
-            push!(accessible_customers, i)
-        end
-    end
-    # Precompute closest depot return distance (Chebyshev) for every customer
     closest_depot_distance = Vector{Float64}(undef, length(customers))
-    for i in 1:length(customers)
-        customer_x, customer_y = customers[i]
-        min_d = typemax(Int)
-        for (depot_x, depot_y) in depot_coord
-            d = max(abs(depot_x - customer_x), abs(depot_y - customer_y))
-            if d < min_d
-                min_d = d
+    
+    if !isempty(blocked)
+        # Use BFS-based accessibility when blocked cells exist
+        bfs_start_time = time()
+        elapsed = bfs_start_time - start_time
+        println("[TIME CHECK] Starting BFS computation: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s")
+        
+        # First, determine grid bounds from customer coordinates
+        max_x = max(maximum(coord[1] for coord in customers), maximum(coord[1] for coord in depot_coord))
+        max_y = max(maximum(coord[2] for coord in customers), maximum(coord[2] for coord in depot_coord))
+        N, M = max_x, max_y
+        
+        # Compute BFS distances from all depots to all customers
+        # We use BFS to find actual path distances respecting blocked cells
+        inbounds(x, y) = 1 <= x <= N && 1 <= y <= M
+        neighbors(x,y) = ((x+1,y), (x-1,y), (x, y+1), (x, y-1), (x+1,y+1), (x+1,y-1), (x-1,y+1), (x-1,y-1))
+        
+        # Initialize distance array
+        dist = fill(Inf, N, M)
+        Q = DataStructures.Queue{Tuple{Int,Int}}()
+        
+        # Initialize all depots as sources
+        for (sx,sy) in depot_coord
+            if inbounds(sx,sy) && !((sx,sy) in blocked)
+                dist[sx,sy] = 0
+                DataStructures.enqueue!(Q, (sx,sy))
             end
         end
-        closest_depot_distance[i] = Float64(min_d)
+        
+        # BFS to compute distances with periodic time checks
+        bfs_iterations = 0
+        last_check_time = time()
+        while !isempty(Q)
+            # Periodic time check every 0.5 seconds
+            current_check_time = time()
+            if current_check_time - last_check_time > 0.5
+                elapsed = current_check_time - start_time
+                remaining = max_time - elapsed
+                queue_size = length(Q)
+                println("[TIME CHECK] BFS in progress: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(remaining, digits=2))s, queue_size=$queue_size, iterations=$bfs_iterations")
+                if elapsed > max_time
+                    println("[TIME CHECK] Time limit exceeded during BFS! Stopping.")
+                    return pso.global_best, pso.global_best_profit, pso
+                end
+                last_check_time = current_check_time
+            end
+            
+            (x,y) = DataStructures.dequeue!(Q)
+            dxy = dist[x,y]
+            for (nx,ny) in neighbors(x,y)
+                if inbounds(nx,ny) && !((nx,ny) in blocked) && isinf(dist[nx,ny])
+                    dist[nx,ny] = dxy + 1
+                    DataStructures.enqueue!(Q, (nx,ny))
+                end
+            end
+            bfs_iterations += 1
+        end
+        bfs_end_time = time()
+        elapsed = bfs_end_time - start_time
+        println("[TIME CHECK] BFS completed: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s, iterations=$bfs_iterations")
+        
+        # Check accessibility for each customer using BFS distances
+        for i in 1:length(customers)
+            customer_coord = customers[i]
+            customer_x, customer_y = customer_coord
+            
+            if inbounds(customer_x, customer_y) && !isinf(dist[customer_x, customer_y])
+                bfs_distance = dist[customer_x, customer_y]
+                closest_depot_distance[i] = bfs_distance
+                
+                # Check if customer can be visited and returned within battery limit (2 * distance for round trip)
+                if 2 * bfs_distance <= max_battery_time
+                    push!(accessible_customers, i)
+                end
+            else
+                closest_depot_distance[i] = Inf
+            end
+        end
+    else
+        # Original L-infinity distance based accessibility
+        for i in 1:length(customers)
+            # Calculate L-infinity distance (minimum hops) to visit customer and return
+            customer_coord = customers[i]
+            min_distance = max_battery_time*2
+            for depot in depot_coord
+                depot_x, depot_y = depot
+                customer_x, customer_y = customer_coord
+                # L-infinity distance: max(|x1-x2|, |y1-y2|)
+                distance_to = max(abs(customer_x - depot_x), abs(customer_y - depot_y))
+                distance_from = max(abs(customer_x - depot_x), abs(customer_y - depot_y))
+                if distance_to + distance_from < min_distance
+                    min_distance = distance_to + distance_from
+                end
+            end
+                
+            # Check if customer can be visited and returned within battery limit
+            if min_distance <= max_battery_time
+                push!(accessible_customers, i)
+            end
+        end
+        
+        # Precompute closest depot return distance (Chebyshev) for every customer
+        for i in 1:length(customers)
+            customer_x, customer_y = customers[i]
+            min_d = typemax(Int)
+            for (depot_x, depot_y) in depot_coord
+                d = max(abs(depot_x - customer_x), abs(depot_y - customer_y))
+                if d < min_d
+                    min_d = d
+                end
+            end
+            closest_depot_distance[i] = Float64(min_d)
+        end
     end
+    elapsed = time() - start_time
+    println("[TIME CHECK] After accessibility check: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s")
     println("accessible_customers: $(length(accessible_customers))")
     println("n_pure_customers: $(n_pure_customers)")
+    
+    # Initialize PSO with empty vector of node-to-position mappings
+    # This will be populated during swarm initialization
+    node_to_position_vec = Dict{Int, Int}[]
+    
     # Initialize PSO
     pso = PSOiA_TOP_multiple_depots(
         Particle[], Int[], -Inf, swarm_size, max_iterations,
         w, c1, c2, ph, pm, n_drones, n_pure_customers, max_battery_time,
-        customers, profits, costs, accessible_customers, depot_coord, closest_depot_distance
+        customers, profits, costs, left_neighbors, node_to_position_vec,
+        accessible_customers, depot_coord, closest_depot_distance
     )
     
-    # println("=== PSO SETUP ===")
-    # println("Total customers: $(length(customers))")
-    # println("Accessible customers: $(length(accessible_customers))")
-    # println("Max battery time: $max_battery_time")
-    # println("Number of drones: $n_drones")
-    # println("==================")
+    elapsed = time() - start_time
+    println("[TIME CHECK] After PSO object creation: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s")
 
     time_to_initialize_pso = time() - start_time
     println("time to initialize pso: $(time_to_initialize_pso)")
     time_before_swarm_sampling = time()
+    elapsed = time_before_swarm_sampling - start_time
+    println("[TIME CHECK] Before swarm initialization: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s")
     
     # Initialize and evaluate each particle in swarm (see Section 2.3)
-    initialize_swarm(pso, use_greedy_init)
+    # Skip IDCH for testing purposes
+    initialize_swarm(pso, use_greedy_init, skip_idch=true)
     time_after_swarm_sampling = time()
+    elapsed = time_after_swarm_sampling - start_time
     println("time to initialize swarm: $(time_after_swarm_sampling - time_before_swarm_sampling)")
+    println("[TIME CHECK] After swarm initialization: elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s")
     
+    # Check if we've already exceeded the time limit during initialization
+    if elapsed > max_time
+        println("[TIME CHECK] Maximum time limit of $(max_time) seconds reached during initialization. Stopping algorithm.")
+        return pso.global_best, pso.global_best_profit, pso
+    end
 
     iter = 1
     itermax = max_iterations #* length(accessible_customers) * n_drones  # As mentioned in paper
@@ -1517,44 +2054,87 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
         # Check if max_time has been exceeded
         current_time = time()
         elapsed_time = current_time - start_time
+        remaining_time = max_time - elapsed_time
+        if iter % 10 == 1 || elapsed_time > max_time * 0.9  # Print every 10 iterations or when 90% time used
+            println("[TIME CHECK] Iteration $iter: elapsed=$(round(elapsed_time, digits=2))s, remaining=$(round(remaining_time, digits=2))s, best_profit=$(round(pso.global_best_profit, digits=6))")
+        end
         if elapsed_time > max_time
-            println("Maximum time limit of $(max_time) seconds reached. Stopping algorithm.")
+            println("[TIME CHECK] Maximum time limit of $(max_time) seconds reached at iteration $iter. Stopping algorithm.")
             break
         end
         
         improvement_found = false
+        time_limit_exceeded = false
         
         for x in 1:pso.swarm_size
+            # Time check at start of each particle
+            particle_start_time = time()
+            elapsed = particle_start_time - start_time
+            if elapsed > max_time
+                println("[TIME CHECK] Time limit exceeded at start of particle $x of iteration $iter. Stopping.")
+                time_limit_exceeded = true
+                break
+            end
+            if x <= 3 || x % 10 == 1  # Log first 3 particles and every 10th
+                println("[TIME CHECK] Processing particle $x/$(pso.swarm_size) (iter $iter): elapsed=$(round(elapsed, digits=2))s, remaining=$(round(max_time - elapsed, digits=2))s")
+            end
+            
             # Random move with probability ph
             if rand() < pso.ph
                 # Move S[x] to a new position (see Section 2.3)
                 time_before_idch = time()
                 pso.swarm[x].position = idch_heuristic(pso, false)  # Fast version
                 time_after_idch = time()
-                #println("time to run idch: $(time_after_idch - time_before_idch)")
+                idch_time = time_after_idch - time_before_idch
+                elapsed = time_after_idch - start_time
+                if idch_time > 0.1  # Log if IDCH takes more than 0.1 seconds
+                    println("[TIME CHECK] IDCH took $(round(idch_time, digits=3))s (particle $x, iter $iter), elapsed=$(round(elapsed, digits=2))s")
+                end
+                # Update node-to-position mapping after position change
+                pso.node_to_position[x] = compute_node_to_position(pso.swarm[x].position)
             else
                 # Update S[x].pos (see Section 2.5)
                 update_position!(pso.swarm[x], pso.global_best, pso)
+                # Update node-to-position mapping after position change
+                pso.node_to_position[x] = compute_node_to_position(pso.swarm[x].position)
             end
             
             # Local search with probability pm
             if rand() < pso.pm
                 # Apply local search on S[x].pos (see Section 2.4)
                 time_before_local_search = time()
-                time_shift, time_swap, time_destruction_repair = local_search!(pso.swarm[x], pso)
+                time_shift, time_swap, time_destruction_repair = local_search!(pso.swarm[x], x, pso)
                 time_after_local_search = time()
-                total_time_local_search += time_after_local_search - time_before_local_search
+                local_search_time = time_after_local_search - time_before_local_search
+                total_time_local_search += local_search_time
                 total_time_shift += time_shift
                 total_time_swap += time_swap
                 total_time_destruction_repair += time_destruction_repair
-                #println("time to run local search: $(time_after_local_search - time_before_local_search)")
+                elapsed = time_after_local_search - start_time
+                if local_search_time > 0.1  # Log if local search takes more than 0.1 seconds
+                    println("[TIME CHECK] Local search took $(round(local_search_time, digits=3))s (particle $x, iter $iter), elapsed=$(round(elapsed, digits=2))s")
+                end
+                # Note: node-to-position mapping is updated incrementally within shift/swap operators
+                # Only destruction/repair recomputes the full mapping when needed
             end
             
             # Evaluate S[x].pos (see Section 2.2)
             time_before_split = time()
             pso.swarm[x].current_profit = fast_split_multiple_depots(pso.swarm[x].position, pso)
             time_after_split = time()
-            #println("time to run split: $(time_after_split - time_before_split)")
+            split_time = time_after_split - time_before_split
+            elapsed = time_after_split - start_time
+            if split_time > 0.1  # Log if fast_split takes more than 0.1 seconds
+                println("[TIME CHECK] fast_split took $(round(split_time, digits=3))s (particle $x, iter $iter), elapsed=$(round(elapsed, digits=2))s")
+            end
+            
+            # Check time limit after expensive operations
+            if elapsed > max_time
+                println("[TIME CHECK] Time limit exceeded after particle $x of iteration $iter. Stopping.")
+                time_limit_exceeded = true
+                break
+            end
+            
             # Update lbest of S (see Section 2.6)
             prev_global_best = pso.global_best_profit
             update_local_bests!(pso)
@@ -1564,6 +2144,11 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
                 improvement_found = true
                 println("Iter $iter: New best = $(round(pso.global_best_profit, digits=3))")#, Solution: $(pso.global_best)")
             end
+        end
+        
+        # Break out of outer loop if time limit was exceeded
+        if time_limit_exceeded
+            break
         end
 
         if improvement_found

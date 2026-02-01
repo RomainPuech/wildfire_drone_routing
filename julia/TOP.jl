@@ -107,7 +107,7 @@ include("TOP_PSO_multi_depot.jl")
 # c[(Begin_CS,End_CS)] = L*4
 
 
-function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L)
+function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_battery_time, L, blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}())
 
     # ---------- parameters ----------
     
@@ -123,8 +123,15 @@ function milp_relaxed(risk_pertime,n_drones,ChargingStation,GroundStations,max_b
     ChargingStations = [(Int(x), Int(y)) for (x,y) in ChargingStation]
     GroundStations = [(Int(x), Int(y)) for (x,y) in GroundStations]
 
-    I = [(x, y) for x in 1:N for y in 1:M] # All feasible grid points
-    GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+    # Filter out blocked cells from feasible grid points
+    I = [(x, y) for x in 1:N for y in 1:M if !((x, y) in blocked)] # All feasible grid points (excluding blocked)
+    
+    # Use BFS-based get_drone_gridpoints when blocked cells exist
+    if !isempty(blocked)
+        GridpointsDrones_set, _ = get_drone_gridpoints_BFS(ChargingStations, floor(max_battery_time/2), I, N, M)
+    else
+        GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+    end
     # GridpointsDrones = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDrones_set)) # All feasible grid points for drones
     GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
     #GridpointsDronesDetecting_set = setdiff(GridpointsDronesDetecting_set, GroundStations) 
@@ -569,13 +576,14 @@ end
 """
 Convert TOP.jl format to PSO format and run PSO algorithm
 """
-function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions = []; use_greedy_init::Bool = true, max_time::Float64 = 3000.0, max_iterations::Int = 500, swarm_size::Int = 10)
+function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}(); use_greedy_init::Bool = true, max_time::Float64 = 30.0, max_iterations::Int = 500, swarm_size::Int = 10)
     start_time = time()
     # println("Starting get_PSO_solution_multiple_depots...")
     # Convert GridpointsDronesDetecting to customer format for PSO
     customers = GridpointsDronesDetecting
     # println("Customers: $(customers)")
     profits = Float64[]
+    
 
     # find how many drones start at each depot
     if length(initial_drone_positions) > 0 
@@ -609,16 +617,52 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     # println("len Customers: $(length(customers))")
 
     # Extract profits for each customer and clamp to non-negative values
-    for (x, y) in customers
+    test_point = (36, 46)
+    test_point_customer_idx = 0
+    test_point_profit = 0.0
+    for (idx, (x, y)) in enumerate(customers)
         profit_value = risk_pertime[1, x, y]
         # Clamp profits to be non-negative to avoid complex number errors in PSO algorithm
         clamped_profit = max(0.0, profit_value)
         push!(profits, clamped_profit)
+        
+        # Check if this is the test point
+        if (x, y) == test_point
+            test_point_customer_idx = idx
+            test_point_profit = clamped_profit
+            println("[PSO-SETUP] Test point $test_point found as customer $idx with profit: $test_point_profit (original: $profit_value)")
+        end
+    end
+    if test_point_customer_idx == 0
+        println("[PSO-SETUP] WARNING: Test point $test_point is NOT in the customers list!")
+        # Check what the profit would be at that location
+        if test_point[1] > 0 && test_point[1] <= size(risk_pertime, 2) && test_point[2] > 0 && test_point[2] <= size(risk_pertime, 3)
+            test_profit = risk_pertime[1, test_point[1], test_point[2]]
+            println("[PSO-SETUP] However, risk_pertime[1, $(test_point[1]), $(test_point[2])] = $test_profit")
+        end
     end
     n_customers = length(customers) - sum(n_duplicates_array)
     # println("n_customers: $n_customers")
     # Create cost matrix using infinity norm (as in TOP.jl)
     costs = Dict{Tuple{Int,Int}, Float64}()
+
+    # shift operator optimization: we create a dictionary of left-neighbors for each customer (i.e we can move from a to b if a is a left-neighbor of b)
+    # i.e a is a left-neighobr of b if cost(a, b) <= max_battery_time and a != b (and a is not a duplicate of b)
+    # if a is a left neighbor of b, we add it to neighbors[b]
+    left_neighbors = Dict{Int, Vector{Int}}()
+
+    function add_left_neighbor!(left_neighbor, node)
+        if haskey(left_neighbors, node)
+            # check if left_neighbor is already in neighbors[node]
+            if left_neighbor in neighbors[node]
+                return
+            end
+            push!(left_neighbors[node], left_neighbor)
+        else
+            left_neighbors[node] = [left_neighbor]
+        end
+    end
+
 
     # IF there are multiple depots, we create an artificial node connecting all depots
     artificial_node = 0 #length(customers) + length(ChargingStation) + 1
@@ -648,7 +692,9 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
         for duplicate_idx in 1:n_duplicates_array[depot_idx]
             costs[(artificial_node, depot_node)] = 0.0 # should I put a cost higher than the battery and add this cost to the battery?
             costs[(depot_node, artificial_node)] = 0.0
+            # we don't want the artificial node to be neighbor to any client node 
             depot_node += 1
+
         end
     end # /!\ BREAKS TRIANGLE INEQUALITY
     
@@ -690,7 +736,12 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
                     xi, yi = customers[i]
                     xj, yj = customers[j]
                     inf_dist = max(abs(xi - xj), abs(yi - yj))
-                    costs[(i, j)] = inf_dist <= 1 ? 1.0 : max_battery_time*4
+                    if inf_dist <= 1
+                        costs[(i, j)] = 1.0
+                        add_left_neighbor!(i, j)
+                    else
+                        costs[(i, j)] = max_battery_time*4
+                    end
                 end
             else
                 costs[(i, j)] = 0.0
@@ -706,8 +757,15 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
             for i in 1:n_customers
                 xi, yi = customers[i]
                 inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
-                costs[(depot_node, i)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
-                costs[(i, depot_node)] = inf_dist_from_depot <= 1 ? 1.0 : max_battery_time*4
+                if inf_dist_from_depot <= 1
+                    costs[(depot_node, i)] = 1.0
+                    costs[(i, depot_node)] = 1.0
+                    add_left_neighbor!(depot_node, i)
+                    add_left_neighbor!(i, depot_node)
+                else
+                    costs[(depot_node, i)] = max_battery_time*4
+                    costs[(i, depot_node)] = max_battery_time*4
+                end
             end
             depot_node += 1
         end
@@ -791,7 +849,8 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
     total_time_without_pso = time_before_pso - start_time
     # println("Running PSO for initial solution...")
     giant_tour, pso_profit, pso_obj = solve_PSO_TOP_multiple_depots(
-        customers, profits, costs, n_drones, n_customers, max_battery_time, ChargingStation;
+        customers, profits, costs, left_neighbors,
+        n_drones, n_customers, max_battery_time, ChargingStation, blocked;
         swarm_size=swarm_size, max_iterations=max_iterations,  # Use passed parameters
         max_time=max_time, # Use passed parameter
         w=0.3, c1=0.5, c2=0.3, ph=0.15, pm=0.3, use_greedy_init=use_greedy_init
@@ -957,11 +1016,73 @@ function print_routes(routes, coords, n_drones, filename_suffix="")
 end
 
 """
+Find shortest path between two points using BFS, avoiding blocked cells.
+Returns the path as a vector of coordinates (excluding start, including end).
+"""
+function bfs_path(start::Tuple{Int,Int}, goal::Tuple{Int,Int}, blocked::Set{Tuple{Int,Int}}, max_coord::Int = 1000)
+    if start == goal
+        return Tuple{Int,Int}[]
+    end
+    
+    # If adjacent, return direct connection
+    if abs(start[1] - goal[1]) <= 1 && abs(start[2] - goal[2]) <= 1
+        return [goal]
+    end
+    
+    neighbors(x,y) = ((x+1,y), (x-1,y), (x, y+1), (x, y-1), (x+1,y+1), (x+1,y-1), (x-1,y+1), (x-1,y-1))
+    inbounds(x, y) = 1 <= x <= max_coord && 1 <= y <= max_coord
+    
+    # BFS to find shortest path
+    Q = DataStructures.Queue{Tuple{Int,Int}}()
+    DataStructures.enqueue!(Q, start)
+    parent = Dict{Tuple{Int,Int}, Tuple{Int,Int}}()
+    parent[start] = start
+    
+    while !isempty(Q)
+        current = DataStructures.dequeue!(Q)
+        
+        if current == goal
+            # Reconstruct path
+            path = Tuple{Int,Int}[]
+            node = goal
+            while node != start
+                push!(path, node)
+                node = parent[node]
+            end
+            return reverse(path)
+        end
+        
+        for (nx, ny) in neighbors(current[1], current[2])
+            neighbor = (nx, ny)
+            if inbounds(nx, ny) && !haskey(parent, neighbor) && !(neighbor in blocked)
+                parent[neighbor] = current
+                DataStructures.enqueue!(Q, neighbor)
+            end
+        end
+    end
+    
+    # No path found - return empty (shouldn't happen if points are reachable)
+    println("Warning: No path found from $start to $goal")
+    return Tuple{Int,Int}[]
+end
+
+"""
 Get the coordinates of the tours, remove the artificial node, and patches the path to the depot
 """
-function get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations, n_drones)
+function get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations, n_drones, blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}())
     tours_coordinates = Vector{Vector{Tuple{Int,Int}}}(undef, n_drones)
     println("routes: $routes")
+    
+    # Determine max coordinate for bounds checking in BFS
+    max_coord = 1
+    for point in GridpointsDronesDetecting
+        max_coord = max(max_coord, point[1], point[2])
+    end
+    for point in ChargingStations
+        max_coord = max(max_coord, point[1], point[2])
+    end
+    max_coord += 10  # Add some buffer
+    
     for s in 1:n_drones
         tours_coordinates[s] = Vector{Tuple{Int,Int}}()  # Initialize with empty vector
         if s <= length(routes) && length(routes[s]) >= 3
@@ -992,11 +1113,20 @@ function get_patched_tours_coordinates(routes, GridpointsDronesDetecting, Chargi
                     next_node = GridpointsDronesDetecting[route[next_node_index]]
 
                     # patch the path between 2 clients
-                    while abs(current_node[1] - next_node[1]) > 1 || abs(current_node[2] - next_node[2]) > 1
-                        current_node = (current_node[1] + sign(next_node[1] - current_node[1]), current_node[2] + sign(next_node[2] - current_node[2]))
-                        push!(tours_coordinates[s], current_node)
+                    if !isempty(blocked)
+                        # Use BFS pathfinding to avoid blocked cells
+                        path = bfs_path(current_node, next_node, blocked, max_coord)
+                        for p in path
+                            push!(tours_coordinates[s], p)
+                        end
+                    else
+                        # Original direct patching (diagonal moves)
+                        while abs(current_node[1] - next_node[1]) > 1 || abs(current_node[2] - next_node[2]) > 1
+                            current_node = (current_node[1] + sign(next_node[1] - current_node[1]), current_node[2] + sign(next_node[2] - current_node[2]))
+                            push!(tours_coordinates[s], current_node)
+                        end
+                        push!(tours_coordinates[s], next_node)
                     end
-                    push!(tours_coordinates[s], next_node)
                     current_node = next_node
                 end
 
@@ -1006,11 +1136,21 @@ function get_patched_tours_coordinates(routes, GridpointsDronesDetecting, Chargi
                     # We identify the closest charging station
                     closest_charging_station_idx = findmin(x -> sum(abs.(x .- last_node)), ChargingStations)[2]
                     closest_charging_station = ChargingStations[closest_charging_station_idx]
-                    while abs(current_node[1] - closest_charging_station[1]) > 1 || abs(current_node[2] - closest_charging_station[2]) > 1
-                        current_node = (current_node[1] + sign(closest_charging_station[1] - current_node[1]), current_node[2] + sign(closest_charging_station[2] - current_node[2]))
-                        push!(tours_coordinates[s], current_node)
+                    
+                    if !isempty(blocked)
+                        # Use BFS pathfinding to avoid blocked cells
+                        path = bfs_path(current_node, closest_charging_station, blocked, max_coord)
+                        for p in path
+                            push!(tours_coordinates[s], p)
+                        end
+                    else
+                        # Original direct patching
+                        while abs(current_node[1] - closest_charging_station[1]) > 1 || abs(current_node[2] - closest_charging_station[2]) > 1
+                            current_node = (current_node[1] + sign(closest_charging_station[1] - current_node[1]), current_node[2] + sign(closest_charging_station[2] - current_node[2]))
+                            push!(tours_coordinates[s], current_node)
+                        end
+                        push!(tours_coordinates[s], closest_charging_station)
                     end
-                    push!(tours_coordinates[s], closest_charging_station)
                 end
 
             end
@@ -1091,6 +1231,28 @@ function find_highest_risk_point_within_radius(risk_pertime, possible_centers, r
     if length(ChargingStations) == 0
         ChargingStations = possible_centers
     end
+    
+    # Debug: Check if test point (36, 46) is in possible_points
+    test_point = (36, 46)
+    test_point_in_possible = test_point in possible_points
+    test_point_risk = 0.0
+    if test_point[1] > 0 && test_point[1] <= size(risk_pertime, 2) && test_point[2] > 0 && test_point[2] <= size(risk_pertime, 3)
+        test_point_risk = risk_pertime[1, test_point[1], test_point[2]]
+    end
+    if test_point_risk > 0.1  # Only print if it's a high value point
+        println("    [FIND-POINT-DEBUG] Test point $test_point: in possible_points=$test_point_in_possible, risk=$test_point_risk")
+        if test_point_in_possible
+            # Check if it's reachable from centers
+            for center in possible_centers
+                cost = max(abs(center[1] - test_point[1]), abs(center[2] - test_point[2]))
+                return_cost, _ = findmin(x -> max(abs(x[1] - test_point[1]), abs(x[2] - test_point[2])), ChargingStations)
+                total_cost = cost + return_cost
+                reachable = cost <= radius && total_cost <= radius
+                println("    [FIND-POINT-DEBUG] From center $center: cost=$cost, return=$return_cost, total=$total_cost, radius=$radius, reachable=$reachable")
+            end
+        end
+    end
+    
     #println("ChargingStations: $ChargingStations")
     best_risk = -1.0
     best_point = nothing
@@ -1151,10 +1313,11 @@ function set_point_risk_to_zero!(risk_pertime, point)
     end
 end
 
-function patch_path_with_highest_risk!(route, target_point, risk_pertime)
+function patch_path_with_highest_risk!(route, target_point, risk_pertime, blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}())
     """
     Patch path from the last point in route to target_point using dynamic programming
     to find the path with the highest cumulative risk using Chebyshev distance.
+    Takes blocked cells into account when present.
     Modifies route in-place and adds target_point at the end.
     """
     start_point = route[end]
@@ -1176,6 +1339,22 @@ function patch_path_with_highest_risk!(route, target_point, risk_pertime)
         # Fallback to simple patching if points are out of bounds
         patch_path_to_route!(route, target_point)
         return
+    end
+    
+    # Check if start or target is blocked
+    if (start_point in blocked) || (target_point in blocked)
+        # If blocked, fallback to BFS pathfinding
+        if !isempty(blocked)
+            max_coord = max(N, M) + 10
+            path = bfs_path(start_point, target_point, blocked, max_coord)
+            for p in path
+                push!(route, p)
+            end
+            return
+        else
+            patch_path_to_route!(route, target_point)
+            return
+        end
     end
     
     # Get bounds for the search area - for Chebyshev distance, we need to expand bounds
@@ -1215,6 +1394,11 @@ function patch_path_with_highest_risk!(route, target_point, risk_pertime)
             for y in min_y:max_y
                 current = (x, y)
                 
+                # Skip blocked cells
+                if current in blocked
+                    continue
+                end
+                
                 # Skip if not on a valid path (Chebyshev distance constraint)
                 start_dist = max(abs(x - start_point[1]), abs(y - start_point[2]))
                 target_dist = max(abs(target_point[1] - x), abs(target_point[2] - y))
@@ -1245,6 +1429,11 @@ function patch_path_with_highest_risk!(route, target_point, risk_pertime)
                     prev_x, prev_y = x - dx, y - dy
                     prev = (prev_x, prev_y)
                     
+                    # Skip if previous position is blocked
+                    if prev in blocked
+                        continue
+                    end
+                    
                     # Check if previous position is in bounds and in DP table
                     if prev_x >= min_x && prev_x <= max_x && prev_y >= min_y && prev_y <= max_y && haskey(dp, prev)
                         # Check if this move is valid (towards target) using Chebyshev distance
@@ -1274,8 +1463,16 @@ function patch_path_with_highest_risk!(route, target_point, risk_pertime)
     
     # Reconstruct path from target back to start
     if !haskey(dp, target_point)
-        # Fallback to simple patching if DP fails
-        patch_path_to_route!(route, target_point)
+        # Fallback to BFS pathfinding if DP fails (e.g., no path found due to blocked cells)
+        if !isempty(blocked)
+            max_coord = max(N, M) + 10
+            path = bfs_path(start_point, target_point, blocked, max_coord)
+            for p in path
+                push!(route, p)
+            end
+        else
+            patch_path_to_route!(route, target_point)
+        end
         return
     end
     
@@ -1297,7 +1494,11 @@ function patch_path_with_highest_risk!(route, target_point, risk_pertime)
     end
 end
 
-function get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, max_battery_time, n_drones, initial_drone_positions, override_allowed_initial_positions = [])
+function get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, max_battery_time, n_drones, initial_drone_positions, override_allowed_initial_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}())
+    greedy_total_start = time()
+    
+    # === Setup Phase ===
+    setup_start = time()
     # Make a copy of risk_pertime to avoid modifying the original
     risk_pertime_copy = copy(risk_pertime)
     for station in  GroundStations
@@ -1341,12 +1542,19 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     if length(override_allowed_initial_positions) > 0
         allowed_initial_positions = Set(override_allowed_initial_positions)
     end
+    setup_time = time() - setup_start
+    
     # we now have the list of allowed initial positions. We now find the chain of points
     if max_battery_time <= 1
         element = first(allowed_initial_positions)
         return [element, element]
     end
+    
+    # === Find First Point ===
+    find_first_start = time()
     best_first_point, first_center, current_cumulative_cost, current_return_cost, best_return_point = find_highest_risk_point_within_radius(risk_pertime_copy, allowed_initial_positions, max_battery_time, possible_points, ChargingStations)
+    find_first_time = time() - find_first_start
+    println("    [GREEDY-DETAIL] Finding first point: $(round(find_first_time, digits=3))s")
     println("best_first_point: $best_first_point")
     println("first_center: $first_center")
     println("current_cumulative_cost: $current_cumulative_cost")
@@ -1371,12 +1579,33 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
         end
     end
     
+    # Determine max_coord for BFS pathfinding
+    max_coord = 1
+    for point in GridpointsDronesDetecting
+        max_coord = max(max_coord, point[1], point[2])
+    end
+    max_coord += 10
+    
+    # === Build Route Phase ===
+    build_route_start = time()
     # Initialize final route and patch between first_center and best_first_point
     final_route = [first_center]
     # Set first_center risk to zero in this time step
     set_point_risk_to_zero!(risk_pertime_copy, first_center)
     
-    patch_path_with_highest_risk!(final_route, best_first_point, risk_pertime_copy)
+    # Use DP pathing (which handles blocked cells) instead of BFS
+    patch_first_start = time()
+    patch_path_with_highest_risk!(final_route, best_first_point, risk_pertime_copy, blocked)
+    patch_first_time = time() - patch_first_start
+    
+    # Calculate profit from initial segment before setting risk to zero
+    initial_segment_profit = 0.0
+    for point in final_route
+        if point[1] > 0 && point[1] <= size(risk_pertime, 2) && point[2] > 0 && point[2] <= size(risk_pertime, 3)
+            initial_segment_profit += risk_pertime[1, point[1], point[2]]
+        end
+    end
+    println("    [GREEDY-DETAIL] Initial segment (to first point): profit = $(round(initial_segment_profit, digits=6))")
     
     # Set risk to zero for all newly visited points
     for point in final_route
@@ -1387,28 +1616,75 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     route_main_points = [first_center, best_first_point]
     possible_points = setdiff(possible_points, final_route)
     
+    # Iteratively extend route
+    extension_iterations = 0
+    extension_find_time = 0.0
+    extension_patch_time = 0.0
+    cumulative_profit = initial_segment_profit
     while current_cumulative_cost + current_return_cost < max_battery_time
+        extension_iterations += 1
+        find_next_start = time()
         best_next_point, _, best_cost, best_return_cost, best_return_point = find_highest_risk_point_within_radius(risk_pertime_copy, [final_route[end]], max_battery_time - current_cumulative_cost, possible_points, ChargingStations)
+        extension_find_time += time() - find_next_start
         # if nothing
         if best_next_point === nothing
+            println("    [GREEDY-DETAIL] Iteration $extension_iterations: No more points found, stopping")
             break
         end
         
-        # Patch from current end of route to the new point
-        route_length_before = length(final_route)
-        patch_path_with_highest_risk!(final_route, best_next_point, risk_pertime_copy)
+        # Get profit of the next point before it's added (risk will be set to 0 after)
+        next_point_profit = 0.0
+        if best_next_point[1] > 0 && best_next_point[1] <= size(risk_pertime, 2) && best_next_point[2] > 0 && best_next_point[2] <= size(risk_pertime, 3)
+            next_point_profit = risk_pertime_copy[1, best_next_point[1], best_next_point[2]]
+        end
         
-        # Set risk to zero for all newly visited points in this segment
+        # Patch from current end of route to the new point using DP (handles blocked cells)
+        route_length_before = length(final_route)
+        
+        patch_next_start = time()
+        patch_path_with_highest_risk!(final_route, best_next_point, risk_pertime_copy, blocked)
+        extension_patch_time += time() - patch_next_start
+        
+        # Calculate profit from newly added points (including intermediate path points)
+        segment_profit = 0.0
         for i in (route_length_before + 1):length(final_route)
             point = final_route[i]
+            # Get profit before setting to zero
+            if point[1] > 0 && point[1] <= size(risk_pertime, 2) && point[2] > 0 && point[2] <= size(risk_pertime, 3)
+                segment_profit += risk_pertime[1, point[1], point[2]]
+            end
             set_point_risk_to_zero!(risk_pertime_copy, point)
         end
+        
+        cumulative_profit += segment_profit
+        println("    [GREEDY-DETAIL] Iteration $extension_iterations: Added point $best_next_point (profit: $(round(next_point_profit, digits=6)), segment profit: $(round(segment_profit, digits=6)), cumulative: $(round(cumulative_profit, digits=6)), cost: $best_cost, remaining battery: $(max_battery_time - current_cumulative_cost - best_cost))")
         
         push!(route_main_points, best_next_point)
         possible_points = setdiff(possible_points, final_route)
         current_cumulative_cost += best_cost
     end
+    build_route_time = time() - build_route_start
     
+    # Calculate final total profit from entire route
+    final_total_profit = 0.0
+    for point in final_route
+        if point[1] > 0 && point[1] <= size(risk_pertime, 2) && point[2] > 0 && point[2] <= size(risk_pertime, 3)
+            final_total_profit += risk_pertime[1, point[1], point[2]]
+        end
+    end
+    
+    println("    [GREEDY-DETAIL] Building route: $(round(build_route_time, digits=3))s")
+    println("      - Initial patch: $(round(patch_first_time, digits=3))s")
+    println("      - Extension iterations: $extension_iterations")
+    println("      - Finding next points: $(round(extension_find_time, digits=3))s (avg: $(round(extension_find_time/max(1,extension_iterations), digits=3))s/iter)")
+    println("      - Patching paths: $(round(extension_patch_time, digits=3))s (avg: $(round(extension_patch_time/max(1,extension_iterations), digits=3))s/iter)")
+    println("    [GREEDY-DETAIL] Route profit summary:")
+    println("      - Initial segment profit: $(round(initial_segment_profit, digits=6))")
+    println("      - Total cumulative profit (greedy): $(round(cumulative_profit, digits=6))")
+    println("      - Final route total profit: $(round(final_total_profit, digits=6)) (from $(length(final_route)) points)")
+    
+    # === Return to Depot Phase ===
+    return_start = time()
     if best_return_point === nothing
         println("WARNING: best_return_point is nothing")
         if ChargingStations == []
@@ -1427,25 +1703,63 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
         end
     end
     
-    # Patch from the last point to the return point
-    patch_path_with_highest_risk!(final_route, best_return_point, risk_pertime_copy) # add the last return charging point again to close the loop
+    # Calculate profit from return path before adding it
+    route_length_before_return = length(final_route)
+    
+    # Patch from the last point to the return point using DP (handles blocked cells)
+    patch_return_start = time()
+    patch_path_with_highest_risk!(final_route, best_return_point, risk_pertime_copy, blocked) # add the last return charging point again to close the loop
+    patch_return_time = time() - patch_return_start
+    
+    # Calculate profit from return path segment
+    return_path_profit = 0.0
+    for i in (route_length_before_return + 1):length(final_route)
+        point = final_route[i]
+        if point[1] > 0 && point[1] <= size(risk_pertime, 2) && point[2] > 0 && point[2] <= size(risk_pertime, 3)
+            return_path_profit += risk_pertime[1, point[1], point[2]]
+        end
+    end
+    
+    return_time = time() - return_start
+    println("    [GREEDY-DETAIL] Returning to depot: $(round(return_time, digits=3))s (patching: $(round(patch_return_time, digits=3))s)")
+    println("    [GREEDY-DETAIL] Return path profit: $(round(return_path_profit, digits=6))")
+    
+    # Calculate final complete profit including return path
+    final_complete_profit = 0.0
+    for point in final_route
+        if point[1] > 0 && point[1] <= size(risk_pertime, 2) && point[2] > 0 && point[2] <= size(risk_pertime, 3)
+            final_complete_profit += risk_pertime[1, point[1], point[2]]
+        end
+    end
+    
+    greedy_total_time = time() - greedy_total_start
+    println("    [GREEDY-DETAIL] Total greedy fallback time: $(round(greedy_total_time, digits=3))s")
+    println("      - Setup: $(round(setup_time, digits=3))s ($(round(100*setup_time/greedy_total_time, digits=1))%)")
+    println("      - Find first point: $(round(find_first_time, digits=3))s ($(round(100*find_first_time/greedy_total_time, digits=1))%)")
+    println("      - Build route: $(round(build_route_time, digits=3))s ($(round(100*build_route_time/greedy_total_time, digits=1))%)")
+    println("      - Return to depot: $(round(return_time, digits=3))s ($(round(100*return_time/greedy_total_time, digits=1))%)")
+    println("      - Final route length: $(length(final_route)) points")
+    println("    [GREEDY-DETAIL] Final profit breakdown:")
+    println("      - Initial segment: $(round(initial_segment_profit, digits=6))")
+    println("      - Extension segments: $(round(cumulative_profit - initial_segment_profit, digits=6))")
+    println("      - Return path: $(round(return_path_profit, digits=6))")
+    println("      - TOTAL ROUTE PROFIT: $(round(final_complete_profit, digits=6))")
     
     return final_route
 end
 
-function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [])
+function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}())
     # TODO rename the parameter name in the function calls that expect plural
     ChargingStations = ChargingStation
     
     # println("Starting CPA...")
     # Initial upper bound (UB) and initial PSO lower bound (LB)
-    # TODO in this function, use BFS-based get_drone_gridpoints
-    GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L)
+    # Use BFS-based get_drone_gridpoints when blocked cells exist
+    GridpointsDrones, GridpointsDronesDetecting, coords, Begin_CS, End_CS, TransitGridpoints = milp_relaxed(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, blocked)
     
     # UB = sum(risk_pertime[1, GridpointsDronesDetecting[k]...] for k in TransitGridpoints)
     
     # Create cost matrix c for greedy comparison
-    # TODO here compute the distance matrix using BFS / get it from the previous function call
     n_nodes = length(coords)
     c = Dict{Tuple{Int,Int}, Float64}()
     
@@ -1465,13 +1779,7 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     c[(Begin_CS, End_CS)] = L*4
     
     # Use PSO instead of greedy for initialization
-    # TODO TEMPORARY: ALWAYS CALL THE MULTI-DEPOT VERSION
-    routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions)
-    # if length(ChargingStation) == 1
-    #     routes, best_LB = get_PSO_solution(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
-    # else
-    #     routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time)
-    # end
+    routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions, blocked)
 
     
     # Also compute greedy for comparison
@@ -1489,14 +1797,14 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
 
     # Print the initial PSO solution routes
     # print_routes(routes, GridpointsDronesDetecting, n_drones, "(PSO Initial)")
-    # TODO here the patching has to avoid blocked cells !
-    tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations,n_drones)
+    # Pass blocked cells to patching function to avoid them
+    tours_coordinates = get_patched_tours_coordinates(routes, GridpointsDronesDetecting, ChargingStations, n_drones, blocked)
     # fallback mechanism: if one of the tours is empty, we use a greedy solution
     for s in 1:n_drones
         if length(tours_coordinates[s]) < 3
             println("WARNING:We use the FALLBACK SOLUTION for drone $s")
-            # TODO here the fallback solution has to avoid blocked cells !
-            tours_coordinates[s] = get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, max_battery_time, n_drones, initial_drone_positions)
+            # Pass blocked cells to greedy fallback
+            tours_coordinates[s] = get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, max_battery_time, n_drones, initial_drone_positions, [], blocked)
         end
     end
     #println("tours_coordinates: $(tours_coordinates)")
@@ -1995,8 +2303,9 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     max_battery_time::Int,
     t::Int,
     verbose::Bool = false,
-    initial_drone_positions = [])
-
+    initial_drone_positions = [],
+    mask_filename = nothing)
+    
     start_time = time()
     if n_drones == 0
         return []
@@ -2022,11 +2331,23 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
 
    # Create GridpointsDronesDetecting for use in extensions
    _, N, M = size(risk_pertime)
-   I = [(x, y) for x in 1:N for y in 1:M] # All feasible grid points
-   # TODO add mask filtering here
-   # TODO Change here to use BFS--based get_drone_gridpoints
-   # TODO might not matter much given the small size of the grid, but we re-compute the following sets in the CPA_multiple_depots function...
-   GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+   
+   # Load mask if provided, otherwise use all grid points
+   if mask_filename !== nothing
+       mask = load_mask(mask_filename)
+       I = [(x, y) for x in 1:N for y in 1:M if mask[x,y] == 1] # Feasible grid points based on mask
+       blocked = Set([(x, y) for x in 1:N for y in 1:M if mask[x,y] != 1]) # Blocked cells
+   else
+       I = [(x, y) for x in 1:N for y in 1:M] # All grid points
+       blocked = Set{Tuple{Int,Int}}() # No blocked cells
+   end
+   
+   # Use BFS-based get_drone_gridpoints when mask is provided
+   if mask_filename !== nothing
+       GridpointsDrones_set, _ = get_drone_gridpoints_BFS(ChargingStations, floor(max_battery_time/2), I, N, M)
+   else
+       GridpointsDrones_set = get_drone_gridpoints(ChargingStations, floor(max_battery_time/2), I)
+   end
    GridpointsDronesDetecting_set = setdiff(GridpointsDrones_set, ChargingStations)
    GridpointsDronesDetecting = convert(Vector{Tuple{Int,Int}}, collect(GridpointsDronesDetecting_set))
 
@@ -2040,7 +2361,8 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
                           max_battery_time,
                           L,
                           verbose,
-                          initial_drone_positions)
+                          initial_drone_positions,
+                          blocked)
     time_after_cpa = time()
     cpa_time = time_after_cpa - time_before_cpa
     println("execution time for CPA: $cpa_time")
@@ -2057,7 +2379,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
             println("extending tour, length(tours_coordinates[s]): $(length(tours_coordinates[s]))")
             remaining_time = max_battery_time - length(tours_coordinates[s])
             overwritten_allowed_initial_positions = [tours_coordinates[s][end]] # the extension has to start from where the drone currently is
-            extension_solution = get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, remaining_time, n_drones, initial_drone_positions, overwritten_allowed_initial_positions)
+            extension_solution = get_greedy_fallback_solution(risk_pertime, tours_coordinates, GridpointsDronesDetecting, ChargingStations, GroundStations, remaining_time, n_drones, initial_drone_positions, overwritten_allowed_initial_positions, blocked)
             # append the extension solution to the original tour
             tours_coordinates[s] = [tours_coordinates[s]; extension_solution[2:end]] # skiping the duplicate of the last node
         end
@@ -2201,7 +2523,8 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     max_battery_time::Int,
     t::Int,
     verbose::Bool = false,
-    initial_drone_positions = [])
+    initial_drone_positions = [],
+    mask_filename = nothing)
     # Convert Vector{Any} to Vector{Tuple{Int,Int}}
     typed_ground_stations = Vector{Tuple{Int,Int}}()
     for gs in GroundStations
@@ -2209,5 +2532,5 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
             push!(typed_ground_stations, gs)
         end
     end
-    return compute_TOP_plan_multiple_depots(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose, initial_drone_positions)
+    return compute_TOP_plan_multiple_depots(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose, initial_drone_positions, mask_filename)
 end
