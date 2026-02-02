@@ -1,0 +1,216 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{observation}{Observation}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+
+\title{Boundary Optimizations for Local Search in Team Orienteering with a Giant-Tour Split}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We study boundary-based optimizations for local search operators in a Particle Swarm Optimization (PSO) framework applied to the Team Orienteering Problem (TOP) on grid or sparse graphs. Solutions are encoded as a giant tour (a permutation) and evaluated by a split procedure that constructs feasible routes starting at depot nodes. We derive formal conditions under which local search moves (swap and shift) can affect the split profit, and we provide provably safe filtering rules that avoid unnecessary recomputation. For the shift operator, we introduce a two-stage filter that leverages client-graph sparsity via left-neighbor restriction. For the swap operator, we formalize a lightweight blocking-edge check that can be evaluated in constant time. These results enable significant computational savings without loss of solution quality.
+\end{abstract}
+
+\section{Problem Setting}
+
+\subsection{Team Orienteering Problem (TOP)}
+
+Given a set of customer nodes with profits and a set of depots, the TOP seeks a set of routes (one per vehicle) that maximize total collected profit subject to a travel-time (battery) constraint and without revisiting customers.
+
+\subsection{Giant-Tour Encoding and Split}
+
+A solution is represented by a \textbf{giant tour} (a permutation of customers and depot markers). A \textbf{split procedure} converts this permutation into feasible routes:
+
+\begin{itemize}
+    \item A route starts at a depot marker.
+    \item Nodes are visited in permutation order until a battery constraint would be violated.
+    \item A Dynamic Programming (DP) program selects up to $m$ routes (vehicles) to maximize total profit.
+\end{itemize}
+
+\section{Definitions}
+
+\begin{definition}[Permutation]
+Let $\pi = [\pi_1, \pi_2, \ldots, \pi_n]$ denote the giant tour permutation. Customer nodes are labeled $1..n_{\text{pure\_customers}}$. Depot nodes are labeled $> n_{\text{pure\_customers}}$.
+\end{definition}
+
+\begin{definition}[Saturated Tour]
+For each depot position $d$ (i.e., $\pi_d$ is a depot), a \textbf{saturated tour} is the maximal consecutive subsequence starting at $d$ that respects the battery constraint. Its profit is the sum of profits of visited customers.
+\end{definition}
+
+\begin{definition}[Tour Membership and Dead Nodes]
+A position $k$ \textbf{belongs to} a saturated tour starting at depot position $d$ if $d \leq k < d + \text{length}(d)$. A position is \textbf{dead} if it belongs to no saturated tour. Depot positions are never dead (they belong to their own tour).
+\end{definition}
+
+\begin{definition}[Clients Graph]
+Let $G = (V, E)$ be the directed graph of feasible transitions between customers. An edge $(u, v) \in E$ exists if moving from $u$ to $v$ is feasible (cost defined and within battery bounds). For node $v$, its \textbf{left-neighbors} are nodes $u$ such that $(u, v) \in E$.
+\end{definition}
+
+\section{Fundamental Observations}
+
+\begin{observation}[Tour Structure]
+Every saturated tour starts at a depot position in the permutation and has a well-defined length and profit.
+\end{observation}
+
+\begin{observation}[Tour Membership]
+A node can belong to multiple saturated tours. Depot nodes are never dead.
+\end{observation}
+
+\begin{observation}[Optimal Tour Selection]
+The DP phase selects a subset of saturated tours maximizing total profit, subject to vehicle limits and non-overlap.
+\end{observation}
+
+\section{Boundary Effects of Local Search Operators}
+
+We analyze \textbf{swap} and \textbf{shift} operators on the permutation.
+
+\begin{definition}[Swap]
+Swap positions $i < j$: exchange $\pi_i$ and $\pi_j$.
+\end{definition}
+
+\begin{definition}[Shift]
+Shift positions $i < j$: remove $\pi_i$, shift $\pi_{i+1..j}$ left by one, insert the removed node at position $j$.
+\end{definition}
+
+\begin{theorem}[Swap Boundary]
+If positions $i$ and $j$ (with $i < j$) are non-depot nodes, then only tours that include positions $i-1$ or $j-1$ can change profit after swapping $i$ and $j$.
+\end{theorem}
+
+\begin{proof}
+Only the nodes at positions $i$ and $j$ are changed by a swap. A tour's profit depends only on the sequence of nodes it visits; thus a tour's profit can change only if it includes position $i$ or $j$. For non-depot positions, any tour including $k$ must include $k-1$ (since tours start at depots). Therefore, affected tours are exactly those containing $i-1$ or $j-1$.
+\end{proof}
+
+\begin{theorem}[Shift Boundary]
+If positions $i < j$ are non-depot nodes, then only tours that include positions $i-1$ or $j$ can change profit after shifting $i \to j$.
+\end{theorem}
+
+\begin{proof}
+The shift removes $\pi_i$ from its original location and inserts it immediately after $\pi_j$. Any tour containing position $i$ must include $i-1$ and sees $\pi_i$ removed; any tour containing position $j$ may extend to include $\pi_i$ after insertion. Positions strictly between $i$ and $j$ preserve node order (only shifted), so their tour sequences are unchanged. Therefore, only tours containing $i-1$ or $j$ can change profit.
+\end{proof}
+
+\section{Perfect Filtering Criterion}
+
+\begin{theorem}[Zero False Negatives]
+Let $P$ be the optimal profit for permutation $\pi$, and $P'$ be the optimal profit after a local move. If \textbf{no affected tour} increases in profit, then $P' \leq P$.
+\end{theorem}
+
+\begin{proof}
+Unaffected tours have identical node sequences, hence identical profits. Affected tours have profits that are less than or equal to their previous values by assumption. Therefore, all tour profits in the new permutation are $\leq$ their original values. The DP maximizes a sum of tour profits; hence the optimal value cannot increase.
+\end{proof}
+
+\begin{corollary}
+A move should be evaluated with the full split procedure \textbf{only if} at least one affected tour increases in profit. This yields a perfect filter with zero false negatives.
+\end{corollary}
+
+\section{Two-Stage Filter for Shift}
+
+\begin{definition}[Stage 1: Removal Test]
+Given a shift candidate index $i$, Stage 1 constructs the permutation $\pi^{(-i)}$ obtained by removing $\pi_i$ and shifting positions $i+1..n$ left by one. Stage 1 \textbf{recomputes only} the profits of tours containing position $i-1$ in the original permutation. Stage 1 \textbf{succeeds} if at least one of these tours improves in profit under $\pi^{(-i)}$.
+\end{definition}
+
+\begin{definition}[Stage 2: Insertion-Only Scan]
+If Stage 1 fails, Stage 2 evaluates shifts $i \to j$ but \textbf{restricts} candidate positions $j$ to the current positions of left-neighbors of $\pi_i$ in the clients graph. The left-neighbor list is randomized before iteration, and each candidate $j$ is evaluated using the perfect filter.
+\end{definition}
+
+\begin{observation}[Stage-2 Adjacency]
+If Stage 1 finds no improvement among tours containing position $i-1$, then a tour containing the former position $j$ can improve \textbf{only if} the edge $\pi_j \to \pi_i$ is feasible in the clients graph.
+\end{observation}
+
+\begin{proof}
+After shifting $\pi_i$ to position $j$, the only new node that can extend a tour containing $\pi_j$ is $\pi_i$. Extending requires edge $\pi_j \to \pi_i$. If infeasible, the tour cannot include $\pi_i$, so its profit cannot increase.
+\end{proof}
+
+\begin{algorithm}
+\caption{Shift Filter}
+\begin{algorithmic}[1]
+\State \textbf{Stage 1 (Removal Test):}
+\State Remove $\pi_i$ and recompute profits only for tours containing position $i-1$
+\If{any tour improves}
+    \State Run a full randomized scan over all $j$
+\Else
+    \State \textbf{Stage 2 (Insertion-Only Scan):}
+    \State Restrict candidate $j$ to positions of \textbf{left-neighbors} of $\pi_i$
+    \State Randomize the order of these neighbors
+    \State Map them to positions via \texttt{node\_to\_position}
+    \State Evaluate only those $j$
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+This reduces the candidate scan from $O(n)$ to $O(\deg(\pi_i))$ in sparse graphs without sacrificing correctness.
+
+\section{Lightweight Blocking Check for Swap}
+
+Because swap is already inexpensive, we use a local \textbf{blocking} check rather than the perfect filter.
+
+\begin{definition}[Blocking Node]
+Let $u$ be the predecessor of $v$ in the permutation. Node $v$ is \textbf{blocking} if:
+\begin{itemize}
+    \item $u$ is not dead, and
+    \item edge $u \to v$ is infeasible.
+\end{itemize}
+\end{definition}
+
+\begin{definition}[Blocking Once Inserted]
+When a node $x$ is inserted after predecessor $u$, $x$ is \textbf{blocking once inserted} if $u$ is not dead and $u \to x$ is infeasible.
+\end{definition}
+
+\begin{definition}[Blocking Once Removed]
+When a node $x$ is removed, its former successor $w$ becomes adjacent to predecessor $u$. The successor $w$ is \textbf{blocking once removed} if $u$ is not dead and $u \to w$ is infeasible.
+\end{definition}
+
+These tests are $O(1)$ with a constant-time adjacency lookup.
+
+\section{Discussion and Practical Impact}
+
+\begin{itemize}
+    \item \textbf{Correctness}: The perfect filter (Theorem 5.1) cannot reject a move that would improve the final profit.
+    \item \textbf{Efficiency}: The two-stage shift filter exploits sparsity by scanning only $\deg(\pi_i)$ candidates when Stage 1 fails.
+    \item \textbf{Swap}: Blocking checks are fast and effective, and are sufficient in practice given swap's low overhead.
+\end{itemize}
+
+\appendix
+
+\section{Pseudocode: Shift Filter}
+
+\begin{lstlisting}[language=Python, basicstyle=\ttfamily, frame=single]
+SHIFT_FILTER(i):
+  # Stage 1: removal-only test
+  remove π_i → π^(-i)
+  if any tour containing position i-1 improves on π^(-i):
+      for j in shuffled(all positions except i):
+          evaluate full shift i → j with perfect filter
+      return
+
+  # Stage 2: left-neighbor restriction
+  for node_j in shuffled(left_neighbors(π_i)):
+      j = position(node_j)
+      if j <= i: continue
+      evaluate full shift i → j with perfect filter
+\end{lstlisting}
+
+\section{Pseudocode: Blocking Check for Swap}
+
+\begin{lstlisting}[language=Python, basicstyle=\ttfamily, frame=single]
+SWAP_BLOCKING_FILTER(i, j):
+  # Skip if swap does not change blocking status in any relevant adjacency
+  # Check blocking once inserted for each node at the other's position
+  # Check blocking once removed for each node at its original position
+  # If no change, skip swap
+\end{lstlisting}
+
+\end{document}

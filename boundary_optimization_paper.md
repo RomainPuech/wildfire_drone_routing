@@ -18,7 +18,7 @@ A solution is represented by a **giant tour** (a permutation of customers and de
 
 - A route starts at a depot marker.
 - Nodes are visited in permutation order until a battery constraint would be violated.
-- A dynamic program selects up to `m` routes (vehicles) to maximize total profit.
+- A Dynamic Programming (DP) program selects up to `m` routes (vehicles) to maximize total profit.
 
 ---
 
@@ -26,7 +26,7 @@ A solution is represented by a **giant tour** (a permutation of customers and de
 
 ### Definition 2.1 (Permutation)
 
-Let `π = [π₁, π₂, ..., πₙ]` denote the giant tour permutation. Customer indices are `1..n_pure_customers`. Depot nodes are indices `> n_pure_customers`.
+Let `π = [π₁, π₂, ..., πₙ]` denote the giant tour permutation. Customer nodes are labeled `1..n_pure_customers`. Depot nodes are labeled `> n_pure_customers`.
 
 ### Definition 2.2 (Saturated Tour)
 
@@ -100,6 +100,14 @@ Unaffected tours have identical node sequences, hence identical profits. Affecte
 ---
 
 ## 6. Two-Stage Filter for Shift
+
+### Definition 6.1 (Stage 1: Removal Test)
+
+Given a shift candidate index `i`, Stage 1 constructs the permutation `π^(-i)` obtained by removing `π_i` and shifting positions `i+1..n` left by one. Stage 1 **recomputes only** the profits of tours containing position `i-1` in the original permutation. Stage 1 **succeeds** if at least one of these tours improves in profit under `π^(-i)`.
+
+### Definition 6.2 (Stage 2: Insertion-Only Scan)
+
+If Stage 1 fails, Stage 2 evaluates shifts `i → j` but **restricts** candidate positions `j` to the current positions of left-neighbors of `π_i` in the clients graph. The left-neighbor list is randomized before iteration, and each candidate `j` is evaluated using the perfect filter.
 
 ### Observation 6.1 (Stage-2 Adjacency)
 
