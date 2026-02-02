@@ -653,8 +653,8 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
 
     function add_left_neighbor!(left_neighbor, node)
         if haskey(left_neighbors, node)
-            # check if left_neighbor is already in neighbors[node]
-            if left_neighbor in neighbors[node]
+            # check if left_neighbor is already in left_neighbors[node]
+            if left_neighbor in left_neighbors[node]
                 return
             end
             push!(left_neighbors[node], left_neighbor)

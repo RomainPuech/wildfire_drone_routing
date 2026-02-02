@@ -10,6 +10,7 @@ mutable struct Particle
     local_best::Vector{Int}        # Best known position for this particle
     local_best_profit::Float64     # Profit of local best
     current_profit::Float64        # Current profit
+    node_to_position::Vector{Int}  # Maps node → position in this particle's permutation
 end
 
 
@@ -31,152 +32,10 @@ mutable struct PSOiA_TOP_multiple_depots
     profits::Vector{Float64}       # Customer profits
     costs::Dict{Tuple{Int,Int}, Float64}  # Travel costs
     left_neighbors::Dict{Int, Vector{Int}}  # Left neighbors
-    node_to_position::Vector{Dict{Int, Int}}  # For each particle, maps node to its position in the permutation
     accessible_customers::Vector{Int}  # Indices of accessible customers
     depot_coord::Vector{Tuple{Int,Int}}    # Depot coordinates
     closest_depot_distance::Vector{Float64}  # Pre-computed min return distance to closest depot (Chebyshev)
 end
-
-
-"""
-Fast split procedure for multiple depots
-"""
-function fast_split_with_routes_multiple_depots_XX(permutation::Vector{Int}, pso_multiple_depots::PSOiA_TOP_multiple_depots)
-    n = length(permutation)
-    m = pso_multiple_depots.n_drones
-    L = pso_multiple_depots.max_battery_time
-    
-    if n == 0
-        return 0.0, Vector{Vector{Int}}()
-    end
-
-    start_time_phase_1 = time()
-    
-    # Calculate saturated tours P[i] and first successor succ[i]
-    P = zeros(n)  # Profit of saturated tour starting at position i
-    succ = zeros(Int, n)  # First successor of saturated tour starting at position i
-    tour_lengths = zeros(Int, n)  # Length of each saturated tour
-    
-    for i in 1:n
-        current_cost = 0.0
-        current_profit = 0.0
-        j = i
-        
-        # Build maximal feasible tour starting from position i
-        while j <= n
-            customer_idx = permutation[j]
-            
-            # Add travel cost to this customer
-            if j == i
-                # Cost from depot to first customer
-                travel_cost = get(pso_multiple_depots.costs, (0, customer_idx), L*4)
-            else
-                prev_customer = permutation[j-1]
-                travel_cost = get(pso_multiple_depots.costs, (prev_customer, customer_idx), L*4)
-            end
-            
-            # Feasibility: ensure we can still return to the closest depot using precomputed distance
-            return_distance = pso_multiple_depots.closest_depot_distance[customer_idx]
-            if current_cost + travel_cost + return_distance > L
-                break
-            end
-            
-            current_cost += travel_cost
-            current_profit += pso_multiple_depots.profits[customer_idx]
-            j += 1
-        end
-        
-        P[i] = current_profit
-        tour_lengths[i] = j - i
-        
-        # Apply Equation 3: succ[i] = i + l_i^max + 1 if i + l_i^max + 1 ≤ n, else 0
-        # Here, l_i^max = j - i, so i + l_i^max + 1 = i + (j - i) + 1 = j + 1
-        if j <= n
-            succ[i] = j
-        else
-            succ[i] = 0  # According to Equation 3
-        end
-    end
-    time_phase_1 = time() - start_time_phase_1
-    # println("time to run phase 1: $time_phase_1")
-
-    start_time_phase_2 = time()
-    # Dynamic programming table Γ[i,j] = max profit using j drones from position i onwards
-    # Using (n+1) × (m+1) to handle boundary conditions as per Equation 4
-    Γ = zeros(n + 1, m + 1)
-    
-    # Fill DP table in reverse order (as shown in Figure 1c)
-    for i in n:-1:1
-        for j in 0:m
-            if j == 0
-                # No drones left, no profit possible
-                Γ[i, j + 1] = 0.0
-            else
-                # Option 1: Don't use tour starting at i
-                Γ[i, j + 1] = Γ[i + 1, j + 1]
-                
-                # Option 2: Use saturated tour starting at i
-                # According to Equation 4: max{Γ(succ[i], j-1) + P[i], Γ(i+1, j)}
-                if succ[i] == 0
-                    # When succ[i] = 0, Γ(succ[i], j-1) = 0 according to Equation 4
-                    profit_with_tour = P[i] + 0.0
-                else
-                    # Normal case: access Γ[succ[i], j] which corresponds to Γ(succ[i], j-1) in paper notation
-                    profit_with_tour = P[i] + Γ[succ[i], j]
-                end
-                
-                Γ[i, j + 1] = max(Γ[i, j + 1], profit_with_tour)
-            end
-        end
-    end
-    time_phase_2 = time() - start_time_phase_2
-    # println("time to run phase 2: $time_phase_2")
-
-    start_time_phase_3 = time()
-    # Backtrack to find the optimal routes (as described in the paper)
-    routes = Vector{Vector{Int}}()
-    i = 1
-    j = m
-    
-    while i <= n && j > 0 && length(routes) < m
-        # Check which option was chosen in the DP
-        option1 = Γ[i + 1, j + 1]  # Don't use tour starting at i
-        
-        option2 = 0.0
-        if succ[i] == 0
-            option2 = P[i] + 0.0
-        else
-            option2 = P[i] + Γ[succ[i], j]
-        end
-        
-        if abs(option2 - Γ[i, j + 1]) < 1e-10  # Use saturated tour starting at i
-            # Extract the saturated tour starting at position i
-            tour_end = i + tour_lengths[i] - 1
-            route = permutation[i:tour_end]
-            push!(routes, route)
-            
-            i = succ[i] > 0 ? succ[i] : n + 1
-            j -= 1
-        else  # Skip this position
-            i += 1
-        end
-    end
-    time_phase_3 = time() - start_time_phase_3
-    # println("time to run phase 3: $time_phase_3")
-    total_time = time_phase_1 + time_phase_2 + time_phase_3
-    if total_time > 0.01
-        println("total time: $(time_phase_1 + time_phase_2 + time_phase_3)")
-        # relative time
-        println("relative time: $(time_phase_1 / (time_phase_1 + time_phase_2 + time_phase_3))")
-        println("relative time: $(time_phase_2 / (time_phase_1 + time_phase_2 + time_phase_3))")
-        println("relative time: $(time_phase_3 / (time_phase_1 + time_phase_2 + time_phase_3))")
-        println("n: $n")
-    end
-
-    return Γ[1, m + 1], routes
-end
-
-
 
 """
 Fast split procedure for GRID (grid-based) multiple depots
@@ -346,23 +205,421 @@ end
 
 
 
-# Update the original fast_split to use the new function
+# Use sparse split for all profit-only evaluations (Section 13.1)
 function fast_split_multiple_depots(permutation::Vector{Int}, pso_multiple_depots::PSOiA_TOP_multiple_depots)
-    profit, _ = fast_split_with_routes_multiple_depots(permutation, pso_multiple_depots)
+    profit, _, _ = fast_split_sparse(permutation, pso_multiple_depots)
     return profit
 end
 
 """
 Compute node-to-position mapping for a given permutation
-Returns a dictionary mapping each node to its position (1-indexed) in the permutation
+Returns a Vector where node_to_pos[node] = position of that node in the permutation.
+The vector is sized to hold all nodes (1 to max node ID).
 """
 function compute_node_to_position(permutation::Vector{Int})
-    node_to_pos = Dict{Int, Int}()
+    if isempty(permutation)
+        return Int[]
+    end
+    max_node = maximum(permutation)
+    node_to_pos = zeros(Int, max_node)
     for (pos, node) in enumerate(permutation)
         node_to_pos[node] = pos
     end
     return node_to_pos
 end
+
+# ============================================================================
+# SPARSE SPLIT PROCEDURE (Optimized for grid-based instances with sparse depots)
+# ============================================================================
+
+"""
+TourIntervals: Stores the union of saturated tour intervals for boundary optimization.
+Used to skip no-op shift/swap moves that cannot affect the split profit.
+"""
+struct TourIntervals
+    intervals::Vector{Tuple{Int,Int}}  # Sorted, non-overlapping (start, end) pairs
+    max_end::Int                        # Maximum endpoint for quick rejection
+end
+
+"""
+Build an empty TourIntervals
+"""
+function empty_tour_intervals()
+    return TourIntervals(Tuple{Int,Int}[], 0)
+end
+
+"""
+Get sorted depot positions from a node_to_position mapping.
+Depot nodes are those with index > n_pure_customers.
+Returns positions sorted in ascending order.
+"""
+function get_sorted_depot_positions(node_to_position::Vector{Int}, n_pure_customers::Int)
+    depot_positions = Int[]
+    for node in (n_pure_customers + 1):length(node_to_position)
+        pos = node_to_position[node]
+        if pos > 0  # Only include if the node is in the permutation
+            push!(depot_positions, pos)
+        end
+    end
+    sort!(depot_positions)
+    return depot_positions
+end
+
+"""
+Phase 1 (Sparse): Compute saturated tours only at depot positions.
+Returns sparse arrays indexed by depot index (1 to k), not position.
+"""
+function compute_saturated_tours_sparse(
+    permutation::Vector{Int},
+    node_to_position::Vector{Int},
+    pso::PSOiA_TOP_multiple_depots
+)
+    n = length(permutation)
+    n_pure_customers = pso.n_pure_customers
+    L = pso.max_battery_time
+    
+    # Get sorted depot positions
+    sorted_depot_positions = get_sorted_depot_positions(node_to_position, n_pure_customers)
+    k = length(sorted_depot_positions)
+    
+    if k == 0
+        return Float64[], Int[], Int[], Int[]
+    end
+    
+    # Sparse arrays indexed by depot index (1 to k)
+    P_sparse = zeros(Float64, k)           # Profit of saturated tour
+    succ_sparse = zeros(Int, k)            # Next position after tour ends (0 if extends to end)
+    tour_lengths_sparse = zeros(Int, k)    # Length of saturated tour
+    
+    for idx in 1:k
+        depot_pos = sorted_depot_positions[idx]
+        
+        # Build saturated tour starting from depot_pos
+        current_cost = 0.0
+        current_profit = 0.0
+        prev_customer = permutation[depot_pos]  # The depot node itself
+        j = depot_pos + 1
+        
+        while j <= n
+            customer_idx = permutation[j]
+            
+            # Get travel cost (default to infeasible if not found)
+            travel_cost = get(pso.costs, (prev_customer, customer_idx), L * 4)
+            
+            # Get return distance to closest depot (precomputed)
+            return_distance = pso.closest_depot_distance[customer_idx]
+            
+            # Accumulate cost first
+            current_cost += travel_cost
+            
+            # Feasibility check
+            if current_cost + return_distance > L
+                break
+            end
+            
+            current_profit += pso.profits[customer_idx]
+            prev_customer = customer_idx
+            j += 1
+        end
+        
+        P_sparse[idx] = current_profit
+        tour_lengths_sparse[idx] = j - depot_pos
+        succ_sparse[idx] = (j <= n) ? j : 0  # 0 indicates tour extends to end
+    end
+    
+    return P_sparse, succ_sparse, tour_lengths_sparse, sorted_depot_positions
+end
+
+"""
+Lookup function for sparse DP: find Γ value at first depot at or after 'position'.
+Uses binary search for O(log k) lookup.
+"""
+function lookup_Γ_sparse(
+    position::Int,
+    j::Int,  # Number of drones (0 to m)
+    sorted_depot_positions::Vector{Int},
+    Γ_sparse::Matrix{Float64}
+)
+    # Handle boundary: no drones left
+    if j < 0
+        return 0.0
+    end
+    
+    # Binary search for first depot at or after 'position'
+    idx = searchsortedfirst(sorted_depot_positions, position)
+    if idx > length(sorted_depot_positions)
+        return 0.0
+    end
+    return Γ_sparse[idx, j + 1]
+end
+
+"""
+Phase 2 (Sparse): Dynamic programming on depot positions only.
+Γ_sparse[idx, j+1] = max profit using j drones from depot index idx onwards.
+"""
+function sparse_dp_phase2(
+    P_sparse::Vector{Float64},
+    succ_sparse::Vector{Int},
+    sorted_depot_positions::Vector{Int},
+    m::Int,  # Number of drones
+    n::Int   # Permutation length
+)
+    k = length(sorted_depot_positions)
+    
+    # Γ_sparse dimensions: (k+1) × (m+1) to handle boundary conditions
+    Γ_sparse = zeros(Float64, k + 1, m + 1)
+    
+    # Boundary condition: Γ_sparse[k+1, :] = 0 (no more depots) - already initialized
+    
+    # Fill DP table in reverse order of depot indices
+    for idx in k:-1:1
+        for j in 1:m
+            # Option 1: Skip this depot (go to next depot)
+            skip_value = Γ_sparse[idx + 1, j + 1]
+            
+            # Option 2: Use the saturated tour starting at this depot
+            succ_pos = succ_sparse[idx]
+            
+            if succ_pos == 0
+                # Tour extends to end of permutation, no remaining profit
+                remaining_value = 0.0
+            else
+                # Find the first depot at or after succ_pos (binary search)
+                remaining_value = lookup_Γ_sparse(
+                    succ_pos, j - 1,
+                    sorted_depot_positions, Γ_sparse
+                )
+            end
+            
+            use_value = P_sparse[idx] + remaining_value
+            
+            Γ_sparse[idx, j + 1] = max(skip_value, use_value)
+        end
+    end
+    
+    return Γ_sparse
+end
+
+"""
+Find next depot index at or after a given position (binary search).
+Returns 0 if no depot exists at or after the position.
+"""
+function find_next_depot_index(position::Int, sorted_depot_positions::Vector{Int})
+    idx = searchsortedfirst(sorted_depot_positions, position)
+    return idx <= length(sorted_depot_positions) ? idx : 0
+end
+
+"""
+Phase 3 (Sparse): Backtrack through sparse DP table to extract routes.
+"""
+function sparse_backtracking(
+    P_sparse::Vector{Float64},
+    succ_sparse::Vector{Int},
+    tour_lengths_sparse::Vector{Int},
+    sorted_depot_positions::Vector{Int},
+    Γ_sparse::Matrix{Float64},
+    permutation::Vector{Int},
+    m::Int,
+    n::Int
+)
+    routes = Vector{Vector{Int}}()
+    
+    idx = 1  # Current depot index
+    j = m    # Remaining drones
+    k = length(sorted_depot_positions)
+    
+    while idx <= k && j > 0 && length(routes) < m
+        depot_pos = sorted_depot_positions[idx]
+        
+        # Compute both options to determine which was chosen
+        skip_value = Γ_sparse[idx + 1, j + 1]
+        
+        succ_pos = succ_sparse[idx]
+        if succ_pos == 0
+            remaining_value = 0.0
+        else
+            remaining_value = lookup_Γ_sparse(succ_pos, j - 1, sorted_depot_positions, Γ_sparse)
+        end
+        use_value = P_sparse[idx] + remaining_value
+        
+        # Check which option matches the stored DP value
+        if abs(use_value - Γ_sparse[idx, j + 1]) < 1e-10
+            # Use the tour starting at this depot
+            tour_start = depot_pos
+            tour_end = depot_pos + tour_lengths_sparse[idx] - 1
+            route = permutation[tour_start:tour_end]
+            push!(routes, route)
+            
+            # Move to next depot at or after succ_pos
+            if succ_pos == 0 || succ_pos > n
+                break  # Tour extends to end, we're done
+            end
+            
+            # Find next depot index at or after succ_pos
+            next_idx = find_next_depot_index(succ_pos, sorted_depot_positions)
+            if next_idx == 0
+                break  # No more depots
+            end
+            idx = next_idx
+            j -= 1
+        else
+            # Skip this depot, move to next
+            idx += 1
+        end
+    end
+    
+    return routes
+end
+
+"""
+Build TourIntervals from Phase 1 results.
+Includes depot positions as zero-length intervals to prevent skipping depot-crossing moves.
+"""
+function build_tour_intervals(
+    sorted_depot_positions::Vector{Int},
+    tour_lengths_sparse::Vector{Int}
+)
+    intervals = Tuple{Int,Int}[]
+    
+    for (idx, depot_pos) in enumerate(sorted_depot_positions)
+        # Include depot position as zero-length interval
+        push!(intervals, (depot_pos, depot_pos))
+        # Include tour interval (positions after depot)
+        tour_start = depot_pos + 1
+        tour_end = depot_pos + tour_lengths_sparse[idx] - 1
+        if tour_end >= tour_start  # Non-empty tour
+            push!(intervals, (tour_start, tour_end))
+        end
+    end
+    
+    # Sort by start position
+    sort!(intervals, by=first)
+    
+    # Merge overlapping intervals
+    merged = Tuple{Int,Int}[]
+    for (s, e) in intervals
+        if isempty(merged) || s > merged[end][2] + 1
+            push!(merged, (s, e))
+        else
+            # Extend the last interval
+            merged[end] = (merged[end][1], max(merged[end][2], e))
+        end
+    end
+    
+    max_end = isempty(merged) ? 0 : merged[end][2]
+    return TourIntervals(merged, max_end)
+end
+
+"""
+Check if a range [range_start, range_end] intersects any tour interval.
+Used for shift operations to detect no-op moves.
+"""
+function intersects_range(ti::TourIntervals, range_start::Int, range_end::Int)
+    # Quick rejection: range is entirely after all tours
+    if range_start > ti.max_end
+        return false
+    end
+    
+    # Quick rejection: empty intervals
+    if isempty(ti.intervals)
+        return false
+    end
+    
+    # Binary search for first interval with start >= range_start
+    idx = searchsortedfirst(ti.intervals, (range_start, 0), by=first)
+    
+    # Check interval before idx (if exists): does its end reach into our range?
+    if idx > 1 && ti.intervals[idx-1][2] >= range_start
+        return true
+    end
+    
+    # Check interval at idx (if exists): does its start fall within our range?
+    if idx <= length(ti.intervals) && ti.intervals[idx][1] <= range_end
+        return true
+    end
+    
+    return false
+end
+
+"""
+Check if a single position is inside any tour interval.
+Used for swap operations.
+"""
+function is_active(ti::TourIntervals, pos::Int)
+    return intersects_range(ti, pos, pos)
+end
+
+"""
+Sparse split procedure: Version 1 - uses node_to_position from particle.
+Returns (profit, routes, tour_intervals).
+"""
+function fast_split_sparse(
+    permutation::Vector{Int},
+    particle::Particle,
+    pso::PSOiA_TOP_multiple_depots
+)
+    return fast_split_sparse_with_mapping(permutation, particle.node_to_position, pso)
+end
+
+"""
+Sparse split procedure: Version 2 - computes mapping on-the-fly.
+Returns (profit, routes, tour_intervals).
+"""
+function fast_split_sparse(
+    permutation::Vector{Int},
+    pso::PSOiA_TOP_multiple_depots
+)
+    node_to_position = compute_node_to_position(permutation)
+    return fast_split_sparse_with_mapping(permutation, node_to_position, pso)
+end
+
+"""
+Core sparse split implementation with explicit node_to_position mapping.
+Returns (profit, routes, tour_intervals).
+"""
+function fast_split_sparse_with_mapping(
+    permutation::Vector{Int},
+    node_to_position::Vector{Int},
+    pso::PSOiA_TOP_multiple_depots
+)
+    n = length(permutation)
+    m = pso.n_drones
+    
+    empty_intervals = empty_tour_intervals()
+    
+    if n == 0
+        return 0.0, Vector{Vector{Int}}(), empty_intervals
+    end
+    
+    # Phase 1: Compute saturated tours (sparse)
+    P_sparse, succ_sparse, tour_lengths_sparse, sorted_depot_positions = 
+        compute_saturated_tours_sparse(permutation, node_to_position, pso)
+    
+    k = length(sorted_depot_positions)
+    if k == 0
+        return 0.0, Vector{Vector{Int}}(), empty_intervals
+    end
+    
+    # Phase 2: Dynamic programming (sparse)
+    Γ_sparse = sparse_dp_phase2(P_sparse, succ_sparse, sorted_depot_positions, m, n)
+    
+    # Phase 3: Backtracking (sparse)
+    routes = sparse_backtracking(
+        P_sparse, succ_sparse, tour_lengths_sparse,
+        sorted_depot_positions, Γ_sparse, permutation, m, n
+    )
+    
+    # Build tour intervals for boundary optimization
+    tour_intervals = build_tour_intervals(sorted_depot_positions, tour_lengths_sparse)
+    
+    optimal_profit = lookup_Γ_sparse(1, m, sorted_depot_positions, Γ_sparse)
+    
+    return optimal_profit, routes, tour_intervals
+end
+
+# ============================================================================
+# END SPARSE SPLIT PROCEDURE
+# ============================================================================
 
 """
 Initialize particle swarm
@@ -378,18 +635,18 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
         position = shuffle(pso.accessible_customers)
         profit = fast_split_multiple_depots(position, pso)
         
+        # Compute node-to-position mapping for this particle
+        node_to_pos = compute_node_to_position(position)
+        
         particle = Particle(
             copy(position),
             copy(position),
             profit,
-            profit
+            profit,
+            node_to_pos
         )
         
         push!(pso.swarm, particle)
-        
-        # Compute and store node-to-position mapping for this particle
-        node_to_pos = compute_node_to_position(position)
-        push!(pso.node_to_position, node_to_pos)
         
         # Update global best
         if profit > pso.global_best_profit
@@ -409,7 +666,7 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
         for i in 1:n_idch
             idch_particle_start = time()
             position = idch_heuristic(pso, false)  # Fast version
-            profit, routes = fast_split_with_routes_multiple_depots(position, pso)
+            profit, routes, _ = fast_split_sparse(position, pso)
             
             # Calculate profit breakdown per route
             route_profits = Float64[]
@@ -433,12 +690,11 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
             end
             
             pso.swarm[i].position = copy(position)
+            pso.swarm[i].position = copy(position)
             pso.swarm[i].local_best = copy(position)
             pso.swarm[i].local_best_profit = profit
             pso.swarm[i].current_profit = profit
-            
-            # Update node-to-position mapping for this particle
-            pso.node_to_position[i] = compute_node_to_position(position)
+            pso.swarm[i].node_to_position = compute_node_to_position(position)
             
             # Print detailed information
             println("  [IDCH] Particle $i:")
@@ -497,7 +753,7 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
             println("  [GREEDY-DEBUG] Particle $idx: expected profit from greedy = $(round(profit, digits=6))")
             
             # Also compute fast_split profit for comparison (but don't use it)
-            fast_split_profit, routes = fast_split_with_routes_multiple_depots(position, pso)
+            fast_split_profit, routes, _ = fast_split_sparse(position, pso)
             println("  [GREEDY-DEBUG] Particle $idx: fast_split profit = $(round(fast_split_profit, digits=6)) (NOT USED)")
             if fast_split_profit < profit * 0.5
                 println("  [GREEDY-DEBUG] Particle $idx: NOTE: fast_split gives much lower profit because it uses L-infinity costs,")
@@ -508,9 +764,7 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
             pso.swarm[particle_index].local_best = copy(position)
             pso.swarm[particle_index].local_best_profit = profit
             pso.swarm[particle_index].current_profit = profit
-            
-            # Update node-to-position mapping for this particle
-            pso.node_to_position[particle_index] = compute_node_to_position(position)
+            pso.swarm[particle_index].node_to_position = compute_node_to_position(position)
             
             # Track best greedy solution
             if profit > best_greedy_profit
@@ -569,9 +823,7 @@ function initialize_swarm(pso::PSOiA_TOP_multiple_depots, use_greedy_init::Bool 
         pso.swarm[end].local_best = copy(position)
         pso.swarm[end].local_best_profit = profit
         pso.swarm[end].current_profit = profit
-        
-        # Update node-to-position mapping for this particle
-        pso.node_to_position[end] = compute_node_to_position(position)
+        pso.swarm[end].node_to_position = compute_node_to_position(position)
         
         if profit > pso.global_best_profit
             pso.global_best = copy(position)
@@ -1414,6 +1666,194 @@ function local_search!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_mul
     return total_time_shift, total_time_swap, total_time_destruction_repair
 end
 
+# ============================================================================
+# SPARSE OPERATORS (with boundary optimization)
+# These are new versions that use fast_split_sparse and skip no-op moves.
+# ============================================================================
+
+"""
+Shift operator with sparse split and boundary optimization.
+Skips moves that cannot affect the split profit (moves entirely in dead zones).
+Returns (improved::Bool, new_tour_intervals::TourIntervals).
+"""
+function shift_operator_sparse!(
+    particle::Particle,
+    pso::PSOiA_TOP_multiple_depots,
+    tour_intervals::TourIntervals
+)
+    n = length(particle.position)
+    positions = shuffle(1:n)
+    
+    for i in positions
+        node_i = particle.position[i]
+        is_depot = node_i > pso.n_pure_customers
+        
+        for j in shuffle(setdiff(1:n, [i]))
+            # === BOUNDARY OPTIMIZATION ===
+            # Skip if move cannot affect any tour (customer moves in dead zone)
+            if !is_depot
+                range_start = min(i, j)
+                range_end = max(i, j)
+                if !intersects_range(tour_intervals, range_start, range_end)
+                    continue  # No-op move, skip evaluation
+                end
+            end
+            
+            # === EXISTING BLOCKING CHECK ===
+            if !is_depot
+                if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_removed(particle, i, pso)
+                    continue
+                end
+            end
+            
+            # === EVALUATE SHIFT ===
+            new_position = move_element(particle.position, i, j)
+            new_profit, _, new_tour_intervals = fast_split_sparse(new_position, pso)
+            
+            if new_profit > particle.current_profit
+                particle.position = new_position
+                particle.current_profit = new_profit
+                
+                # Update node-to-position mapping incrementally
+                node_moved = particle.position[j]
+                if i < j
+                    for pos in (i+1):j
+                        node_at_pos = particle.position[pos]
+                        particle.node_to_position[node_at_pos] = pos
+                    end
+                else
+                    for pos in j:(i-1)
+                        node_at_pos = particle.position[pos]
+                        particle.node_to_position[node_at_pos] = pos
+                    end
+                end
+                particle.node_to_position[node_moved] = j
+                
+                return true, new_tour_intervals
+            end
+        end
+    end
+    
+    return false, tour_intervals
+end
+
+"""
+Swap operator with sparse split and boundary optimization.
+Skips swaps where both positions are outside all tour intervals.
+Returns (improved::Bool, new_tour_intervals::TourIntervals).
+Counters: (total_swaps, skipped_swaps) are updated in-place.
+"""
+function swap_operator_sparse!(
+    particle::Particle,
+    pso::PSOiA_TOP_multiple_depots,
+    tour_intervals::TourIntervals,
+    counters::Ref{Tuple{Int, Int}}  # (total_swaps, skipped_swaps)
+)
+    n = length(particle.position)
+    positions = shuffle(1:n)
+    pos = particle.position
+    
+    for i in positions
+        node_i = pos[i]
+        is_depot_i = node_i > pso.n_pure_customers
+        
+        for j in shuffle((i+1):n)
+            node_j = pos[j]
+            is_depot_j = node_j > pso.n_pure_customers
+            
+            # Increment total swap attempts
+            counters[] = (counters[][1] + 1, counters[][2])
+            
+            # === BOUNDARY OPTIMIZATION ===
+            # Skip if both positions are outside all tours (and neither is a depot)
+            if !is_depot_i && !is_depot_j
+                if !is_active(tour_intervals, i) && !is_active(tour_intervals, j)
+                    # Increment skipped swaps
+                    counters[] = (counters[][1], counters[][2] + 1)
+                    continue  # No-op swap, skip evaluation
+                end
+            end
+            
+            # === EXISTING BLOCKING CHECK ===
+            if !is_depot_i && !is_depot_j
+                if is_blocking_once_inserted(particle, i, j, pso) && is_blocking_once_inserted(particle, j, i, pso)
+                    continue
+                end
+            end
+            
+            # === EVALUATE SWAP ===
+            node_at_i = pos[i]
+            node_at_j = pos[j]
+            pos[i], pos[j] = pos[j], pos[i]  # Trial swap
+            new_profit, _, new_tour_intervals = fast_split_sparse(pos, pso)
+            
+            if new_profit > particle.current_profit
+                particle.current_profit = new_profit
+                # Update mapping: O(1)
+                particle.node_to_position[node_at_i] = j
+                particle.node_to_position[node_at_j] = i
+                return true, new_tour_intervals
+            else
+                # Revert swap
+                pos[i], pos[j] = pos[j], pos[i]
+            end
+        end
+    end
+    
+    return false, tour_intervals
+end
+
+"""
+Local search using sparse operators with boundary optimization.
+Returns timing info (time_shift, time_swap, time_destruction_repair) for compatibility with original local_search!.
+Note: particle_idx is accepted for compatibility but not used (mapping is in particle).
+"""
+function local_search_sparse!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_multiple_depots)
+    total_time_shift = 0.0
+    total_time_swap = 0.0
+    total_time_destruction_repair = 0.0  # Not used in sparse version, kept for compatibility
+    
+    # Counters for swap boundary optimization statistics
+    swap_counters = Ref((0, 0))  # (total_swaps, skipped_swaps)
+    
+    # Initial split to get tour intervals
+    _, _, tour_intervals = fast_split_sparse(particle.position, particle, pso)
+    
+    improved = true
+    while improved
+        improved = false
+        neighborhoods = shuffle([1, 2])
+        
+        for neighborhood in neighborhoods
+            if neighborhood == 1
+                time_before = time()
+                improved, tour_intervals = shift_operator_sparse!(particle, pso, tour_intervals)
+                total_time_shift += time() - time_before
+            else
+                time_before = time()
+                improved, tour_intervals = swap_operator_sparse!(particle, pso, tour_intervals, swap_counters)
+                total_time_swap += time() - time_before
+            end
+            
+            if improved
+                break  # Restart from first neighborhood
+            end
+        end
+    end
+    
+    # Print swap boundary optimization statistics
+    total_swaps, skipped_swaps = swap_counters[]
+    if total_swaps > 0
+        skip_percentage = 100.0 * skipped_swaps / total_swaps
+        println("[BOUNDARY-OPT] Swap operations: $total_swaps total, $skipped_swaps skipped ($(round(skip_percentage, digits=2))%)")
+    end
+    
+    return total_time_shift, total_time_swap, total_time_destruction_repair
+end
+
+# ============================================================================
+# END SPARSE OPERATORS
+# ============================================================================
 
 """
 Move element from position i to position j in one pass with no extra copy
@@ -1579,20 +2019,17 @@ function shift_operator!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_m
                     # Moving forward: positions from i+1 to j shift left by 1
                     for pos in (i+1):j
                         node_at_pos = particle.position[pos]
-                        pso.node_to_position[particle_idx][node_at_pos] = pos
+                        particle.node_to_position[node_at_pos] = pos
                     end
                 else  # i > j
                     # Moving backward: positions from j to i-1 shift right by 1
                     for pos in j:(i-1)
                         node_at_pos = particle.position[pos]
-                        pso.node_to_position[particle_idx][node_at_pos] = pos
+                        particle.node_to_position[node_at_pos] = pos
                     end
                 end
-                pso.node_to_position[particle_idx][node_moved] = j
+                particle.node_to_position[node_moved] = j
                 
-                ending_time = time()
-                #println("time to run split: $time_split")
-                #println("time to run shift without split: $(ending_time - start_time - time_split)")
                 return true
             end
         end
@@ -1624,8 +2061,8 @@ function swap_operator!(particle::Particle, particle_idx::Int, pso::PSOiA_TOP_mu
             if new_profit > particle.current_profit
                 particle.current_profit = new_profit
                 # Update node-to-position mapping incrementally (O(1) - just 2 updates)
-                pso.node_to_position[particle_idx][node_at_i] = j
-                pso.node_to_position[particle_idx][node_at_j] = i
+                particle.node_to_position[node_at_i] = j
+                particle.node_to_position[node_at_j] = i
                 return true  # keep swap; pos already updated
             else
                 pos[i], pos[j] = pos[j], pos[i]  # revert
@@ -1665,12 +2102,13 @@ function destruction_repair_operator!(particle::Particle, particle_idx::Int, pso
         particle.position = reconstructed
         particle.current_profit = new_profit
         # Recompute mapping since we created a new permutation
-        pso.node_to_position[particle_idx] = compute_node_to_position(reconstructed)
+        particle.node_to_position = compute_node_to_position(reconstructed)
         return true
     end
     
     return false
 end
+
 """
 Update local best positions with diversity management
 """
@@ -2006,15 +2444,11 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
     println("accessible_customers: $(length(accessible_customers))")
     println("n_pure_customers: $(n_pure_customers)")
     
-    # Initialize PSO with empty vector of node-to-position mappings
-    # This will be populated during swarm initialization
-    node_to_position_vec = Dict{Int, Int}[]
-    
-    # Initialize PSO
+    # Initialize PSO (node_to_position is now stored in each Particle)
     pso = PSOiA_TOP_multiple_depots(
         Particle[], Int[], -Inf, swarm_size, max_iterations,
         w, c1, c2, ph, pm, n_drones, n_pure_customers, max_battery_time,
-        customers, profits, costs, left_neighbors, node_to_position_vec,
+        customers, profits, costs, left_neighbors,
         accessible_customers, depot_coord, closest_depot_distance
     )
     
@@ -2091,19 +2525,20 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
                     println("[TIME CHECK] IDCH took $(round(idch_time, digits=3))s (particle $x, iter $iter), elapsed=$(round(elapsed, digits=2))s")
                 end
                 # Update node-to-position mapping after position change
-                pso.node_to_position[x] = compute_node_to_position(pso.swarm[x].position)
+                pso.swarm[x].node_to_position = compute_node_to_position(pso.swarm[x].position)
             else
                 # Update S[x].pos (see Section 2.5)
                 update_position!(pso.swarm[x], pso.global_best, pso)
                 # Update node-to-position mapping after position change
-                pso.node_to_position[x] = compute_node_to_position(pso.swarm[x].position)
+                pso.swarm[x].node_to_position = compute_node_to_position(pso.swarm[x].position)
             end
             
             # Local search with probability pm
             if rand() < pso.pm
                 # Apply local search on S[x].pos (see Section 2.4)
+                # Using sparse operators with boundary optimization
                 time_before_local_search = time()
-                time_shift, time_swap, time_destruction_repair = local_search!(pso.swarm[x], x, pso)
+                time_shift, time_swap, time_destruction_repair = local_search_sparse!(pso.swarm[x], x, pso)
                 time_after_local_search = time()
                 local_search_time = time_after_local_search - time_before_local_search
                 total_time_local_search += local_search_time
@@ -2114,8 +2549,7 @@ function solve_PSO_TOP_multiple_depots(customers::Vector{Tuple{Int,Int}}, profit
                 if local_search_time > 0.1  # Log if local search takes more than 0.1 seconds
                     println("[TIME CHECK] Local search took $(round(local_search_time, digits=3))s (particle $x, iter $iter), elapsed=$(round(elapsed, digits=2))s")
                 end
-                # Note: node-to-position mapping is updated incrementally within shift/swap operators
-                # Only destruction/repair recomputes the full mapping when needed
+                # Note: node-to-position mapping is updated incrementally within sparse shift/swap operators
             end
             
             # Evaluate S[x].pos (see Section 2.2)
@@ -2185,8 +2619,8 @@ end
 Convert giant tour to actual routes using the optimal split procedure from the paper
 """
 function extract_routes(giant_tour::Vector{Int}, pso::PSOiA_TOP_multiple_depots)
-    # Use the proper split procedure from the paper
-    optimal_profit, routes = fast_split_with_routes_multiple_depots(giant_tour, pso)
+    # Use the sparse split procedure (Section 13.1)
+    optimal_profit, routes, _ = fast_split_sparse(giant_tour, pso)
     
     #println("=== OPTIMAL ROUTES ===")
     for (i, route) in enumerate(routes)
