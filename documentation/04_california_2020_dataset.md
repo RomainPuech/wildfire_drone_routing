@@ -9,8 +9,9 @@ The **California 2020 Wildfire Dataset** is a comprehensive dataset containing a
 ```
 California2020Dataset/
 ├── mask.npy                          # California mask (1 = valid, 0 = invalid)
-├── wfpi_YYYYMMDD.npy                 # WFPI Day 2 forecast maps (one per unique fire date)
+├── wfpi_YYYYMMDD.npy                 # WFPI Day 2 forecast maps (one per calendar day — 366 files)
 ├── static_risk_wfpi_avg.npy          # Year-averaged WFPI map (for sensor placement)
+├── static_risk_wfpi_yearly.npy       # Time-aware yearly WFPI map, shape (732, H, W)
 ├── scenarii/                         # Ignition-point scenarios
 │   ├── FireName_FODID_scenario1.npy # One scenario per fire
 │   └── ...
@@ -52,6 +53,56 @@ Each scenario uses the **ignition-point-only format** (see [03_ignition_point_on
 - **Values:** Capped at 0 (negative values set to 0)
 - **Naming:** `wfpi_YYYYMMDD.npy` where YYYYMMDD is the date of the Day 2 forecast
 - **Date Logic:** For a fire discovered on date D, we use WFPI Day 2 forecast from date D-1
+
+### Yearly Time-Aware WFPI Map (`static_risk_wfpi_yearly.npy`)
+
+For scenarios where accurate time-of-day context matters, `static_risk_wfpi_yearly.npy` stores the correct WFPI forecast for every hour of 2020 in a single compact file.
+
+- **Format:** NumPy array with shape `(732, H, W)` — 2 frames per day × 366 days (2020 is a leap year)
+- **Data type:** `float32`
+- **Frame layout for calendar day d** (d = 1 for Jan 1, d = 366 for Dec 31):
+  - Frame `2*(d-1) + 0` — **before 10 am**: Day-2 forecast issued on day d−1
+  - Frame `2*(d-1) + 1` — **after 10 am**: Day-1 forecast issued on day d
+- **Rationale:** WFPI forecasts are updated once per day at 10 am. Before the update, the best available forecast is the Day-2 (issued the previous day). After 10 am, the Day-1 (same-day) forecast becomes available and supersedes it.
+- **Missing days:** The 366 daily D2 and D1 source files were completed with `complete_wfpi_datasets.py` before building this map (see below). The only fallback is Jan 1 pre-10 am, which uses Jan 1 D1 (Dec 31 2019 D2 does not exist).
+
+**Indexing at runtime:**
+
+```python
+def frame_index(discovery_date, hour):
+    day_of_year = discovery_date.timetuple().tm_yday  # 1–366
+    return 2 * (day_of_year - 1) + (0 if hour < 10 else 1)
+```
+
+**Per-scenario burn map extraction:**
+
+```python
+from datetime import timedelta
+
+# sim_start: datetime of the first simulation step
+frames = [yearly_map[frame_index(sim_start.date() + timedelta(minutes=30*t),
+                                  (sim_start + timedelta(minutes=30*t)).hour)]
+          for t in range(num_steps)]
+scenario_burnmap = np.stack(frames)   # shape (num_steps, H, W)
+```
+
+**Performance vs other maps** (see `documentation/12_yearly_wfpi_map_comparison.md`):
+
+| Map | % fires above bg median (all) | % fires above bg median (large) |
+|-----|-------------------------------|----------------------------------|
+| WFPI Yearly (time-aware) | **+18.1 pp** | +31.8 pp |
+| WFPI Day 1 | +18.0 pp | +29.5 pp |
+| WFPI Day 2 | +17.2 pp | +34.1 pp |
+
+**Generation script:**
+
+```bash
+# Step 1 — ensure all 366 daily files exist for both D1 and D2:
+python code/dataset_creation/nature_dataset_creation/complete_wfpi_datasets.py
+
+# Step 2 — build the yearly map:
+python code/dataset_creation/nature_dataset_creation/create_yearly_wfpi_burnmap.py
+```
 
 ### Aggregated WFPI Map (`static_risk_wfpi_avg.npy`)
 
@@ -115,13 +166,23 @@ cd code/dataset_creation/nature_dataset_creation
 python create_california_2020_dataset.py
 ```
 
-After creation, generate the year-averaged WFPI map for sensor placement strategies:
+After creation, complete both D1 and D2 datasets to cover all 366 calendar days (required for the yearly map):
 
 ```bash
-python code/dataset_creation/nature_dataset_creation/aggregate_wfpi_maps.py
+python code/dataset_creation/nature_dataset_creation/complete_wfpi_datasets.py
 ```
 
-This produces `static_risk_wfpi_avg.npy` in each WFPI-based dataset directory (Day-1 and Day-2). See the [Aggregated WFPI Map](#aggregated-wfpi-map-static_risk_wfpi_avgnpy) section for details.
+Then generate the static risk maps:
+
+```bash
+# Year-averaged map (sensor placement):
+python code/dataset_creation/nature_dataset_creation/aggregate_wfpi_maps.py
+
+# Time-aware yearly map (per-scenario burn map extraction):
+python code/dataset_creation/nature_dataset_creation/create_yearly_wfpi_burnmap.py
+```
+
+See the [Yearly WFPI Map](#yearly-time-aware-wfpi-map-static_risk_wfpi_yearlynpy) and [Aggregated WFPI Map](#aggregated-wfpi-map-static_risk_wfpi_avgnpy) sections for details.
 
 ### Processing Steps
 
@@ -221,11 +282,13 @@ After creation, check `dataset_summary.json` for:
 ## Storage Requirements
 
 **Estimated Storage (1km WFPI resolution):**
-- WFPI maps: ~1-2 GB (one per unique fire date)
+- WFPI maps (D2): ~1.5 GB (366 files × ~4 MB each)
+- WFPI maps (D1, in California2020Dataset_Day1/): ~1.5 GB
+- Yearly time-aware map: ~3.1 GB
 - Averaged WFPI map: ~4 MB (single file)
 - Mask: ~3 MB
 - Scenarios: ~0.12 MB (ignition-point format)
-- **Total: ~1-2 GB**
+- **Total: ~6 GB (D2 dataset alone); ~10 GB including D1 dataset)**
 
 **Estimated Storage (30m WFPI resolution):**
 - WFPI maps: ~1.2 TB
