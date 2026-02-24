@@ -459,6 +459,51 @@ A summary is also printed to stdout after saving:
 
 ---
 
+## Observed Solving Times
+
+The following figures were measured on a MacBook during smoke tests on the 261×161 opt-space grid (California 2020, 1 km WFPI resolution, 7 substeps per data step).
+
+### Sensor Placement (Gurobi ILP)
+
+| Configuration | Gurobi solve time |
+|---|---|
+| 8 ground + 2 charging stations | ~9 s (preprocessing 1 s, model creation 5 s, solve 3 s) |
+| 8 ground + 10 charging stations | comparable (same order of magnitude) |
+
+Sensor placement runs **once per strategy combination** and is cached to `logs/sensor_alloc_*.json`. On subsequent runs it loads in milliseconds.
+
+### Routing (Julia TOP / PSO, per unique cluster × start-hour pair)
+
+Each unique `(cluster, YYYYMMDD_HH)` key triggers one Julia routing computation consisting of:
+
+| Phase | Observed time |
+|---|---|
+| CPA initial plan (Julia ILP) | 22 – 46 s |
+| PSO (491 iterations) | ~0.5 s |
+| Subsequent reevaluation calls (per `reevaluation_step`) | 15 – 20 s each |
+
+The CPA time varies with the number of reachable customer nodes in the local burn map, which depends on the station's position and the fire risk distribution on that particular date and hour. Stations in high-risk, high-density areas tend to produce larger customer sets and longer solves.
+
+With `MAX_ROUTING_DATA_STEPS = 24` data steps and `reevaluation_step = 5`, each routing computation triggers approximately `24 * 7 / 5 ≈ 34` reevaluation calls, giving a **total routing time of roughly 10 – 15 minutes per unique (cluster, hour) pair**.
+
+### Scaling with number of stations
+
+Going from 2 to 10 charging stations **does not slow down individual routing calls**: each cluster is solved independently with its own subset of drones. The per-cluster routing complexity depends only on local grid density and drone count, not on the total number of stations. With 10 stations allocating 1 drone each, all 10 routing problems are the same size as the 1-drone problems in the 2-station case.
+
+The total benchmark wall time scales with the number of **unique (cluster, YYYYMMDD_HH) pairs** that actually contain fires, not with the total number of scenarios. Caching is therefore critical: once a routing plan for a given cluster and start hour is computed, all subsequent scenarios that share that key replay it in milliseconds.
+
+### Expected full-run time (1,530 scenarios, 10 clusters)
+
+With 1,530 scenarios distributed across 10 clusters, and assuming roughly 500 unique (cluster, hour) pairs need routing (the rest are cache hits or sensor-only fires outside all clusters):
+
+- **Routing computation**: ~500 × 12 min ≈ ~100 hours single-threaded
+- **Simulation replay** (cached routing): negligible (<1 s per scenario)
+- **Sensor-only path** (fires outside all clusters): negligible
+
+This makes **parallelisation across clusters and/or time keys the primary lever** for reducing wall time. Each (cluster, YYYYMMDD_HH) pair is fully independent and can be distributed across workers without coordination.
+
+---
+
 ## References
 
 - [04_california_2020_dataset.md](04_california_2020_dataset.md) — California 2020 dataset structure, WFPI maps, scenario format, and creation pipeline
