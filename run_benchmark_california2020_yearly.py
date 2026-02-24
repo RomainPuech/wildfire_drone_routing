@@ -81,6 +81,7 @@ SIMULATION_PARAMETERS = {
     "drone_speed_m_per_min": 600,
     "coverage_radius_m":     2900,
     "cell_size_m":           1000,     # ~1 km WFPI resolution
+    "transmission_range":    50000,
     "mask_pooling_mode":     "max",
 }
 
@@ -211,12 +212,16 @@ def load_or_compute_sensor_placement(strategy_cls, rescaled_auto_params: dict,
 
     with open(log_path, "w") as f:
         json.dump({
-            "ground_sensor_locations":  [list(x) for x in ground_locs],
-            "charging_station_locations": [list(x) for x in charging_locs],
-            "drones_per_charging_station": list(drones_per_station),
+            "ground_sensor_locations":    [[int(v) for v in x] for x in ground_locs],
+            "charging_station_locations": [[int(v) for v in x] for x in charging_locs],
+            "drones_per_charging_station": [int(x) for x in drones_per_station],
         }, f, indent=2)
     print(f"  [sensor] Saved to {Path(log_path).name}", flush=True)
-    return list(ground_locs), list(charging_locs), list(drones_per_station)
+    return (
+        [tuple(int(v) for v in x) for x in ground_locs],
+        [tuple(int(v) for v in x) for x in charging_locs],
+        [int(x) for x in drones_per_station],
+    )
 
 
 # ── Routing log ────────────────────────────────────────────────────────────────
@@ -599,6 +604,7 @@ def main():
         "speed_m_per_min":      speed,
         "coverage_radius_m":    coverage_r_m,
         "cell_size_m":          cell_size_m,
+        "transmission_range":   SIMULATION_PARAMETERS["transmission_range"],
         "mask_filename":        rescaled_mask_path,
     }
     base_rescaled_auto = {
