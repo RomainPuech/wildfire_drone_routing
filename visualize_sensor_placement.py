@@ -2,32 +2,29 @@
 """
 Visualize Sensor Placement on California 2020 Averaged WFPI Map
 
-Generates two PNG files in the project root:
+Generates up to four PNG files depending on --scale:
 
-  1. california_sensor_placement.png
-       Averaged yearly WFPI burn map (with California mask applied),
-       overlaid with all ground sensor and charging station positions.
+  Data scale (1 km/cell, 1309×805):
+    california_sensor_placement.png       — avg WFPI + sensors + stations
+    california_sensor_clusters.png        — same + cluster zones + all fires
 
-  2. california_sensor_clusters.png
-       Same base map plus the reachable zone (L∞ bounding box in opt-space)
-       of every drone cluster, and all fire ignition points from the dataset
-       (so you can visually assess how many fires fall inside vs outside clusters).
+  Operational scale (5 km/cell, 261×161, pooled):
+    california_sensor_placement_opt.png   — pooled avg WFPI + sensors + stations
+    california_sensor_clusters_opt.png    — same + cluster zones + all fires
 
-Run from the project root:
-    python visualize_sensor_placement.py [sensor_cache_json]
+Usage:
+    python visualize_sensor_placement.py [sensor_cache_json] [--scale data|opt|both]
 
-If no cache file is specified, the most recently modified
-California2020Dataset/logs/sensor_alloc_*.json is used.
+Defaults: most-recent sensor_alloc_*.json, --scale both
 """
 
 import sys
 import json
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import Rectangle
-from matplotlib.colors import Normalize
-from matplotlib.cm import ScalarMappable
 from collections import defaultdict
 from pathlib import Path
 
@@ -49,16 +46,30 @@ CLUSTER_COLOURS = [
 ]
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ── Map helpers ────────────────────────────────────────────────────────────────
 
-def opt_to_data_center(loc_opt):
-    """Opt-space (row, col) → data-space centre pixel."""
-    r, c = loc_opt
-    return r * COVERAGE_W + COVERAGE_W // 2, c * COVERAGE_W + COVERAGE_W // 2
+def pool_mean_2d(arr, block):
+    """Block-mean pool a 2-D float array."""
+    H, W = arr.shape
+    rH, rW = H // block, W // block
+    return (arr[:rH * block, :rW * block]
+            .reshape(rH, block, rW, block)
+            .mean(axis=(1, 3)))
 
+
+def pool_max_2d(arr, block):
+    """Block-max pool a 2-D array (used for mask)."""
+    H, W = arr.shape
+    rH, rW = H // block, W // block
+    return (arr[:rH * block, :rW * block]
+            .reshape(rH, block, rW, block)
+            .max(axis=(1, 3)))
+
+
+# ── Cluster helpers ────────────────────────────────────────────────────────────
 
 def compute_clusters(charging_locs_opt, drones_per_station):
-    """Union-find on charging stations with L∞ distance ≤ MAX_BATTERY_SUBSTEPS."""
+    """Union-find on charging stations; L∞ distance ≤ MAX_BATTERY_SUBSTEPS."""
     n = len(charging_locs_opt)
     parent = list(range(n))
 
@@ -90,28 +101,30 @@ def compute_clusters(charging_locs_opt, drones_per_station):
     return clusters
 
 
-def cluster_bbox_data(cluster, H, W):
-    """Return (col_min, row_min, width, height) in data-space for a cluster's
-    reachable zone (union of L∞ balls of radius MAX_BATTERY_SUBSTEPS around
-    each station, converted to data-space pixels)."""
+def cluster_bbox(cluster, max_rows, max_cols, scale=1):
+    """Return (col_lo, row_lo, width, height) for the cluster's reachable zone.
+
+    scale=1  → opt-space (coordinates are opt-cell indices)
+    scale=COVERAGE_W → data-space (coordinates are data-cell pixels)
+    """
     stations = cluster["stations_opt"]
     r_min = min(r for r, _ in stations) - MAX_BATTERY_SUBSTEPS
     r_max = max(r for r, _ in stations) + MAX_BATTERY_SUBSTEPS + 1
     c_min = min(c for _, c in stations) - MAX_BATTERY_SUBSTEPS
     c_max = max(c for _, c in stations) + MAX_BATTERY_SUBSTEPS + 1
 
-    # Convert opt-space bounds to data-space pixels
-    row_lo = max(0, r_min * COVERAGE_W)
-    row_hi = min(H, r_max * COVERAGE_W)
-    col_lo = max(0, c_min * COVERAGE_W)
-    col_hi = min(W, c_max * COVERAGE_W)
+    row_lo = max(0,        r_min * scale)
+    row_hi = min(max_rows, r_max * scale)
+    col_lo = max(0,        c_min * scale)
+    col_hi = min(max_cols, c_max * scale)
 
-    # matplotlib Rectangle: (x=col, y=row), width=Δcol, height=Δrow
     return col_lo, row_lo, col_hi - col_lo, row_hi - row_lo
 
 
+# ── Fire loader ────────────────────────────────────────────────────────────────
+
 def load_fire_ignition_points():
-    """Return arrays (rows, cols) of every fire ignition point in data-space."""
+    """Return (rows, cols) arrays of all fire ignition points in data-space."""
     rows, cols = [], []
     for f in sorted(SCENARII_DIR.glob("*.npy")):
         pt = np.load(str(f))
@@ -120,64 +133,113 @@ def load_fire_ignition_points():
     return np.array(rows), np.array(cols)
 
 
-def make_base_axes(bmap_masked, title):
-    """Create a figure/axes with the WFPI burn map already drawn."""
-    H, W = bmap_masked.shape
+# ── Plot primitives ────────────────────────────────────────────────────────────
+
+def make_base_axes(bmap_masked, title, xlabel, ylabel):
+    """Figure + axes with the burn map already rendered."""
+    H, W  = bmap_masked.shape
     aspect = W / H
-    fig_h = 12
-    fig, ax = plt.subplots(figsize=(fig_h * aspect + 1.5, fig_h))
+    fig_h  = 12
+    fig, ax = plt.subplots(figsize=(fig_h * aspect + 1.8, fig_h))
     im = ax.imshow(
         bmap_masked,
         cmap="YlOrRd",
         origin="upper",
         interpolation="nearest",
         vmin=0, vmax=255,
-        extent=[0, W, H, 0],   # (left, right, bottom, top) in data coords
+        extent=[0, W, H, 0],
     )
     ax.set_xlim(0, W)
-    ax.set_ylim(H, 0)          # row 0 at top, row H at bottom
+    ax.set_ylim(H, 0)
     fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label="WFPI (0–255)")
     ax.set_title(title, fontsize=12, fontweight="bold")
-    ax.set_xlabel("Column (1 km / cell)")
-    ax.set_ylabel("Row (1 km / cell)")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
     return fig, ax
 
 
-def add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
-                              drones_per_station, legend_items):
-    """Scatter ground sensors and charging stations onto ax."""
-    # Ground sensors — white star
-    if ground_locs_data:
-        g_rows = [r for r, _ in ground_locs_data]
-        g_cols = [c for _, c in ground_locs_data]
-        ax.scatter(g_cols, g_rows, marker="*", s=200, color="white",
-                   edgecolors="black", linewidths=0.8, zorder=5, label="_noleg")
+def add_sensors_and_stations(ax, ground_locs, charging_locs,
+                              drones_per_station, legend_items,
+                              marker_scale=1.0):
+    """Overlay ground sensors (stars) and charging stations (diamonds)."""
+    if ground_locs:
+        g_rows = [r for r, _ in ground_locs]
+        g_cols = [c for _, c in ground_locs]
+        ax.scatter(g_cols, g_rows, marker="*", s=int(200 * marker_scale),
+                   color="white", edgecolors="black", linewidths=0.8, zorder=5)
         legend_items.append(
             mpatches.Patch(facecolor="white", edgecolor="black",
-                           label=f"Ground sensor (n={len(ground_locs_data)})")
+                           label=f"Ground sensor (n={len(ground_locs)})")
         )
 
-    # Charging stations — colour-coded by drone allocation
-    if charging_locs_data:
-        c_rows = [r for r, _ in charging_locs_data]
-        c_cols = [c for _, c in charging_locs_data]
-        for i, ((r, c), nd) in enumerate(zip(charging_locs_data, drones_per_station)):
-            ax.scatter(c, r, marker="D", s=120, color="cyan",
-                       edgecolors="black", linewidths=0.8, zorder=5)
-            ax.text(c + 4, r - 4, str(nd), color="cyan",
-                    fontsize=7, fontweight="bold", zorder=6)
+    if charging_locs:
+        for (r, c), nd in zip(charging_locs, drones_per_station):
+            ax.scatter(c, r, marker="D", s=int(120 * marker_scale),
+                       color="cyan", edgecolors="black", linewidths=0.8, zorder=5)
+            offset = max(1, int(4 * marker_scale))
+            ax.text(c + offset, r - offset, str(nd),
+                    color="cyan", fontsize=max(6, int(7 * marker_scale)),
+                    fontweight="bold", zorder=6)
         legend_items.append(
             mpatches.Patch(facecolor="cyan", edgecolor="black",
-                           label=f"Charging station (n={len(charging_locs_data)}, label=drones)")
+                           label=f"Charging station (n={len(charging_locs)}, label=drones)")
         )
+
+
+def add_cluster_boxes(ax, clusters, H, W, scale, legend_items):
+    """Overlay cluster reachable-zone rectangles."""
+    for i, cluster in enumerate(clusters):
+        col_lo, row_lo, w, h = cluster_bbox(cluster, H, W, scale=scale)
+        colour = CLUSTER_COLOURS[i % len(CLUSTER_COLOURS)]
+        ax.add_patch(Rectangle(
+            (col_lo, row_lo), w, h,
+            linewidth=1.5, edgecolor=colour, facecolor=colour, alpha=0.15, zorder=3
+        ))
+        ax.add_patch(Rectangle(
+            (col_lo, row_lo), w, h,
+            linewidth=1.5, edgecolor=colour, facecolor="none", zorder=4
+        ))
+        nd = cluster["n_drones"]
+        legend_items.append(
+            mpatches.Patch(facecolor=colour, alpha=0.4, edgecolor=colour,
+                           label=f"Cluster {i} ({nd} drone{'s' if nd != 1 else ''})")
+        )
+
+
+def add_fires(ax, fire_rows, fire_cols, legend_items, s=4, alpha=0.5, color="black"):
+    """Overlay fire ignition points."""
+    ax.scatter(fire_cols, fire_rows, s=s, color=color,
+               alpha=alpha, zorder=2, linewidths=0)
+    legend_items.append(
+        mpatches.Patch(facecolor=color, alpha=min(1.0, alpha + 0.3),
+                       label=f"Fire ignition points (n={len(fire_rows)})")
+    )
+
+
+def render_and_save(fig, ax, H, W, out_path, legend_items, legend_loc="upper right"):
+    ax.set_xlim(0, W)
+    ax.set_ylim(H, 0)
+    ax.legend(handles=legend_items, loc=legend_loc, fontsize=8, framealpha=0.85)
+    fig.tight_layout()
+    fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved → {out_path.name}", flush=True)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
-    # ── Resolve sensor cache file ──────────────────────────────────────────────
-    if len(sys.argv) > 1:
-        cache_path = Path(sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("cache", nargs="?", help="Path to sensor_alloc_*.json")
+    parser.add_argument("--scale", choices=["data", "opt", "both"],
+                        default="both",
+                        help="Which coordinate scale to render (default: both)")
+    args = parser.parse_args()
+
+    # ── Resolve sensor cache ───────────────────────────────────────────────────
+    if args.cache:
+        cache_path = Path(args.cache)
     else:
         candidates = sorted(LOG_DIR.glob("sensor_alloc_*.json"),
                             key=lambda p: p.stat().st_mtime)
@@ -192,104 +254,119 @@ def main():
     ground_locs_opt    = [tuple(x) for x in d["ground_sensor_locations"]]
     charging_locs_opt  = [tuple(x) for x in d["charging_station_locations"]]
     drones_per_station = d["drones_per_charging_station"]
+    clusters           = compute_clusters(charging_locs_opt, drones_per_station)
+    combo_name         = cache_path.stem.replace("sensor_alloc_", "")
 
-    ground_locs_data   = [opt_to_data_center(loc) for loc in ground_locs_opt]
-    charging_locs_data = [opt_to_data_center(loc) for loc in charging_locs_opt]
+    n_gs = len(ground_locs_opt)
+    n_cs = len(charging_locs_opt)
+    n_dr = sum(drones_per_station)
+    n_cl = len(clusters)
 
-    clusters = compute_clusters(charging_locs_opt, drones_per_station)
+    # Data-space station/sensor centres
+    ground_locs_data   = [(r * COVERAGE_W + COVERAGE_W // 2,
+                           c * COVERAGE_W + COVERAGE_W // 2)
+                          for r, c in ground_locs_opt]
+    charging_locs_data = [(r * COVERAGE_W + COVERAGE_W // 2,
+                           c * COVERAGE_W + COVERAGE_W // 2)
+                          for r, c in charging_locs_opt]
 
-    # ── Load map and mask ──────────────────────────────────────────────────────
+    # ── Load maps ──────────────────────────────────────────────────────────────
     print("Loading avg WFPI map and mask ...", flush=True)
     avg_map = np.load(str(DATASET_DIR / "static_risk_wfpi_avg.npy"))
     mask    = np.load(str(DATASET_DIR / "mask.npy"))
     H, W    = mask.shape
 
-    bmap_masked = avg_map[0].astype(float).copy()
-    bmap_masked[mask == 0] = np.nan
+    bmap_data        = avg_map[0].astype(float).copy()
+    bmap_data[mask == 0] = np.nan
 
-    # ── Load fire ignition points ──────────────────────────────────────────────
+    # Pooled versions for opt scale
+    rH, rW           = H // COVERAGE_W, W // COVERAGE_W
+    bmap_opt_raw      = pool_mean_2d(avg_map[0].astype(float), COVERAGE_W)
+    mask_opt          = pool_max_2d(mask.astype(float),          COVERAGE_W)
+    bmap_opt          = bmap_opt_raw.copy()
+    bmap_opt[mask_opt == 0] = np.nan
+
+    # ── Load fires ─────────────────────────────────────────────────────────────
     print("Loading fire ignition points ...", flush=True)
-    fire_rows, fire_cols = load_fire_ignition_points()
-    print(f"  {len(fire_rows)} fires loaded", flush=True)
+    fire_rows_data, fire_cols_data = load_fire_ignition_points()
+    fire_rows_opt = fire_rows_data // COVERAGE_W
+    fire_cols_opt = fire_cols_data // COVERAGE_W
+    n_fires = len(fire_rows_data)
+    print(f"  {n_fires} fires loaded", flush=True)
+
+    do_data = args.scale in ("data", "both")
+    do_opt  = args.scale in ("opt",  "both")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # Plot 1 — avg WFPI + sensors + charging stations
+    # DATA SCALE plots
     # ══════════════════════════════════════════════════════════════════════════
-    print("Rendering Plot 1 ...", flush=True)
-    combo_name = cache_path.stem.replace("sensor_alloc_", "")
-    fig1, ax1 = make_base_axes(
-        bmap_masked,
-        f"Averaged yearly WFPI + sensor/station placement\n({combo_name},"
-        f"  {len(ground_locs_opt)} sensors, {len(charging_locs_opt)} charging stations,"
-        f" {sum(drones_per_station)} drones)"
-    )
-
-    legend_items1 = []
-    add_sensors_and_stations(ax1, ground_locs_data, charging_locs_data,
-                              drones_per_station, legend_items1)
-    ax1.set_xlim(0, W); ax1.set_ylim(H, 0)
-    ax1.legend(handles=legend_items1, loc="upper right", fontsize=9)
-    fig1.tight_layout()
-
-    out1 = PROJECT_ROOT / "california_sensor_placement.png"
-    fig1.savefig(str(out1), dpi=150, bbox_inches="tight")
-    plt.close(fig1)
-    print(f"  Saved → {out1.name}", flush=True)
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # Plot 2 — same + cluster bounding boxes + all fires
-    # ══════════════════════════════════════════════════════════════════════════
-    print("Rendering Plot 2 ...", flush=True)
-    fig2, ax2 = make_base_axes(
-        bmap_masked,
-        f"Averaged yearly WFPI + sensor placement + cluster zones + all fires\n"
-        f"({combo_name},  {len(clusters)} clusters,  {len(fire_rows)} fires)"
-    )
-
-    legend_items2 = []
-
-    # Cluster bounding boxes
-    for i, cluster in enumerate(clusters):
-        col_lo, row_lo, w, h = cluster_bbox_data(cluster, H, W)
-        colour = CLUSTER_COLOURS[i % len(CLUSTER_COLOURS)]
-        rect = Rectangle(
-            (col_lo, row_lo), w, h,
-            linewidth=1.5, edgecolor=colour, facecolor=colour, alpha=0.15,
-            zorder=3
+    if do_data:
+        # Plot 1-D: placement only
+        print("Rendering [data] Plot 1 — placement ...", flush=True)
+        fig, ax = make_base_axes(
+            bmap_data,
+            f"Avg yearly WFPI + sensor/station placement  [{combo_name}]\n"
+            f"{n_gs} ground sensors · {n_cs} charging stations · {n_dr} drones",
+            "Column (1 km / cell)", "Row (1 km / cell)",
         )
-        ax2.add_patch(rect)
-        # Also draw a solid border
-        rect_border = Rectangle(
-            (col_lo, row_lo), w, h,
-            linewidth=1.5, edgecolor=colour, facecolor="none",
-            zorder=4
+        leg = []
+        add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
+                                  drones_per_station, leg)
+        render_and_save(fig, ax, H, W,
+                        PROJECT_ROOT / "california_sensor_placement.png", leg)
+
+        # Plot 2-D: clusters + fires
+        print("Rendering [data] Plot 2 — clusters + fires ...", flush=True)
+        fig, ax = make_base_axes(
+            bmap_data,
+            f"Avg yearly WFPI + sensor placement + cluster zones + all fires  [{combo_name}]\n"
+            f"{n_cl} clusters · {n_fires} fires",
+            "Column (1 km / cell)", "Row (1 km / cell)",
         )
-        ax2.add_patch(rect_border)
-        legend_items2.append(
-            mpatches.Patch(facecolor=colour, alpha=0.4, edgecolor=colour,
-                           label=f"Cluster {i} ({cluster['n_drones']} drone{'s' if cluster['n_drones'] != 1 else ''})")
+        leg = []
+        add_cluster_boxes(ax, clusters, H, W, scale=COVERAGE_W, legend_items=leg)
+        add_fires(ax, fire_rows_data, fire_cols_data, leg, s=10, alpha=0.5, color="black")
+        add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
+                                  drones_per_station, leg)
+        render_and_save(fig, ax, H, W,
+                        PROJECT_ROOT / "california_sensor_clusters.png", leg)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # OPERATIONAL SCALE plots
+    # ══════════════════════════════════════════════════════════════════════════
+    if do_opt:
+        cell_label = f"{COVERAGE_W} km / cell"
+
+        # Plot 1-O: placement only
+        print("Rendering [opt] Plot 1 — placement ...", flush=True)
+        fig, ax = make_base_axes(
+            bmap_opt,
+            f"Avg yearly WFPI (opt scale) + sensor/station placement  [{combo_name}]\n"
+            f"{n_gs} ground sensors · {n_cs} charging stations · {n_dr} drones"
+            f"  (grid {rH}×{rW}, {cell_label})",
+            f"Column ({cell_label})", f"Row ({cell_label})",
         )
+        leg = []
+        add_sensors_and_stations(ax, ground_locs_opt, charging_locs_opt,
+                                  drones_per_station, leg, marker_scale=2.0)
+        render_and_save(fig, ax, rH, rW,
+                        PROJECT_ROOT / "california_sensor_placement_opt.png", leg)
 
-    # All fires
-    ax2.scatter(fire_cols, fire_rows, s=4, color="white", alpha=0.35,
-                zorder=2, linewidths=0)
-    legend_items2.append(
-        mpatches.Patch(facecolor="white", alpha=0.6,
-                       label=f"Fire ignition points (n={len(fire_rows)})")
-    )
-
-    add_sensors_and_stations(ax2, ground_locs_data, charging_locs_data,
-                              drones_per_station, legend_items2)
-
-    ax2.set_xlim(0, W); ax2.set_ylim(H, 0)
-    ax2.legend(handles=legend_items2, loc="upper right", fontsize=8,
-               framealpha=0.85)
-    fig2.tight_layout()
-
-    out2 = PROJECT_ROOT / "california_sensor_clusters.png"
-    fig2.savefig(str(out2), dpi=150, bbox_inches="tight")
-    plt.close(fig2)
-    print(f"  Saved → {out2.name}", flush=True)
+        # Plot 2-O: clusters + fires
+        print("Rendering [opt] Plot 2 — clusters + fires ...", flush=True)
+        fig, ax = make_base_axes(
+            bmap_opt,
+            f"Avg yearly WFPI (opt scale) + cluster zones + all fires  [{combo_name}]\n"
+            f"{n_cl} clusters · {n_fires} fires  (grid {rH}×{rW}, {cell_label})",
+            f"Column ({cell_label})", f"Row ({cell_label})",
+        )
+        leg = []
+        add_cluster_boxes(ax, clusters, rH, rW, scale=1, legend_items=leg)
+        add_fires(ax, fire_rows_opt, fire_cols_opt, leg, s=8, alpha=0.40)
+        add_sensors_and_stations(ax, ground_locs_opt, charging_locs_opt,
+                                  drones_per_station, leg, marker_scale=2.0)
+        render_and_save(fig, ax, rH, rW,
+                        PROJECT_ROOT / "california_sensor_clusters_opt.png", leg)
 
     print("\nDone.", flush=True)
 
