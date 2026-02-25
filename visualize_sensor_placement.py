@@ -101,24 +101,7 @@ def compute_clusters(charging_locs_opt, drones_per_station):
     return clusters
 
 
-def cluster_bbox(cluster, max_rows, max_cols, scale=1):
-    """Return (col_lo, row_lo, width, height) for the cluster's reachable zone.
-
-    scale=1  → opt-space (coordinates are opt-cell indices)
-    scale=COVERAGE_W → data-space (coordinates are data-cell pixels)
-    """
-    stations = cluster["stations_opt"]
-    r_min = min(r for r, _ in stations) - MAX_BATTERY_SUBSTEPS
-    r_max = max(r for r, _ in stations) + MAX_BATTERY_SUBSTEPS + 1
-    c_min = min(c for _, c in stations) - MAX_BATTERY_SUBSTEPS
-    c_max = max(c for _, c in stations) + MAX_BATTERY_SUBSTEPS + 1
-
-    row_lo = max(0,        r_min * scale)
-    row_hi = min(max_rows, r_max * scale)
-    col_lo = max(0,        c_min * scale)
-    col_hi = min(max_cols, c_max * scale)
-
-    return col_lo, row_lo, col_hi - col_lo, row_hi - row_lo
+DRONE_REACH = MAX_BATTERY_SUBSTEPS // 2   # one-way reach in opt-cells (must reserve battery for return)
 
 
 # ── Fire loader ────────────────────────────────────────────────────────────────
@@ -187,19 +170,35 @@ def add_sensors_and_stations(ax, ground_locs, charging_locs,
 
 
 def add_cluster_boxes(ax, clusters, H, W, scale, legend_items):
-    """Overlay cluster reachable-zone rectangles."""
+    """Overlay the true reachable zone of each cluster.
+
+    For each charging station draw an L∞ square of radius DRONE_REACH
+    (= MAX_BATTERY_SUBSTEPS // 2), which is the furthest a drone can go
+    and still return on a single charge.  All stations in the same cluster
+    share a colour; their squares together form the full cluster coverage.
+    """
     for i, cluster in enumerate(clusters):
-        col_lo, row_lo, w, h = cluster_bbox(cluster, H, W, scale=scale)
         colour = CLUSTER_COLOURS[i % len(CLUSTER_COLOURS)]
-        ax.add_patch(Rectangle(
-            (col_lo, row_lo), w, h,
-            linewidth=1.5, edgecolor=colour, facecolor=colour, alpha=0.15, zorder=3
-        ))
-        ax.add_patch(Rectangle(
-            (col_lo, row_lo), w, h,
-            linewidth=1.5, edgecolor=colour, facecolor="none", zorder=4
-        ))
-        nd = cluster["n_drones"]
+        nd     = cluster["n_drones"]
+
+        for r_opt, c_opt in cluster["stations_opt"]:
+            row_lo = max(0, (r_opt - DRONE_REACH) * scale)
+            row_hi = min(H, (r_opt + DRONE_REACH + 1) * scale)
+            col_lo = max(0, (c_opt - DRONE_REACH) * scale)
+            col_hi = min(W, (c_opt + DRONE_REACH + 1) * scale)
+            w = col_hi - col_lo
+            h = row_hi - row_lo
+
+            ax.add_patch(Rectangle(
+                (col_lo, row_lo), w, h,
+                linewidth=1.5, edgecolor=colour, facecolor=colour,
+                alpha=0.20, zorder=3,
+            ))
+            ax.add_patch(Rectangle(
+                (col_lo, row_lo), w, h,
+                linewidth=1.5, edgecolor=colour, facecolor="none", zorder=4,
+            ))
+
         legend_items.append(
             mpatches.Patch(facecolor=colour, alpha=0.4, edgecolor=colour,
                            label=f"Cluster {i} ({nd} drone{'s' if nd != 1 else ''})")
