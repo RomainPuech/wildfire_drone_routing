@@ -106,10 +106,17 @@ DRONE_REACH = MAX_BATTERY_SUBSTEPS // 2   # one-way reach in opt-cells (must res
 
 # ── Fire loader ────────────────────────────────────────────────────────────────
 
-def load_fire_ignition_points():
-    """Return (rows, cols) arrays of all fire ignition points in data-space."""
+def load_fire_ignition_points(valid_names=None):
+    """Return (rows, cols) arrays of fire ignition points in data-space.
+
+    If valid_names is provided (a set of scenario name strings), only load
+    scenarios whose stem (without '_scenario1') is in that set.
+    """
     rows, cols = [], []
     for f in sorted(SCENARII_DIR.glob("*.npy")):
+        name = f.stem.replace("_scenario1", "")
+        if valid_names is not None and name not in valid_names:
+            continue
         pt = np.load(str(f))
         rows.append(int(pt[0]))
         cols.append(int(pt[1]))
@@ -285,9 +292,23 @@ def main():
     bmap_opt          = bmap_opt_raw.copy()
     bmap_opt[mask_opt == 0] = np.nan
 
+    # ── Load config to find benchmarked fires (have date + time) ──────────────
+    config_path = DATASET_DIR / "config_california_2020.json"
+    print(f"Loading config to filter benchmarked fires ...", flush=True)
+    with open(config_path) as f:
+        config = json.load(f)
+    valid_names = {
+        key[len("offset_"):]
+        for key in config
+        if key.startswith("offset_")
+        and f"date_{key[len('offset_'):]}" in config
+        and f"time_{key[len('offset_'):]}" in config
+    }
+    print(f"  {len(valid_names)} scenarios with date+time in config", flush=True)
+
     # ── Load fires ─────────────────────────────────────────────────────────────
     print("Loading fire ignition points ...", flush=True)
-    fire_rows_data, fire_cols_data = load_fire_ignition_points()
+    fire_rows_data, fire_cols_data = load_fire_ignition_points(valid_names)
     fire_rows_opt = fire_rows_data // COVERAGE_W
     fire_cols_opt = fire_cols_data // COVERAGE_W
     n_fires = len(fire_rows_data)
