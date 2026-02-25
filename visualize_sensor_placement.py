@@ -150,7 +150,7 @@ def make_base_axes(bmap_masked, title, xlabel, ylabel):
 
 def add_sensors_and_stations(ax, ground_locs, charging_locs,
                               drones_per_station, legend_items,
-                              marker_scale=1.0):
+                              marker_scale=0.5):
     """Overlay ground sensors (stars) and charging stations (diamonds)."""
     if ground_locs:
         g_rows = [r for r, _ in ground_locs]
@@ -331,7 +331,7 @@ def main():
         )
         leg = []
         add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
-                                  drones_per_station, leg, marker_scale=0.5)
+                                  drones_per_station, leg, marker_scale=0.25)
         render_and_save(fig, ax, H, W,
                         PROJECT_ROOT / "california_sensor_placement.png", leg)
 
@@ -347,7 +347,7 @@ def main():
         add_cluster_boxes(ax, clusters, H, W, scale=COVERAGE_W, legend_items=leg)
         add_fires(ax, fire_rows_data, fire_cols_data, leg, s=10, alpha=0.5, color="black")
         add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
-                                  drones_per_station, leg, marker_scale=0.5)
+                                  drones_per_station, leg, marker_scale=0.25)
         render_and_save(fig, ax, H, W,
                         PROJECT_ROOT / "california_sensor_clusters.png", leg)
 
@@ -368,7 +368,7 @@ def main():
         )
         leg = []
         add_sensors_and_stations(ax, ground_locs_opt, charging_locs_opt,
-                                  drones_per_station, leg, marker_scale=1.0)
+                                  drones_per_station, leg, marker_scale=0.5)
         render_and_save(fig, ax, rH, rW,
                         PROJECT_ROOT / "california_sensor_placement_opt.png", leg)
 
@@ -384,7 +384,7 @@ def main():
         add_cluster_boxes(ax, clusters, rH, rW, scale=1, legend_items=leg)
         add_fires(ax, fire_rows_opt, fire_cols_opt, leg, s=8, alpha=0.40)
         add_sensors_and_stations(ax, ground_locs_opt, charging_locs_opt,
-                                  drones_per_station, leg, marker_scale=1.0)
+                                  drones_per_station, leg, marker_scale=0.5)
         render_and_save(fig, ax, rH, rW,
                         PROJECT_ROOT / "california_sensor_clusters_opt.png", leg)
 
