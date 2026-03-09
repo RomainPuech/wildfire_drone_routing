@@ -1,0 +1,35 @@
+Counterexample: DP increases without per-tour increase
+base_profit = 0.28
+new_profit  = 0.49
+i = 26, j = 32
+node_i = 25, node_j = D46
+n_pure_customers = 40
+depot nodes = [41, 42, 43, 44, 45, 46]
+
+Permutation (original, labeled):
+[4, 6, 11, 12, 8, 3, 13, 5, 2, 9, 7, 10, 1, D41, D42, D43, 14, 18, 19, 17, 21, 16, 15, 20, 22, 25, 26, 24, 23, D44, D45, D46, 40, 36, 29, 37, 33, 32, 28, 35, 31, 38, 34, 27, 39, 30]
+
+Local window around i (positions 20..32):
+[17, 21, 16, 15, 20, 22, 25, 26, 24, 23, D44, D45, D46]
+Local window around j (positions 26..38):
+[25, 26, 24, 23, D44, D45, D46, 40, 36, 29, 37, 33, 32]
+
+Affected tours (original):
+  tour idx=4 depot_pos=30 end=31 profit=0.0
+    nodes: [D44, D45]
+  tour idx=5 depot_pos=31 end=33 profit=0.28
+    nodes: [D45, D46, 40]
+
+Affected tours (after shift):
+  tour idx=4 depot_pos=29 end=30 profit=0.0
+    nodes: [D44, D45]
+  tour idx=5 depot_pos=30 end=32 profit=0.21
+    nodes: [D45, 25, D46]
+
+Selected routes BEFORE shift (profit=0.28):
+  route 1: [D41, D42]
+  route 2: [D45, D46, 40]
+
+Selected routes AFTER shift (profit=0.49):
+  route 1: [D45, 25]
+  route 2: [D46, 40]

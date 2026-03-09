@@ -63,13 +63,13 @@ The same physical depot can appear multiple times in the permutation (depot dupl
 
 ### Observation 4.2: Shift Operator Impact
 
-**Statement**: If positions `i` and `j` (with `j > i`) are used as arguments to the shift operator and both correspond to non-depot nodes, then the only tours whose profits can be affected are those that include positions `i-1` or `j` in the original permutation (before the shift). Note: The starting indices of tours that start between positions `i` and `j` will shift by -1, but their profits remain unchanged.
+**Statement**: If positions `i` and `j` (with `j > i`) are used as arguments to the shift operator and both correspond to non-depot nodes, then the only tours whose profits can be affected are those that include positions `i-1` or `j-1` in the original permutation (before the shift). Note: The starting indices of tours that start strictly between positions `i` and `j-1` will shift by -1, but their profits remain unchanged.
 
 ---
 
 ### Observation 5.1: Shift Stage-2 Adjacency Filter
 
-**Statement**: If Stage 1 finds no improvement among tours that include position `i-1`, then a tour containing the node at the former position `j` can improve **only if** the node at former position `j` is connected in the clients graph to the node at former position `i` (i.e., the edge `node_j → node_i` is feasible).
+**Statement**: If Stage 1 finds no improvement among tours that include position `i-1`, then a tour containing the node at the former position `j-1` can improve **only if** the node at former position `j-1` is connected in the clients graph to the node at former position `i` (i.e., the edge `node_{j-1} → node_i` is feasible).
 
 **Note**: This is a **necessary but not sufficient** condition. Even if the edge exists, the tour may still lack remaining budget to include `node_i` and return to a depot.
 
@@ -150,14 +150,14 @@ permutation'[j+1] = permutation[j+1]
 - The sequence changes → profit changes
 - Since position `i` is non-depot, any tour including it must include position `i-1` (by Lemma) ✓
 
-**Case 2: Tours that include position `j` in the original permutation**
+**Case 2: Tours that include position `j-1` in the original permutation**
 
-- Original sequence at position `j`: `[..., permutation[j-1], permutation[j], permutation[j+1], ...]`
-- New sequence at position `j`: `[..., permutation[j-1], permutation[j], node_i, permutation[j+1], ...]`
-- The node `node_i` is inserted after `permutation[j]`
-- If the tour extended through position `j`, it may now extend further to include `node_i`
+- Original sequence at position `j-1`: `[..., permutation[j-2], permutation[j-1], permutation[j], ...]`
+- New sequence at position `j-1`: `[..., permutation[j-2], permutation[j-1], node_i, permutation[j], ...]`
+- The node `node_i` is inserted after `permutation[j-1]` (before `permutation[j]`)
+- If the tour extended through position `j-1`, it may now extend further to include `node_i`
 - The sequence potentially changes → profit potentially changes
-- We detect these by checking if tours include position `j` ✓
+- We detect these by checking if tours include position `j-1` ✓
 
 **Case 3: Tours that include positions `k` where `i < k < j`**
 
@@ -174,10 +174,10 @@ permutation'[j+1] = permutation[j+1]
 - Otherwise, profit unchanged ✓
 
 **Conclusion**:
-- Tours affected by profit changes are exactly those that include position `i` or position `j` in the original permutation
+- Tours affected by profit changes are exactly those that include position `i` or position `j-1` in the original permutation
 - Tours including position `i` (non-depot) must include position `i-1` (by Lemma)
-- Tours including position `j` are detected by checking position `j` directly
-- Therefore, checking positions `i-1` and `j` is sufficient ✓
+- Tours including position `j-1` are detected by checking position `j-1` directly
+- Therefore, checking positions `i-1` and `j-1` is sufficient ✓
 
 ---
 
@@ -333,46 +333,47 @@ To implement these optimizations, we need:
 
 ---
 
-## Perfect Filtering Strategy
+## Irrelevance-Based Shift Filter
 
 ### Motivation
 
-Instead of running the full split procedure (Phase 1 + Phase 2 + Phase 3) for every candidate move, we can use a **conservative filter** based on the following insight:
+Instead of running the full split procedure (Phase 1 + Phase 2 + Phase 3) for every candidate shift move, we use a **conservative irrelevance filter** that skips moves guaranteed not to change any tour.
 
-- Observations 4.1 and 4.2 tell us which saturated tours can be affected by a move
-- We can quickly recompute only the profits of affected tours
-- If **no** affected tour increases in profit, the final optimal profit is very unlikely to increase
-- Therefore, we only run the full split if at least one affected tour's profit increases
+The filter is based on the notion of **irrelevant nodes** for removal and insertion, using only O(1) blocking/dead checks. It is conservative and produces **no false negatives** (never skips a move that could improve the final profit).
 
-### Key Idea
+### Definitions
 
-**Perfect filtering criterion**: Accept a move for full evaluation only if:
+**irrelevant_once_removed(i)** (non-depot node at position `i`):
+1. If `node_i` is **blocking or dead**:
+   - If `is_blocking_once_removed(i)` is true, then removal does **not** change any tour containing position `i-1` → **irrelevant**.
+   - If `is_blocking_once_removed(i)` is false, removal can extend a tour → **relevant**.
+2. If `node_i` is **not blocking/dead**, then it belongs to a tour → **relevant**.
+
+**irrelevant_once_inserted_at_position_j(i, j)** (non-depot node `node_i`, insertion **before** `j`):
+If `irrelevant_once_removed(i)` is true, then `node_i` does not belong to any tour that reaches the predecessor at `j-1`. Therefore:
+- If the node at position `j-1` is **dead**, then insertion at `j` does **not** change any tour → **irrelevant**.
+- If the node at position `j-1` is **not dead**, insertion **may** change a tour → **relevant**.
+
+Important: “deadness” must be evaluated for the **node identity** at position `j-1`. If `irrelevant_once_removed(i)` is true, deadness is the same before and after removal (no tour changes).
+
+### Safe Skip Criterion (Shift)
+
+**Skip shift `i → j` if and only if**:
 ```
-exists at least one affected tour T such that: new_profit(T) > old_profit(T)
+irrelevant_once_removed(i) && irrelevant_once_inserted_at_position_j(i, j)
 ```
 
-**Why this is perfect (zero false negatives)**:
-- If at least one affected tour improves, there's a real chance the final DP solution improves
-- We only reject moves where **all** affected tours either decrease or stay the same
-- **This produces ZERO false negatives** (never rejects a move that would increase final profit)
-- Acts as a cheap filter to avoid expensive split evaluations for moves that cannot improve final profit
+This ensures we skip only moves that do not change any tour.
 
-### Stage 1 / Stage 2 for Shift
+### Candidate Reduction (Optional)
 
-We split the shift evaluation into two stages to reduce the candidate space for `j`:
+If `irrelevant_once_removed(i)` is true, insertion can only matter when the predecessor at `j-1` is **not dead** and **connected** to `node_i`. This yields a conservative reduction of candidates:
 
-**Stage 1 (removal test, no `j` needed)**:
-- Fix `i` and evaluate the permutation where `node_i` is removed and positions `i+1..n` shift left by one
-- Recompute only tours that include position `i-1`
-- If any tour improves, proceed with the normal randomized scan over all `j`
+- Restrict `j` such that `node_{j-1} ∈ left_neighbors(node_i)`
+- Use `node_to_position` to map each `node_{j-1}` to its position, then set `j = position(node_{j-1}) + 1`
+- Randomize the order of these neighbors before iterating
 
-**Stage 2 (insertion-only scan)**:
-- If Stage 1 finds no improvement, then by Observation 5.1 a tour containing the former position `j` can improve **only if** `node_j → node_i` is a feasible edge
-- Therefore, restrict candidate `j` values to the **left-neighbors of `node_i`** in the clients graph
-- Use `node_to_position` to map each neighbor `node_j` to its current position `j`
-- **Important**: Randomize the order of these left-neighbors before iterating
-
-This reduces the scan from `O(n)` to `O(deg(node_i))` when Stage 1 fails, without changing correctness.
+This reduces the scan from `O(n)` to `O(deg(node_i))` in sparse graphs.
 
 ---
 
@@ -464,6 +465,18 @@ end
 ### Swap Check (Lightweight)
 
 For swap positions `i` and `j`, we can skip the move unless it changes the blocking status of at least one relevant adjacency. This uses the two O(1) checks above and is fast enough that we do **not** apply the perfect tour-profit filter for swaps.
+
+---
+
+## Appendix: Prior “Perfect Filter” (Deprecated)
+
+This appendix keeps the earlier **profit-only filter** for reference. It is **incorrect** because it can miss improvements caused by changes in tour overlap structure (i.e., different combinations become feasible even if no individual tour profit increases).
+
+**Prior criterion (deprecated):**
+> Evaluate a shift only if at least one affected tour increases in profit.
+
+**Why it fails:**  
+Tour profits can stay the same or decrease while **tour lengths/overlaps change**, enabling the DP to select a different combination with higher total profit.
 
 ### Algorithm Overview
 
@@ -852,9 +865,9 @@ For typical values (k = 10, n = 500):
 - Position mapping: 8 KB
 - **Total per particle: ~8.4 KB** (negligible)
 
-### Proof: Zero False Negatives
+### Proof: Zero False Negatives (Shift Filter)
 
-**Theorem**: If no affected tour increases in profit, then the final optimal profit cannot increase.
+**Theorem**: If both `irrelevant_once_removed(i)` and `irrelevant_once_inserted_at_position_j(i, j)` are true, then the shift `i → j` does not change any tour, and the final optimal profit cannot increase.
 
 **Proof**:
 
@@ -866,19 +879,10 @@ Let `T'₁, T'₂, ..., T'ₖ` be all saturated tours computed in Phase 1 for pe
 
 By Observations 4.1 and 4.2, a tour `Tᵢ` is **affected** if and only if its node sequence changes between `π` and `π'`.
 
-For any tour `Tᵢ`:
-- If `Tᵢ` is **unaffected**: The node sequence is identical in `π'` → `profit(T'ᵢ) = profit(Tᵢ)`
-- If `Tᵢ` is **affected**: The node sequence changed in `π'` → we recompute `profit(T'ᵢ)`
-
-**Assumption**: No affected tour increases in profit. That is:
-```
-For all affected tours Tᵢ: profit(T'ᵢ) ≤ profit(Tᵢ)
-```
-
-**Combining both cases**:
-```
-For all tours Tᵢ (affected or not): profit(T'ᵢ) ≤ profit(Tᵢ)
-```
+**Argument**:
+- If `irrelevant_once_removed(i)` is true, removing `node_i` does not change any tour that includes position `i-1`.
+- If `irrelevant_once_inserted_at_position_j(i, j)` is true, inserting `node_i` before `j` does not change any tour that includes position `j-1`.
+- By Observation 4.2, only tours containing positions `i-1` or `j-1` can be affected by the shift. Since neither set changes, **no tour changes**.
 
 **Phase 2 (DP)**: Selects a subset `S` of tours to maximize total profit, subject to:
 - Each tour is used at most once
@@ -900,23 +904,9 @@ Therefore, `P' ≤ P*`, meaning **the final optimal profit cannot increase**. �
 
 ---
 
-### Comparison with Alternative Filters
+### Notes on Conservativeness
 
-**Alternative 1: "Sum of affected profits increases"**
-- Could reject moves where Tour A improves (+10) but Tour B worsens (-15)
-- If Tour B is not selected by DP, we incorrectly rejected a beneficial move
-- **Has false negatives** ❌
-
-**Alternative 2: "Any tour improved"** (our choice)
-- Only rejects if ALL affected tours decrease or stay same
-- Proof above shows this cannot increase final profit
-- **Zero false negatives** ✓
-
-**Alternative 3: "Always run full split"** (no filter)
-- Perfect accuracy but expensive
-- **Zero false negatives but no speedup** ⚠️
-
-Our filter achieves the best of both worlds: perfect accuracy with significant speedup.
+The irrelevance filter is conservative by construction: it skips only moves that provably do not change any tour. It can leave many moves for evaluation, but it never misses an improving move.
 
 ---
 

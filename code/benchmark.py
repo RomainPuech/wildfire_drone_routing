@@ -52,12 +52,25 @@ def load_strategy(strategy_folder: str, strategy_file: str, class_name: str):
 def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simulation_parameters: dict, scenario_name: str = ""):
     #print("simulation_parameters", simulation_parameters)
     layout_dir = os.path.abspath(os.path.join(input_dir, ".."))
-    mask_filename = os.path.join(layout_dir, "mask.npy")
+    # Look for mask.npy in input_dir first (fire directory), then one level up (layout directory)
+    mask_filename = os.path.join(os.path.abspath(input_dir), "mask.npy")
+    if not os.path.exists(mask_filename):
+        mask_filename = os.path.join(layout_dir, "mask.npy")
     if not os.path.exists(mask_filename):
         mask_filename = None
+    
+    # Get grid dimensions from scenario if available, otherwise from mask
+    if scenario is not None and scenario.ndim >= 2:
+        N, M = scenario.shape[1], scenario.shape[2]
+    elif mask_filename and os.path.exists(mask_filename):
+        mask = np.load(mask_filename)
+        N, M = mask.shape[0], mask.shape[1]
+    else:
+        raise ValueError("Cannot determine grid dimensions: scenario is None and mask not found")
+    
     return {
-        "N": scenario.shape[1],
-        "M": scenario.shape[2],
+        "N": N,
+        "M": M,
         "max_battery_distance": simulation_parameters.get("max_battery_distance", DEFAULT_SIMULATION_PARAMETERS["max_battery_distance"]),
         "max_battery_time": simulation_parameters.get("max_battery_time", DEFAULT_SIMULATION_PARAMETERS["max_battery_time"]),
         "n_drones": simulation_parameters.get("n_drones", DEFAULT_SIMULATION_PARAMETERS["n_drones"]),
@@ -70,6 +83,7 @@ def get_automatic_layout_parameters(scenario: np.ndarray, input_dir: str, simula
         "transmission_range": simulation_parameters.get("transmission_range", DEFAULT_SIMULATION_PARAMETERS["transmission_range"]),
         "scenario_name": scenario_name or simulation_parameters.get("scenario_name", DEFAULT_SIMULATION_PARAMETERS["scenario_name"]),
         "mask_filename": mask_filename,
+        "mask_pooling_mode": simulation_parameters.get("mask_pooling_mode", DEFAULT_SIMULATION_PARAMETERS["mask_pooling_mode"]),
     }
 
 
@@ -91,6 +105,7 @@ DEFAULT_SIMULATION_PARAMETERS = {
     "cell_size_m": -1,
     "transmission_range": -1,
     "scenario_name": "",
+    "mask_pooling_mode": "min",  # "min" = masked if any data cell masked; "max" = masked only if all data cells masked
 }
 
 def build_custom_init_params(input_dir, layout_name):
@@ -253,9 +268,10 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_burnmap = load_burn_map(custom_initialization_parameters["burnmap_filename"])
     rescaled_burnmap = pool_burnmap_proba_at_least_one(rescaled_burnmap, coverage_width_cells)
 
+    mask_pooling_mode = automatic_initialization_parameters.get("mask_pooling_mode", "min")
     if automatic_initialization_parameters["mask_filename"] is not None:
         rescaled_mask = np.load(automatic_initialization_parameters["mask_filename"])
-        rescaled_mask = pool_mask_min(rescaled_mask, coverage_width_cells)
+        rescaled_mask = pool_mask(rescaled_mask, coverage_width_cells, mode=mask_pooling_mode)
     else:
         rescaled_mask = None
     # duplicate the burn map for the operationnal time scale: each grid is duplicated operational_substeps times
@@ -276,6 +292,7 @@ def run_drone_routing_strategy(drone_routing_strategy:DroneRoutingStrategy, sens
     rescaled_automatic_initialization_parameters["max_battery_time"] = rescaled_max_battery_time
     rescaled_automatic_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
     rescaled_automatic_initialization_parameters["mask_filename"] = rescaled_mask_filename
+    rescaled_automatic_initialization_parameters["data_time_resolution"] = operational_substeps  # Accumulate probabilities once per data timestep
 
     rescaled_custom_initialization_parameters = custom_initialization_parameters.copy()
     rescaled_custom_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
@@ -486,18 +503,35 @@ def pool_burnmap_proba_at_least_one(burnmap, kernel_size):
             burnmap_pooled[:, i, j] = 1 - np.prod(1 - burnmap[:, i*kernel_size:(i+1)*kernel_size, j*kernel_size:(j+1)*kernel_size], axis=(1,2))
     return burnmap_pooled
 
-def pool_mask_min(mask, kernel_size):
+def pool_mask(mask, kernel_size, mode="min"):
     """
-    Pool the mask to the new size by using a min operation with a kernel_size x kernel_size window and a stride of kernel_size.
+    Pool a binary mask to a coarser grid using a kernel_size x kernel_size window with stride = kernel_size.
+
+    Args:
+        mask: 2D array of shape (N, M) with values 0 (masked) or 1 (valid).
+        kernel_size: Size of the square pooling window.
+        mode: Pooling rule.
+            "min"  – operational cell is masked (0) if ANY constituent data cell is masked.
+                     (conservative: only fully-valid blocks remain valid)
+            "max"  – operational cell is masked (0) only if ALL constituent data cells are masked.
+                     (permissive: a block with at least one valid cell stays valid)
+
+    Returns:
+        mask_pooled: 2D array of shape (N//kernel_size, M//kernel_size).
     """
+    pool_fn = np.min if mode == "min" else np.max
     N, M = mask.shape
     N_new = N // kernel_size
     M_new = M // kernel_size
     mask_pooled = np.zeros((N_new, M_new))
     for i in range(N_new):
         for j in range(M_new):
-            mask_pooled[i, j] = np.min(mask[i*kernel_size:(i+1)*kernel_size, j*kernel_size:(j+1)*kernel_size])
+            mask_pooled[i, j] = pool_fn(mask[i*kernel_size:(i+1)*kernel_size, j*kernel_size:(j+1)*kernel_size])
     return mask_pooled
+
+
+# Backward-compatible alias
+pool_mask_min = pool_mask
 
 def listdir_folder_limited(input_dir, max_n_scenarii=None):
     """
@@ -626,9 +660,10 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
 
     rescaled_mask = None
     rescaled_mask_filename = None
+    mask_pooling_mode = automatic_initialization_parameters.get("mask_pooling_mode", "min")
     if automatic_initialization_parameters["mask_filename"] is not None:
         rescaled_mask = np.load(automatic_initialization_parameters["mask_filename"])
-        rescaled_mask = pool_mask_min(rescaled_mask, coverage_width_cells)
+        rescaled_mask = pool_mask(rescaled_mask, coverage_width_cells, mode=mask_pooling_mode)
         rescaled_mask_filename = automatic_initialization_parameters["mask_filename"].replace(".npy", f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy")
         np.save(rescaled_mask_filename, rescaled_mask)
 
@@ -638,6 +673,7 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     rescaled_automatic_initialization_parameters["max_battery_time"] = rescaled_max_battery_time
     rescaled_automatic_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
     rescaled_automatic_initialization_parameters["mask_filename"] = rescaled_mask_filename
+    rescaled_automatic_initialization_parameters["data_time_resolution"] = operational_substeps  # Accumulate probabilities once per data timestep
 
     rescaled_custom_initialization_parameters = custom_initialization_parameters.copy()
     rescaled_custom_initialization_parameters["burnmap_filename"] = rescaled_burnmap_filename
@@ -704,10 +740,11 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # features_per_timestep = concat_len // num_timesteps
 
     fire_detected = False
+    max_time_steps = 12 + starting_time
     if progress_bar:
-        tqdm_iter = tqdm.tqdm(range(-starting_time,min(24,len(scenario)))) # if fire is not detected in 24 time steps, we stop the simulation
+        tqdm_iter = tqdm.tqdm(range(-starting_time,min(max_time_steps,len(scenario)))) # if fire is not detected in 12 + starting_time time steps, we stop the simulation
     else:
-        tqdm_iter = range(-starting_time,min(24,len(scenario)))
+        tqdm_iter = range(-starting_time,min(max_time_steps,len(scenario)))
     for time_step in tqdm_iter:
         if time_step >= 0: # The fire has started.
             grid = scenario[time_step]

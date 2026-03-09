@@ -1,0 +1,354 @@
+======================================================================
+EXTREME SCENARIOS TEST - Drone Concentration
+======================================================================
+Started at: 2026-02-24 15:31:25
+
+Loading Julia modules...
+======================================================================
+OBJECTIVE FUNCTION COMPARISON TEST
+======================================================================
+Started at: 2026-02-24 15:31:31
+
+Loading Julia modules...
+Modules loaded successfully!
+
+Running objective comparison tests...
+
+======================================================================
+TEST 1: Grid 20x20, 2 ground, 3 charging, 10 drones
+======================================================================
+Running ORIGINAL version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective value: 45.2833
+  Covered risk: 45.2833 / 87.5
+  Coverage: 51.75%
+
+Running WITH ALLOCATION version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective value: 69.7
+  Covered risk: 69.7 / 87.5
+  Coverage: 79.66%
+  Drone allocations: [6, 2, 2]
+
+======================================================================
+OBJECTIVE COMPARISON
+======================================================================
+Original objective: 45.2833
+Allocation objective: 69.7
+Difference: 24.4167 (53.92%)
+✓ Allocation version achieves 53.92% HIGHER objective
+
+Coverage Comparison:
+  Original: 51.75%
+  Allocation: 79.66%
+  Difference: 27.9%
+
+Sanity Checks:
+  ✓ Original coverage is in valid range
+  ✓ Allocation coverage is in valid range
+  ✓ Original covered risk is valid
+  ✓ Allocation covered risk is valid
+  ✓ Original objective matches covered risk
+  ✓ Allocation objective matches covered risk
+  ⚠ Original coverage seems unrealistically high
+  ⚠ Allocation coverage seems unrealistically high
+======================================================================
+
+======================================================================
+TEST 2: Grid 25x25, 3 ground, 4 charging, 12 drones
+======================================================================
+Running ORIGINAL version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective value: 59.3571
+  Covered risk: 59.3571 / 87.5
+  Coverage: 67.84%
+
+Running WITH ALLOCATION version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective value: 82.9714
+  Covered risk: 82.9714 / 87.5
+  Coverage: 94.82%
+  Drone allocations: [2, 6, 2, 2]
+
+======================================================================
+OBJECTIVE COMPARISON
+======================================================================
+Original objective: 59.3571
+Allocation objective: 82.9714
+Difference: 23.6143 (39.78%)
+✓ Allocation version achieves 39.78% HIGHER objective
+
+Coverage Comparison:
+  Original: 67.84%
+  Allocation: 94.82%
+  Difference: 26.99%
+
+Sanity Checks:
+  ✓ Original coverage is in valid range
+  ✓ Allocation coverage is in valid range
+  ✓ Original covered risk is valid
+  ✓ Allocation covered risk is valid
+  ✓ Original objective matches covered risk
+  ✓ Allocation objective matches covered risk
+  ⚠ Original coverage seems unrealistically high
+  ⚠ Allocation coverage seems unrealistically high
+======================================================================
+
+======================================================================
+TEST 3: Grid 30x30, 4 ground, 5 charging, 15 drones
+======================================================================
+Running ORIGINAL version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective value: 70.9
+  Covered risk: 70.9 / 87.5
+  Coverage: 81.03%
+
+Running WITH ALLOCATION version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective value: 87.5
+  Covered risk: 87.5 / 87.5
+  Coverage: 100.0%
+  Drone allocations: [2, 2, 2, 7, 2]
+
+======================================================================
+OBJECTIVE COMPARISON
+======================================================================
+Original objective: 70.9
+Allocation objective: 87.5
+Difference: 16.6 (23.41%)
+✓ Allocation version achieves 23.41% HIGHER objective
+
+Coverage Comparison:
+  Original: 81.03%
+  Allocation: 100.0%
+  Difference: 18.97%
+
+Sanity Checks:
+  ✓ Original coverage is in valid range
+  ✓ Allocation coverage is in valid range
+  ✓ Original covered risk is valid
+  ✓ Allocation covered risk is valid
+  ✓ Original objective matches covered risk
+  ✓ Allocation objective matches covered risk
+  ⚠ Original coverage seems unrealistically high
+  ⚠ Allocation coverage seems unrealistically high
+======================================================================
+
+======================================================================
+OVERALL SUMMARY
+======================================================================
+
+Average Objective Values:
+  Original: 58.5135
+  Allocation: 80.0571
+  Difference: 21.5437 (36.82%)
+
+Average Coverage:
+  Original: 66.87%
+  Allocation: 91.49%
+  Difference: 24.62%
+
+✓ Allocation version achieves HIGHER objective on average
+
+Finished at: 2026-02-24 15:32:11
+======================================================================
+Modules loaded successfully!
+
+Running extreme scenario tests...
+
+======================================================================
+SCENARIO: Single Hotspot
+======================================================================
+Grid: 25x25, 2 ground, 5 charging, 5 drones
+Kernel size: 6
+Expected: Drones should concentrate at high-risk areas
+Note: Distance 0-2 cells already well-covered (85-100%), distance 3+ benefit from multiple drones
+
+Risk Map Statistics:
+  Total risk: 76.1
+  Max risk: 0.95
+  High-risk cells (>0.5): 16
+
+Kernel Coverage (for reference):
+  Distance 0: 1.0 (1 drone), 1.0 (2 drones)
+  Distance 1: 0.857 (1 drone), 1.0 (2 drones)
+  Distance 2: 0.714 (1 drone), 1.0 (2 drones)
+  Distance 3: 0.571 (1 drone), 1.0 (2 drones), 1.0 (3 drones)
+  Distance 4: 0.429 (1 drone), 0.857 (2 drones), 1.0 (3 drones)
+
+Running ORIGINAL version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective: 42.2714
+  Coverage: 55.55%
+  Charging stations: [(13, 6), (6, 8), (6, 18), (19, 18), (22, 23)]
+
+Running WITH ALLOCATION version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective: 42.2714
+  Coverage: 55.55%
+  Charging stations: [(18, 6), (6, 7), (6, 17), (18, 19), (23, 22)]
+  Drone allocations: [1, 1, 1, 1, 1]
+
+======================================================================
+CONCENTRATION ANALYSIS
+======================================================================
+Drone Distribution:
+  Total drones: 5
+  Max at one station: 1
+  Min at one station: 1
+  Stations with drones: 5
+  Stations without drones: 0
+  Concentration ratio: 1.0x
+    (1.0 = even distribution, >1.0 = concentrated)
+  ⚠ NO CONCENTRATION: All stations have ≤1 drone
+
+Station Analysis:
+     Station 1 at (18, 6): 1 drone(s) (local risk: 0.1)
+     Station 2 at (6, 7): 1 drone(s) (local risk: 0.1)
+     Station 3 at (6, 17): 1 drone(s) (local risk: 0.1)
+     Station 4 at (18, 19): 1 drone(s) (local risk: 0.1)
+  🔥 Station 5 at (23, 22): 1 drone(s) (local risk: 0.95)
+
+High-Risk Area Coverage:
+  Stations in high-risk areas: 1
+  Total drones at high-risk stations: 1
+  Percentage of drones at high-risk: 20.0%
+    Station 5 at (23, 22): 1 drone(s) (risk: 0.95)
+
+======================================================================
+OBJECTIVE COMPARISON
+======================================================================
+Original objective: 42.2714
+Allocation objective: 42.2714
+Difference: -0.0 (-0.0%)
+⚠ Allocation version achieves 0.0% LOWER objective
+  This is unexpected - investigate why concentration isn't helping
+
+Coverage Comparison:
+  Original: 55.55%
+  Allocation: 55.55%
+  Difference: -0.0 percentage points
+======================================================================
+
+======================================================================
+SCENARIO: Two Distant Hotspots
+======================================================================
+Grid: 30x30, 3 ground, 6 charging, 5 drones
+Kernel size: 8
+Expected: Drones should concentrate at high-risk areas
+Note: Distance 0-2 cells already well-covered (85-100%), distance 3+ benefit from multiple drones
+
+Risk Map Statistics:
+  Total risk: 72.2
+  Max risk: 0.9
+  High-risk cells (>0.5): 32
+
+Kernel Coverage (for reference):
+  Distance 0: 1.0 (1 drone), 1.0 (2 drones)
+  Distance 1: 0.889 (1 drone), 1.0 (2 drones)
+  Distance 2: 0.778 (1 drone), 1.0 (2 drones)
+  Distance 3: 0.667 (1 drone), 1.0 (2 drones), 1.0 (3 drones)
+  Distance 4: 0.556 (1 drone), 1.0 (2 drones), 1.0 (3 drones)
+
+Running ORIGINAL version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective: 52.8722
+  Coverage: 73.23%
+  Charging stations: [(3, 2), (8, 7), (21, 10), (8, 20), (22, 22), (27, 27)]
+
+Running WITH ALLOCATION version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10
+  Objective: 47.4889
+  Coverage: 65.77%
+  Charging stations: [(2, 2), (7, 7), (21, 8), (21, 22), (26, 27), (27, 27)]
+  Drone allocations: [1, 1, 1, 1, 1, 0]
+
+======================================================================
+CONCENTRATION ANALYSIS
+======================================================================
+Drone Distribution:
+  Total drones: 5
+  Max at one station: 1
+  Min at one station: 0
+  Stations with drones: 5
+  Stations without drones: 1
+  Concentration ratio: 1.0x
+    (1.0 = even distribution, >1.0 = concentrated)
+  ⚠ NO CONCENTRATION: All stations have ≤1 drone
+  ✓ Some stations have 0 drones (drones concentrated at others)
+
+Station Analysis:
+  🔥 Station 1 at (2, 2): 1 drone(s) (local risk: 0.9)
+     Station 2 at (7, 7): 1 drone(s) (local risk: 0.05)
+     Station 3 at (21, 8): 1 drone(s) (local risk: 0.05)
+     Station 4 at (21, 22): 1 drone(s) (local risk: 0.05)
+  🔥 Station 5 at (26, 27): 1 drone(s) (local risk: 0.9)
+  🔥 Station 6 at (27, 27): 0 drone(s) (local risk: 0.9)
+
+High-Risk Area Coverage:
+  Stations in high-risk areas: 3
+  Total drones at high-risk stations: 2
+  Percentage of drones at high-risk: 40.0%
+    Station 1 at (2, 2): 1 drone(s) (risk: 0.9)
+    Station 5 at (26, 27): 1 drone(s) (risk: 0.9)
+    Station 6 at (27, 27): 0 drone(s) (risk: 0.9)
+
+======================================================================
+OBJECTIVE COMPARISON
+======================================================================
+Original objective: 52.8722
+Allocation objective: 47.4889
+Difference: -5.3833 (-10.18%)
+⚠ Allocation version achieves 10.18% LOWER objective
+  This is unexpected - investigate why concentration isn't helping
+
+Coverage Comparison:
+  Original: 73.23%
+  Allocation: 65.77%
+  Difference: -7.46 percentage points
+======================================================================
+
+======================================================================
+SCENARIO: Large Center Hotspot
+======================================================================
+Grid: 30x30, 3 ground, 6 charging, 5 drones
+Kernel size: 8
+Expected: Drones should concentrate at high-risk areas
+Note: Distance 0-2 cells already well-covered (85-100%), distance 3+ benefit from multiple drones
+
+Risk Map Statistics:
+  Total risk: 153.9
+  Max risk: 0.95
+  High-risk cells (>0.5): 121
+
+Kernel Coverage (for reference):
+  Distance 0: 1.0 (1 drone), 1.0 (2 drones)
+  Distance 1: 0.889 (1 drone), 1.0 (2 drones)
+  Distance 2: 0.778 (1 drone), 1.0 (2 drones)
+  Distance 3: 0.667 (1 drone), 1.0 (2 drones), 1.0 (3 drones)
+  Distance 4: 0.556 (1 drone), 1.0 (2 drones), 1.0 (3 drones)
+
+Running ORIGINAL version...
+Set parameter Username
+Set parameter LicenseID to value 2735648
+Academic license - for non-commercial use only - expires 2026-11-10

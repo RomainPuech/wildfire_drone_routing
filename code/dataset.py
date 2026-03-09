@@ -154,24 +154,81 @@ def load_scenario_jpg(folder_path, binary=True, first_frame_only=False):
     # Starting time is always 0
     return scenario
 
-def load_scenario_npy(filename):
+def load_scenario_ignition_point(filename, grid_height, grid_width, num_timesteps=12):
+    """
+    Load an ignition-point-only scenario and convert it to a full grid.
+    
+    Args:
+        filename (str): Path to the .npy file containing ignition point
+        grid_height (int): Height of the full grid (from mask or risk map)
+        grid_width (int): Width of the full grid
+        num_timesteps (int): Number of timesteps in the scenario (default: 12 for 6 hours)
+    
+    Returns:
+        numpy.ndarray: Full scenario grid with shape (num_timesteps, grid_height, grid_width)
+                     where the ignition point is set to 1.0 for all timesteps
+    """
+    if not filename.endswith('.npy'):
+        filename += '.npy'
+    
+    ignition_data = np.load(filename, allow_pickle=True)
+    
+    # Extract ignition point coordinates
+    row = int(ignition_data[0])
+    col = int(ignition_data[1])
+    start_timestep = int(ignition_data[2]) if len(ignition_data) > 2 else 0
+    
+    # Validate coordinates
+    if not (0 <= row < grid_height and 0 <= col < grid_width):
+        raise ValueError(
+            f"Ignition point ({row}, {col}) is outside grid bounds "
+            f"({grid_height}, {grid_width})"
+        )
+    
+    # Create full scenario grid
+    scenario = np.zeros((num_timesteps, grid_height, grid_width), dtype=np.float32)
+    
+    # Set ignition point to 1.0 for all timesteps from start_timestep onwards
+    scenario[start_timestep:, row, col] = 1.0
+    
+    return scenario
+
+
+def load_scenario_npy(filename, grid_height=None, grid_width=None, num_timesteps=12):
     """
     Load a scenario from a NumPy binary file.
+    Auto-detects ignition-point-only format and converts to full grid.
     
     Args:
         filename (str): Name of the file to load (with or without .npy extension)
+        grid_height (int, optional): Height of the grid (required for ignition-point format)
+        grid_width (int, optional): Width of the grid (required for ignition-point format)
+        num_timesteps (int, optional): Number of timesteps (default: 12)
     
     Returns:
-        numpy.ndarray: TxNxN array representing the fire progression
+        numpy.ndarray: TxNxM array representing the fire progression
     """
     if not filename.endswith('.npy'):
         filename += '.npy'
     
     try:
         loaded_data = np.load(filename, allow_pickle=True)
-        if loaded_data.ndim > 0:  # If it's a regular array (new format)
+        
+        # Check if this is ignition-point-only format (shape is (2,) or (3,))
+        if loaded_data.shape in [(2,), (3,)]:
+            if grid_height is None or grid_width is None:
+                raise ValueError(
+                    "grid_height and grid_width must be provided for "
+                    "ignition-point-only scenarios"
+                )
+            return load_scenario_ignition_point(
+                filename, grid_height, grid_width, num_timesteps
+            )
+        
+        # Existing format handling
+        if loaded_data.ndim > 0:  # Regular array (new format)
             return loaded_data
-        else:  # If it's a 0-dim array containing a dictionary (old format)
+        else:  # 0-dim array containing dictionary (old format)
             return loaded_data.item()['scenario']
     
     except FileNotFoundError:
@@ -201,6 +258,22 @@ def save_scenario_npy(scenario, out_filename="scenario"):
     
     # Save scenario data directly as array
     np.save(out_filename, scenario.astype(np.float32))
+
+def save_scenario_ignition_point(row, col, start_timestep=0, out_filename="scenario"):
+    """
+    Save an ignition point as a scenario file (ignition-point-only format).
+    
+    Args:
+        row (int): Row index of the ignition point
+        col (int): Column index of the ignition point
+        start_timestep (int): Timestep when fire starts (default: 0)
+        out_filename (str): Output filename (.npy extension added if missing)
+    """
+    if not out_filename.endswith('.npy'):
+        out_filename += '.npy'
+    
+    ignition_point = np.array([row, col, start_timestep], dtype=np.int32)
+    np.save(out_filename, ignition_point)
 
 def save_scenario_jpg(scenario, out_folder_name):
     """

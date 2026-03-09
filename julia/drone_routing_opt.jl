@@ -141,7 +141,11 @@ function create_index_routing_model(risk_pertime_file, n_drones, ChargingStation
     @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) 
     
     # Objective
-    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+    if length(GridpointsDronesDetecting) == 0
+        @objective(model, Max, 0)
+    else
+        @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+    end
 
 
     # Initialize constraint containers
@@ -214,8 +218,15 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
     t2 = time_ns() / 1e9
     optimize!(model)
     t3 = time_ns() / 1e9
-    # check if the model has a solution
-    if termination_status(model) != MOI.OPTIMAL
+    if has_values(model)
+        obj_val = objective_value(model)
+        obj_bound = objective_bound(model)
+        denom = max(abs(obj_val), 1e-10)
+        gap_pct = 100.0 * (obj_bound - obj_val) / denom
+        println("Gurobi optimality gap: ", round(gap_pct, digits=4), "% (status: ", termination_status(model), ")")
+    end
+    # check if the model has a solution (accept OPTIMAL or TIME_LIMIT with incumbent)
+    if termination_status(model) != MOI.OPTIMAL && termination_status(model) != MOI.TIME_LIMIT
         println("No solution found")
         println("Termination status: ", termination_status(model))
         # print the input parameters
@@ -225,6 +236,9 @@ function solve_index_init_routing(routing_model::IndexRoutingModel, reevaluation
         println("n_drones: ", n_drones)
         println("max_battery_time: ", max_battery_time)
         
+        return
+    end
+    if !has_values(model)
         return
     end
 
@@ -388,7 +402,14 @@ function solve_index_next_move_routing(routing_model::IndexRoutingModel, reevalu
     t2 = time_ns() / 1e9
     optimize!(model)
     t3 = time_ns() / 1e9
-    
+    if has_values(model)
+        obj_val = objective_value(model)
+        obj_bound = objective_bound(model)
+        denom = max(abs(obj_val), 1e-10)
+        gap_pct = 100.0 * (obj_bound - obj_val) / denom
+        println("Gurobi optimality gap: ", round(gap_pct, digits=4), "% (status: ", termination_status(model), ")")
+    end
+
     #println("Creating next_move constraints took ", t2 - t1, " seconds")
     #println("Optimizing model took ", t3 - t2, " seconds")
     
@@ -652,7 +673,11 @@ function create_regularized_index_routing_model(risk_pertime_file, n_drones, Cha
     @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] <= sum(a[k,t,s] for s=1:n_drones) + theta[t-1,k])
     @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) 
 
-    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting)) + regularization_param*total_linf_dist ) # plain max coverage
+    if length(GridpointsDronesDetecting) == 0
+        @objective(model, Max, regularization_param*total_linf_dist)
+    else
+        @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting)) + regularization_param*total_linf_dist ) # plain max coverage
+    end
 
     # Initialize constraint containers
     init_constraints = ConstraintRef[]
@@ -1010,7 +1035,11 @@ function new_create_index_routing_model(risk_pertime_file, n_drones, ChargingSta
     @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) 
     
     # Objective
-    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+    if length(GridpointsDronesDetecting) == 0
+        @objective(model, Max, 0)
+    else
+        @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+    end
 
 
     # Initialize constraint containers
@@ -1363,7 +1392,7 @@ struct IndexRoutingModel
 end
 
 function create_index_routing_model_masked(risk_pertime_file, n_drones, ChargingStations, GroundStations, optimization_horizon, max_battery_time, mask_filename)
-    println("Creating index routing model")
+    println("Creating index routing model (masked)")
     t1 = time_ns() / 1e9
 
     # Load burn map and extract dimensions
@@ -1412,7 +1441,9 @@ function create_index_routing_model_masked(risk_pertime_file, n_drones, Charging
     
     model = Model(Gurobi.Optimizer)
     set_silent(model)
-    
+    set_time_limit_sec(model, 120.0)  # 2 minutes for drone routing (max coverage masked)
+    println("Gurobi time limit set to 120 seconds for index routing (masked)")
+
     # Defining the variables using simple integers for position indices
     # Transform grid points to integer indices
     grid_to_idx = Dict(point => i for (i, point) in enumerate(GridpointsDrones))
@@ -1477,7 +1508,11 @@ function create_index_routing_model_masked(risk_pertime_file, n_drones, Charging
     @constraint(model, [t=2:T, k=1:length(GridpointsDronesDetecting)], theta[t,k] >= theta[t-1,k]) 
     
     # Objective
-    @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+    if length(GridpointsDronesDetecting) == 0
+        @objective(model, Max, 0)
+    else
+        @objective(model, Max, sum([risk_pertime[1,GridpointsDronesDetecting[k]...]*(theta[1,k]) for k in 1:length(GridpointsDronesDetecting)]) + sum(risk_pertime[t,GridpointsDronesDetecting[k]...]*(theta[t,k] - theta[t-1,k]) for t in 2:T, k in 1:length(GridpointsDronesDetecting))) # plain max coverage
+    end
 
 
     # Initialize constraint containers

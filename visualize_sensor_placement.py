@@ -57,6 +57,14 @@ def pool_mean_2d(arr, block):
             .mean(axis=(1, 3)))
 
 
+def pool_proba_2d(arr, block):
+    """P(at least one cell fires) pooling: 1 – ∏(1 – p_i), for arr in [0, 1]."""
+    H, W = arr.shape
+    rH, rW = H // block, W // block
+    a = arr[:rH * block, :rW * block].reshape(rH, block, rW, block)
+    return 1.0 - np.prod(1.0 - a, axis=(1, 3))
+
+
 def pool_max_2d(arr, block):
     """Block-max pool a 2-D array (used for mask)."""
     H, W = arr.shape
@@ -125,7 +133,7 @@ def load_fire_ignition_points(valid_names=None):
 
 # ── Plot primitives ────────────────────────────────────────────────────────────
 
-def make_base_axes(bmap_masked, title, xlabel, ylabel):
+def make_base_axes(bmap_masked, title, xlabel, ylabel, vmax=255, cbar_label="WFPI (0–255)"):
     """Figure + axes with the burn map already rendered."""
     H, W  = bmap_masked.shape
     aspect = W / H
@@ -136,12 +144,12 @@ def make_base_axes(bmap_masked, title, xlabel, ylabel):
         cmap="YlOrRd",
         origin="upper",
         interpolation="nearest",
-        vmin=0, vmax=255,
+        vmin=0, vmax=vmax,
         extent=[0, W, H, 0],
     )
     ax.set_xlim(0, W)
     ax.set_ylim(H, 0)
-    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label="WFPI (0–255)")
+    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label=cbar_label)
     ax.set_title(title, fontsize=12, fontweight="bold")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -241,6 +249,12 @@ def main():
     parser.add_argument("--scale", choices=["data", "opt", "both"],
                         default="both",
                         help="Which coordinate scale to render (default: both)")
+    parser.add_argument("--pooling", choices=["mean", "proba"],
+                        default=None,
+                        help="Pooling mode used for the opt-scale background map "
+                             "(auto-detected from cache name if not given)")
+    parser.add_argument("--tag", default="",
+                        help="Extra suffix appended to output filenames, e.g. '_50s25cs'")
     args = parser.parse_args()
 
     # ── Resolve sensor cache ───────────────────────────────────────────────────
@@ -262,6 +276,15 @@ def main():
     drones_per_station = d["drones_per_charging_station"]
     clusters           = compute_clusters(charging_locs_opt, drones_per_station)
     combo_name         = cache_path.stem.replace("sensor_alloc_", "")
+
+    # Detect pooling mode from cache name or explicit flag
+    if args.pooling:
+        pooling = args.pooling
+    elif "_proba" in cache_path.stem:
+        pooling = "proba"
+    else:
+        pooling = "mean"
+    print(f"Pooling mode: {pooling}", flush=True)
 
     n_gs = len(ground_locs_opt)
     n_cs = len(charging_locs_opt)
@@ -285,10 +308,30 @@ def main():
     bmap_data        = avg_map[0].astype(float).copy()
     bmap_data[mask == 0] = np.nan
 
-    # Pooled versions for opt scale
+    # Pooled versions for opt scale — apply mask at data scale first (avoid
+    # contamination from high-WFPI neighbouring states), then pool.
     rH, rW           = H // COVERAGE_W, W // COVERAGE_W
-    bmap_opt_raw      = pool_mean_2d(avg_map[0].astype(float), COVERAGE_W)
-    mask_opt          = pool_max_2d(mask.astype(float),          COVERAGE_W)
+    avg_masked        = avg_map[0].astype(float) * mask.astype(float)
+    mask_opt          = pool_max_2d(mask.astype(float), COVERAGE_W)
+
+    if pooling == "proba":
+        bmap_proba = pool_proba_2d(avg_masked / 255.0, COVERAGE_W)
+        # Re-normalise valid cells to [0, 255] to recover contrast after saturation.
+        nz = bmap_proba > 0
+        if nz.any():
+            p_min, p_max = bmap_proba[nz].min(), bmap_proba[nz].max()
+            if p_max > p_min:
+                bmap_proba = np.where(
+                    nz,
+                    (bmap_proba - p_min) / (p_max - p_min) * 255.0,
+                    0.0,
+                )
+        bmap_opt_raw  = bmap_proba
+        cbar_label    = "Renorm. P(≥1 fire) (0–255)"
+    else:
+        bmap_opt_raw  = pool_mean_2d(avg_masked, COVERAGE_W)
+        cbar_label    = "WFPI (0–255)"
+
     bmap_opt          = bmap_opt_raw.copy()
     bmap_opt[mask_opt == 0] = np.nan
 
@@ -316,6 +359,7 @@ def main():
 
     do_data = args.scale in ("data", "both")
     do_opt  = args.scale in ("opt",  "both")
+    ptag    = f"_{pooling}{args.tag}"  # suffix added to all output filenames
 
     # ══════════════════════════════════════════════════════════════════════════
     # DATA SCALE plots
@@ -333,7 +377,7 @@ def main():
         add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
                                   drones_per_station, leg, marker_scale=0.25)
         render_and_save(fig, ax, H, W,
-                        PROJECT_ROOT / "california_sensor_placement.png", leg)
+                        PROJECT_ROOT / f"california_sensor_placement{ptag}.png", leg)
 
         # Plot 2-D: clusters + fires
         print("Rendering [data] Plot 2 — clusters + fires ...", flush=True)
@@ -349,7 +393,7 @@ def main():
         add_sensors_and_stations(ax, ground_locs_data, charging_locs_data,
                                   drones_per_station, leg, marker_scale=0.25)
         render_and_save(fig, ax, H, W,
-                        PROJECT_ROOT / "california_sensor_clusters.png", leg)
+                        PROJECT_ROOT / f"california_sensor_clusters{ptag}.png", leg)
 
     # ══════════════════════════════════════════════════════════════════════════
     # OPERATIONAL SCALE plots
@@ -361,24 +405,26 @@ def main():
         print("Rendering [opt] Plot 1 — placement ...", flush=True)
         fig, ax = make_base_axes(
             bmap_opt,
-            f"Avg yearly WFPI (opt scale) + sensor/station placement  [{combo_name}]\n"
+            f"Avg yearly WFPI (opt scale, pooling={pooling}) + sensor/station placement  [{combo_name}]\n"
             f"{n_gs} ground sensors · {n_cs} charging stations · {n_dr} drones"
             f"  (grid {rH}×{rW}, {cell_label})",
             f"Column ({cell_label})", f"Row ({cell_label})",
+            vmax=bmap_opt_raw[mask_opt > 0].max(), cbar_label=cbar_label,
         )
         leg = []
         add_sensors_and_stations(ax, ground_locs_opt, charging_locs_opt,
                                   drones_per_station, leg, marker_scale=0.5)
         render_and_save(fig, ax, rH, rW,
-                        PROJECT_ROOT / "california_sensor_placement_opt.png", leg)
+                        PROJECT_ROOT / f"california_sensor_placement_opt{ptag}.png", leg)
 
         # Plot 2-O: clusters + fires
         print("Rendering [opt] Plot 2 — clusters + fires ...", flush=True)
         fig, ax = make_base_axes(
             bmap_opt,
-            f"Avg yearly WFPI (opt scale) + cluster zones + all fires  [{combo_name}]\n"
+            f"Avg yearly WFPI (opt scale, pooling={pooling}) + cluster zones + all fires  [{combo_name}]\n"
             f"{n_cl} clusters · {n_fires} fires  (grid {rH}×{rW}, {cell_label})",
             f"Column ({cell_label})", f"Row ({cell_label})",
+            vmax=bmap_opt_raw[mask_opt > 0].max(), cbar_label=cbar_label,
         )
         leg = []
         add_cluster_boxes(ax, clusters, rH, rW, scale=1, legend_items=leg)
@@ -386,7 +432,7 @@ def main():
         add_sensors_and_stations(ax, ground_locs_opt, charging_locs_opt,
                                   drones_per_station, leg, marker_scale=0.5)
         render_and_save(fig, ax, rH, rW,
-                        PROJECT_ROOT / "california_sensor_clusters_opt.png", leg)
+                        PROJECT_ROOT / f"california_sensor_clusters_opt{ptag}.png", leg)
 
     print("\nDone.", flush=True)
 

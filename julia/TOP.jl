@@ -576,7 +576,7 @@ end
 """
 Convert TOP.jl format to PSO format and run PSO algorithm
 """
-function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}(); use_greedy_init::Bool = true, max_time::Float64 = 30.0, max_iterations::Int = 500, swarm_size::Int = 10)
+function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}(); use_greedy_init::Bool = true, max_time::Float64 = 120.0, max_iterations::Int = 500, swarm_size::Int = 10, use_linf_cost::Bool = false)
     start_time = time()
     # println("Starting get_PSO_solution_multiple_depots...")
     # Convert GridpointsDronesDetecting to customer format for PSO
@@ -736,11 +736,20 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
                     xi, yi = customers[i]
                     xj, yj = customers[j]
                     inf_dist = max(abs(xi - xj), abs(yi - yj))
-                    if inf_dist <= 1
-                        costs[(i, j)] = 1.0
-                        add_left_neighbor!(i, j)
+                    if use_linf_cost
+                        # Use actual L-infinity distance as cost
+                        costs[(i, j)] = Float64(inf_dist)
+                        if inf_dist <= max_battery_time
+                            add_left_neighbor!(i, j)
+                        end
                     else
-                        costs[(i, j)] = max_battery_time*4
+                        # Original logic: cost 1 for adjacent, max_battery_time*4 otherwise
+                        if inf_dist <= 1
+                            costs[(i, j)] = 1.0
+                            add_left_neighbor!(i, j)
+                        else
+                            costs[(i, j)] = max_battery_time*4
+                        end
                     end
                 end
             else
@@ -757,14 +766,25 @@ function get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetectin
             for i in 1:n_customers
                 xi, yi = customers[i]
                 inf_dist_from_depot = max(abs(xi - depot_x), abs(yi - depot_y))
-                if inf_dist_from_depot <= 1
-                    costs[(depot_node, i)] = 1.0
-                    costs[(i, depot_node)] = 1.0
-                    add_left_neighbor!(depot_node, i)
-                    add_left_neighbor!(i, depot_node)
+                if use_linf_cost
+                    # Use actual L-infinity distance as cost
+                    costs[(depot_node, i)] = Float64(inf_dist_from_depot)
+                    costs[(i, depot_node)] = Float64(inf_dist_from_depot)
+                    if inf_dist_from_depot <= max_battery_time
+                        add_left_neighbor!(depot_node, i)
+                        add_left_neighbor!(i, depot_node)
+                    end
                 else
-                    costs[(depot_node, i)] = max_battery_time*4
-                    costs[(i, depot_node)] = max_battery_time*4
+                    # Original logic: cost 1 for adjacent, max_battery_time*4 otherwise
+                    if inf_dist_from_depot <= 1
+                        costs[(depot_node, i)] = 1.0
+                        costs[(i, depot_node)] = 1.0
+                        add_left_neighbor!(depot_node, i)
+                        add_left_neighbor!(i, depot_node)
+                    else
+                        costs[(depot_node, i)] = max_battery_time*4
+                        costs[(i, depot_node)] = max_battery_time*4
+                    end
                 end
             end
             depot_node += 1
@@ -1593,9 +1613,33 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     # Set first_center risk to zero in this time step
     set_point_risk_to_zero!(risk_pertime_copy, first_center)
     
+    # Track all already-visited points to avoid duplicates in greedy path patching
+    already_visited = Set{Tuple{Int,Int}}()
+    for s in 1:n_drones
+        for p in tours_coordinates[s]
+            if !(p in ChargingStations)
+                push!(already_visited, p)
+            end
+        end
+    end
+    # Include current start point (unless it's a depot)
+    if !(first_center in ChargingStations)
+        push!(already_visited, first_center)
+    end
+    
+    # Helper: patch path while forbidding revisiting already-visited points
+    function patch_without_revisit!(route, target_point)
+        # Create a local blocked set that includes already visited points
+        blocked_for_patch = union(blocked, already_visited)
+        # Allow start and target points even if previously visited
+        delete!(blocked_for_patch, route[end])
+        delete!(blocked_for_patch, target_point)
+        patch_path_with_highest_risk!(route, target_point, risk_pertime_copy, blocked_for_patch)
+    end
+    
     # Use DP pathing (which handles blocked cells) instead of BFS
     patch_first_start = time()
-    patch_path_with_highest_risk!(final_route, best_first_point, risk_pertime_copy, blocked)
+    patch_without_revisit!(final_route, best_first_point)
     patch_first_time = time() - patch_first_start
     
     # Calculate profit from initial segment before setting risk to zero
@@ -1610,6 +1654,9 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     # Set risk to zero for all newly visited points
     for point in final_route
         set_point_risk_to_zero!(risk_pertime_copy, point)
+        if !(point in ChargingStations)
+            push!(already_visited, point)
+        end
     end
     
     # Remove points we've used from possible_points
@@ -1642,7 +1689,7 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
         route_length_before = length(final_route)
         
         patch_next_start = time()
-        patch_path_with_highest_risk!(final_route, best_next_point, risk_pertime_copy, blocked)
+        patch_without_revisit!(final_route, best_next_point)
         extension_patch_time += time() - patch_next_start
         
         # Calculate profit from newly added points (including intermediate path points)
@@ -1654,6 +1701,9 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
                 segment_profit += risk_pertime[1, point[1], point[2]]
             end
             set_point_risk_to_zero!(risk_pertime_copy, point)
+            if !(point in ChargingStations)
+                push!(already_visited, point)
+            end
         end
         
         cumulative_profit += segment_profit
@@ -1708,7 +1758,7 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     
     # Patch from the last point to the return point using DP (handles blocked cells)
     patch_return_start = time()
-    patch_path_with_highest_risk!(final_route, best_return_point, risk_pertime_copy, blocked) # add the last return charging point again to close the loop
+    patch_without_revisit!(final_route, best_return_point) # add the last return charging point again to close the loop
     patch_return_time = time() - patch_return_start
     
     # Calculate profit from return path segment
@@ -1748,7 +1798,7 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     return final_route
 end
 
-function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}())
+function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStations, max_battery_time, L, verbose::Bool = false, initial_drone_positions = [], blocked::Set{Tuple{Int,Int}} = Set{Tuple{Int,Int}}(), use_linf_cost::Bool = false)
     # TODO rename the parameter name in the function calls that expect plural
     ChargingStations = ChargingStation
     
@@ -1779,7 +1829,7 @@ function CPA_multiple_depots(risk_pertime, n_drones, ChargingStation, GroundStat
     c[(Begin_CS, End_CS)] = L*4
     
     # Use PSO instead of greedy for initialization
-    routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions, blocked)
+    routes, best_LB = get_PSO_solution_multiple_depots(risk_pertime, GridpointsDronesDetecting, ChargingStation, n_drones, max_battery_time, initial_drone_positions, blocked; use_linf_cost = use_linf_cost)
 
     
     # Also compute greedy for comparison
@@ -2304,7 +2354,8 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     t::Int,
     verbose::Bool = false,
     initial_drone_positions = [],
-    mask_filename = nothing)
+    mask_filename = nothing,
+    use_linf_cost::Bool = false)
     
     start_time = time()
     if n_drones == 0
@@ -2356,16 +2407,18 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
    # ------------------------------------------------------------------
    time_before_cpa = time()
    routes, tours_coordinates = CPA_multiple_depots(risk_pertime, n_drones,
-                          ChargingStations,
-                          GroundStations,
-                          max_battery_time,
-                          L,
-                          verbose,
-                          initial_drone_positions,
-                          blocked)
+                         ChargingStations,
+                         GroundStations,
+                         max_battery_time,
+                         L,
+                         verbose,
+                         initial_drone_positions,
+                         blocked,
+                         use_linf_cost)
     time_after_cpa = time()
     cpa_time = time_after_cpa - time_before_cpa
     println("execution time for CPA: $cpa_time")
+    flush(stdout)
     
 
     movement_plan = [ [("stay", (0,0)) for _ in 1:n_drones] for _ in 1:max_battery_time+1]
@@ -2407,6 +2460,7 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     # println("movement_plan: $movement_plan")
     total_time = time() - start_time
     println("total julia time: $total_time")
+    flush(stdout)
     println("total time without CPA: $(total_time - cpa_time)")
     return movement_plan
 
@@ -2524,7 +2578,8 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
     t::Int,
     verbose::Bool = false,
     initial_drone_positions = [],
-    mask_filename = nothing)
+    mask_filename = nothing,
+    use_linf_cost::Bool = false)
     # Convert Vector{Any} to Vector{Tuple{Int,Int}}
     typed_ground_stations = Vector{Tuple{Int,Int}}()
     for gs in GroundStations
@@ -2532,5 +2587,5 @@ function compute_TOP_plan_multiple_depots(risk_pertime_file::String,
             push!(typed_ground_stations, gs)
         end
     end
-    return compute_TOP_plan_multiple_depots(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose, initial_drone_positions, mask_filename)
+    return compute_TOP_plan_multiple_depots(risk_pertime_file, n_drones, ChargingStations, typed_ground_stations, max_battery_time, t, verbose, initial_drone_positions, mask_filename, use_linf_cost)
 end

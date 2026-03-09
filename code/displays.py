@@ -344,6 +344,232 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
         frames_per_image=3
     )
     
+def plot_fire_locations(
+    background_map,
+    fire_rows,
+    fire_cols,
+    out_path,
+    title="Fire ignition points",
+    marker="o",
+    color="black",
+    marker_size=15,
+):
+    """
+    Save a PNG showing fire ignition points overlaid on a background map.
+
+    Parameters
+    ----------
+    background_map : 2-D float array (H × W), NaN outside the mask.
+    fire_rows : array-like of int, row coordinates in data-space.
+    fire_cols : array-like of int, col coordinates in data-space.
+    out_path : str or Path, destination PNG file.
+    title : str, figure title.
+    marker : matplotlib marker string.
+    color : marker colour.
+    marker_size : scatter marker size (s parameter).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    H, W = background_map.shape
+    aspect = W / H
+    fig, ax = plt.subplots(figsize=(aspect * 11 + 2, 11))
+
+    im = ax.imshow(
+        background_map,
+        cmap="YlOrRd",
+        origin="upper",
+        interpolation="nearest",
+        vmin=0, vmax=255,
+        extent=[0, W, H, 0],
+    )
+    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label="Avg WFPI (0–255)")
+
+    ax.scatter(fire_cols, fire_rows, marker=marker, s=marker_size,
+               color=color, edgecolors="none", alpha=0.8, zorder=5)
+
+    ax.set_title(title, fontsize=11, fontweight="bold")
+    ax.set_xlabel("Column (~1 km/cell)")
+    ax.set_ylabel("Row (~1 km/cell)")
+    ax.set_xlim(0, W)
+    ax.set_ylim(H, 0)
+    fig.tight_layout()
+    fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_benchmark_overview(
+    background_map,
+    mask,
+    clusters,
+    sensors_data,
+    stations_data,
+    detected_fires,
+    missed_disc_fires,
+    non_disc_fires,
+    one_way_reach_opt,
+    coverage_w,
+    out_path,
+    title="Benchmark overview",
+):
+    """
+    Save a static overview PNG showing sensor placement, cluster zones, and
+    benchmark fire outcomes on a WFPI background map.
+
+    Parameters
+    ----------
+    background_map : 2-D float array (H × W), NaN outside the mask.
+    mask : 2-D int/bool array (H × W).
+    clusters : list of dicts with key "stations_opt" → list of (row, col) opt-coords.
+    sensors_data : list of (row, col) data-space sensor centres.
+    stations_data : list of (row, col) data-space station centres.
+    detected_fires : DataFrame with columns 'row' and 'col' (data-space).
+    missed_disc_fires : same format — fires in range but not detected.
+    non_disc_fires : same format — fires outside drone range.
+    one_way_reach_opt : int, one-way drone reach in opt-space cells (floor(max_battery/2)).
+    coverage_w : int, opt-cell width in data cells.
+    out_path : str or Path, destination PNG file.
+    title : str, figure title.
+
+    Cluster zones are drawn as the union of each station's L∞ reachable square
+    (±one_way_reach_opt opt-cells).  If two stations in the same cluster have
+    overlapping zones the union is shown as a single connected region.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    import matplotlib.collections as mc
+    import matplotlib.colors as mcolors
+
+    _CLUSTER_COLOURS = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+        "#aec7e8", "#ffbb78", "#98df8a", "#ff9896", "#c5b0d5",
+    ]
+
+    H, W = background_map.shape
+    zone_half = one_way_reach_opt * coverage_w  # data-cell radius
+
+    aspect = W / H
+    fig, ax = plt.subplots(figsize=(aspect * 11 + 2, 11))
+
+    # Background map
+    im = ax.imshow(
+        background_map,
+        cmap="YlOrRd",
+        origin="upper",
+        interpolation="nearest",
+        vmin=0, vmax=255,
+        extent=[0, W, H, 0],
+    )
+    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label="Avg WFPI (0–255)")
+
+    # ── Cluster zones: union of per-station reachable squares ─────────────────
+    # Build a single fill overlay (all clusters combined) and per-cluster borders.
+    fill_overlay = np.zeros((H, W, 4), dtype=float)
+
+    for i, cl in enumerate(clusters):
+        colour = _CLUSTER_COLOURS[i % len(_CLUSTER_COLOURS)]
+        r_val, g_val, b_val = mcolors.to_rgb(colour)
+
+        # Union mask for this cluster in data-space
+        cl_mask = np.zeros((H, W), dtype=bool)
+        for r_opt, c_opt in cl["stations_opt"]:
+            r_d = r_opt * coverage_w + coverage_w // 2
+            c_d = c_opt * coverage_w + coverage_w // 2
+            r0 = max(0, r_d - zone_half);  r1 = min(H, r_d + zone_half + 1)
+            c0 = max(0, c_d - zone_half);  c1 = min(W, c_d + zone_half + 1)
+            cl_mask[r0:r1, c0:c1] = True
+
+        # Fill: write into shared overlay (clusters are spatially disjoint)
+        fill_overlay[cl_mask, 0] = r_val
+        fill_overlay[cl_mask, 1] = g_val
+        fill_overlay[cl_mask, 2] = b_val
+        fill_overlay[cl_mask, 3] = 0.25
+
+        # Border: find pixel-aligned edges of the union mask via diff
+        m = cl_mask.astype(np.int8)
+
+        # Horizontal edges (between row i-1 and row i → drawn at y = i)
+        m_v = np.zeros((H + 2, W), dtype=np.int8)
+        m_v[1:H + 1, :] = m
+        diff_v = m_v[:-1, :] ^ m_v[1:, :]          # shape (H+1, W)
+        ry, cx = np.where(diff_v)
+        if len(ry):
+            x0 = cx.astype(float)
+            y0 = ry.astype(float)
+            segs = np.stack(
+                [np.column_stack([x0, y0]), np.column_stack([x0 + 1, y0])], axis=1)
+            ax.add_collection(mc.LineCollection(
+                segs, colors=colour, linewidths=1.5, zorder=4))
+
+        # Vertical edges (between col j-1 and col j → drawn at x = j)
+        m_h = np.zeros((H, W + 2), dtype=np.int8)
+        m_h[:, 1:W + 1] = m
+        diff_h = m_h[:, :-1] ^ m_h[:, 1:]          # shape (H, W+1)
+        ry2, cx2 = np.where(diff_h)
+        if len(ry2):
+            x0 = cx2.astype(float)
+            y0 = ry2.astype(float)
+            segs = np.stack(
+                [np.column_stack([x0, y0]), np.column_stack([x0, y0 + 1])], axis=1)
+            ax.add_collection(mc.LineCollection(
+                segs, colors=colour, linewidths=1.5, zorder=4))
+
+    ax.imshow(fill_overlay, origin="upper", extent=[0, W, H, 0],
+              zorder=3, interpolation="nearest")
+
+    # ── Fire markers ──────────────────────────────────────────────────────────
+    def get_rc(obj):
+        """Extract (rows, cols) from a DataFrame or list of (row, col) tuples."""
+        if hasattr(obj, "iterrows"):
+            return obj["row"].tolist(), obj["col"].tolist()
+        return [r for r, _ in obj], [c for _, c in obj]
+
+    nd_r, nd_c = get_rc(non_disc_fires)
+    md_r, md_c = get_rc(missed_disc_fires)
+    dt_r, dt_c = get_rc(detected_fires)
+
+    if nd_r:
+        ax.scatter(nd_c, nd_r, marker=".", s=20, color="gray",
+                   alpha=0.7, zorder=5,
+                   label=f"Non-discoverable (n={len(nd_r)})")
+    if md_r:
+        ax.scatter(md_c, md_r, marker="x", s=50, color="black",
+                   linewidths=1.5, alpha=0.9, zorder=6,
+                   label=f"Missed discoverable (n={len(md_r)})")
+    if dt_r:
+        ax.scatter(dt_c, dt_r, marker="o", s=80, color="limegreen",
+                   edgecolors="darkgreen", linewidths=0.8, zorder=8,
+                   label=f"Detected (n={len(dt_r)}, {len(dt_r)}%)")
+
+    # ── Sensors (white stars) and stations (blue triangles) ───────────────────
+    if sensors_data:
+        sr, sc = zip(*sensors_data)
+        ax.scatter(sc, sr, marker="*", s=40, color="white",
+                   edgecolors="black", linewidths=0.5, zorder=7,
+                   label=f"Ground sensor (n={len(sensors_data)})")
+    if stations_data:
+        tr, tc = zip(*stations_data)
+        ax.scatter(tc, tr, marker="^", s=50, color="blue",
+                   edgecolors="white", linewidths=0.8, zorder=7,
+                   label=f"Charging station (n={len(stations_data)})")
+
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles=handles, fontsize=8, loc="lower right", framealpha=0.85)
+
+    ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.set_xlabel("Column (~1 km/cell)")
+    ax.set_ylabel("Row (~1 km/cell)")
+    ax.set_xlim(0, W)
+    ax.set_ylim(H, 0)
+    fig.tight_layout()
+    fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def create_video_scenario_burnmap(
     burn_map,
     drone_locations_history=None,
@@ -355,7 +581,12 @@ def create_video_scenario_burnmap(
     cmap=None,
     vmin=None,
     vmax=None,
-    display_zones=False
+    display_zones=False,
+    fire_scenario=None,
+    substeps_per_timestep=1,
+    mask=None,
+    coverage_width_cells=None,
+    mask_pooling_mode="min"
 ):
     """
     Create a video visualization of a burn map with drones, sensors, and charging stations overlaid.
@@ -372,6 +603,14 @@ def create_video_scenario_burnmap(
         vmin: Minimum value for colormap (optional)
         vmax: Maximum value for colormap (optional)
         display_zones: If True, display squares of length 60 centered on charging stations (default: False)
+        fire_scenario: Optional T_data x N_data x M_data scenario array (data scale). Fire cells (>0.5) are shown as purple crosses.
+        substeps_per_timestep: Number of operational substeps per data timestep (used to map video frames to scenario time)
+        mask: Optional N_data x M_data mask array (data scale). Cells with mask==0 are shown as gray.
+        coverage_width_cells: Kernel size used in the simulation for pooling data→operational scale.
+            Must match the value used in the benchmark (round(2*coverage_radius_m/cell_size_m)).
+            If None, falls back to N_data//N_op (which may differ and cause visual discrepancies).
+        mask_pooling_mode: "min" (masked if any data cell masked) or "max" (masked only if all data cells masked).
+            Must match the mode used in the benchmark simulation.
     """
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
@@ -395,11 +634,29 @@ def create_video_scenario_burnmap(
         if vmax <= 1e-9:
             vmax = 1e-5
 
+    # Pre-compute pooled mask (operational scale) if provided
+    # Use the same kernel size and pooling mode as the simulation to avoid discrepancies
+    mask_ops = None
+    if mask is not None:
+        cwc = coverage_width_cells if coverage_width_cells is not None else max(1, mask.shape[0] // N)
+        pool_fn = np.min if mask_pooling_mode == "min" else np.max
+        mask_ops = np.ones((N, M))
+        for mi in range(N):
+            for mj in range(M):
+                mask_ops[mi, mj] = pool_fn(mask[mi*cwc:(mi+1)*cwc, mj*cwc:(mj+1)*cwc])
+
     T = min(T, len(drone_locations_history))
 
     for t in range(min(T, maxframes)):
         fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
         im = ax.imshow(burn_map[t].T, cmap=cmap, norm=LogNorm(vmin=vmin, vmax=vmax), alpha=1.0, origin='lower')
+
+        # Gray overlay on masked (inaccessible) cells
+        if mask_ops is not None:
+            gray_overlay = np.full((N, M, 4), 0.0)  # RGBA
+            masked_cells = mask_ops == 0
+            gray_overlay[masked_cells] = [0.5, 0.5, 0.5, 0.8]  # gray with high opacity
+            ax.imshow(gray_overlay.transpose(1, 0, 2), origin='lower')
 
         # Drones
         if drone_locations_history is not None and t < len(drone_locations_history):
@@ -435,6 +692,25 @@ def create_video_scenario_burnmap(
                     )
                     ax.add_patch(rect)
 
+        # Fire cells from scenario (purple crosses)
+        if fire_scenario is not None:
+            scenario_index = min(t // substeps_per_timestep, len(fire_scenario) - 1)
+            if scenario_index >= 0:
+                fire_grid = fire_scenario[scenario_index]
+                # Pool fire grid from data scale to operational scale (max pooling)
+                # Use the same kernel size as the simulation
+                N_data, M_data = fire_grid.shape
+                cwc_fire = coverage_width_cells if coverage_width_cells is not None else max(1, N_data // N)
+                fire_ops = np.zeros((N, M))
+                for fi in range(N):
+                    for fj in range(M):
+                        fire_ops[fi, fj] = np.max(fire_grid[fi*cwc_fire:(fi+1)*cwc_fire, fj*cwc_fire:(fj+1)*cwc_fire])
+                fire_cells = np.argwhere(fire_ops > 0.5)
+                if len(fire_cells) > 0:
+                    ax.scatter(fire_cells[:, 0], fire_cells[:, 1],
+                               c="purple", s=200, marker="x", linewidths=3,
+                               label="Fire" if t == 0 else None)
+
         ax.set_title(f"Burn Probability Map at t={t}")
         ax.set_xlabel('X coordinate')
         ax.set_ylabel('Y coordinate')
@@ -442,8 +718,9 @@ def create_video_scenario_burnmap(
         ax.axis("on")
         
         # Set consistent limits to ensure same image size
-        ax.set_xlim(-0.5, M-0.5)
-        ax.set_ylim(-0.5, N-0.5)
+        # burn_map[t].T has shape (M, N): M rows (y-axis) and N cols (x-axis)
+        ax.set_xlim(-0.5, N-0.5)
+        ax.set_ylim(-0.5, M-0.5)
         
         image_path = os.path.join(output_dir, f"grid_timestep_{t:03d}.png")
         plt.savefig(image_path, bbox_inches='tight', dpi=100)

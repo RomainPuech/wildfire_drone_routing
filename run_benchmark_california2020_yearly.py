@@ -45,12 +45,16 @@ sys.path.append(str(PROJECT_ROOT / "code"))
 print("Importing modules...", flush=True)
 from Drone import Drone
 from dataset import load_scenario_npy
-from Strategy import SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation
+from Strategy import (
+    SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation,
+    SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
+)
 from benchmark import (
     compute_operational_substeps,
     detect_fire_within_coverage,
     operational_space_to_dataspace_coordinates,
     pool_burnmap_mean,
+    pool_burnmap_proba_at_least_one,
     pool_mask,
 )
 import wrappers
@@ -68,16 +72,16 @@ LOG_DIR      = DATASET_DIR / "logs"
 TMP_DIR      = PROJECT_ROOT / "tmp_burnmaps"
 
 MAX_ROUTING_DATA_STEPS = 24   # offset ≤ 12 + 12 scenario steps
-N_SCENARIO_DATA_STEPS  = 12   # 12 × 30 min = 6 h
+N_SCENARIO_DATA_STEPS  = 6    # 6 × 30 min = 3 h
 
 
 # ── Simulation parameters ──────────────────────────────────────────────────────
 SIMULATION_PARAMETERS = {
     "max_battery_distance": -1,
     "max_battery_time":      1,        # hours
-    "n_drones":              2,
-    "n_ground_stations":     8,
-    "n_charging_stations":   2,
+    "n_drones":              50,
+    "n_ground_stations":     100,
+    "n_charging_stations":   50,
     "drone_speed_m_per_min": 600,
     "coverage_radius_m":     2900,
     "cell_size_m":           1000,     # ~1 km WFPI resolution
@@ -85,15 +89,59 @@ SIMULATION_PARAMETERS = {
     "mask_pooling_mode":     "max",
 }
 
+# Budget: 20M total, 50/50 split between sensors and stations+drones.
+#   100 sensors × 100k = 10M
+#   50 stations × 150k + 50 drones × 50k = 7.5M + 2.5M = 10M
+BUDGET_TOTAL      = 20_000_000
+COST_SENSOR       = 100_000
+COST_DRONE        = 50_000
+COST_STATION      = 150_000
+
+# How to pool the avg WFPI map to the operational scale for sensor placement.
+#   "mean"  — block mean (average WFPI over the 5×5 data cells)
+#   "proba" — 1 – ∏(1–p_i) treating WFPI/255 as per-cell fire probability
+SENSOR_POOLING = "mean"
+
+# Random subset of fires to benchmark
+BENCHMARK_SUBSET_SIZE = 100
+RANDOM_SEED           = 42
+
 
 # ── Strategy combinations ──────────────────────────────────────────────────────
 STRATEGY_COMBINATIONS = [
+    # {
+    #     "name":   "GaussianAlloc_TOP",
+    #     "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation,
+    #     "drone":  wrappers.DroneRoutingTOPMaskedLogged,
+    #     "params": {"reevaluation_step": 5, "optimization_horizon": 10},
+    # },
+    # TOP run (uncomment to run TOP; comment MaxCoverageMasked below to run only TOP):
     {
-        "name":   "GaussianAlloc_TOP",
-        "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation,
+        "name":   "GaussianBudget20M_TOP",
+        "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
         "drone":  wrappers.DroneRoutingTOPMaskedLogged,
         "params": {"reevaluation_step": 5, "optimization_horizon": 10},
+        "sensor_params": {
+            "budget_millions": BUDGET_TOTAL / 1_000_000,
+            "cost_sensor":     COST_SENSOR  / 1_000_000,
+            "cost_station":    COST_STATION / 1_000_000,
+            "cost_drone":      COST_DRONE   / 1_000_000,
+        },
     },
+    # MaxCoverage run (comment out TOP above and uncomment this to run only MaxCoverage):
+    # {
+    #     "name":   "GaussianBudget20M_MaxCoverageMasked",
+    #     "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
+    #     "drone":  wrappers.DroneRoutingMaxCoverageResetStaticMaskedLogged,
+    #     "params": {"reevaluation_step": 5, "optimization_horizon": 10},
+    #     "sensor_params": {
+    #         "budget_millions": BUDGET_TOTAL / 1_000_000,
+    #         "cost_sensor":     COST_SENSOR  / 1_000_000,
+    #         "cost_station":    COST_STATION / 1_000_000,
+    #         "cost_drone":      COST_DRONE   / 1_000_000,
+    #     },
+    #     "sensor_cache_key": "GaussianBudget20M_TOP",  # reuse same sensor placement as TOP run
+    # },
 ]
 
 
@@ -176,11 +224,18 @@ def compute_clusters(charging_locs_opt: list,
 
 def fire_cluster(fire_opt: tuple, clusters: list,
                  max_battery_substeps: int) -> dict | None:
-    """Return the cluster whose reachable zone contains fire_opt, or None."""
+    """Return the cluster whose reachable zone contains fire_opt, or None.
+
+    A fire is considered reachable if it lies within L∞ distance
+    floor(max_battery_substeps / 2) of at least one station in a cluster.
+    This is the one-way reach: drones must fly to the fire *and* return to a
+    station on a single charge.
+    """
+    one_way_reach = max_battery_substeps // 2
     fr, fc = fire_opt
     for cluster in clusters:
         for sx, sy in cluster["stations_opt"]:
-            if max(abs(fr - sx), abs(fc - sy)) <= max_battery_substeps:
+            if max(abs(fr - sx), abs(fc - sy)) <= one_way_reach:
                 return cluster
     return None
 
@@ -210,12 +265,17 @@ def load_or_compute_sensor_placement(strategy_cls, rescaled_auto_params: dict,
     ground_locs, charging_locs = strat.get_locations()
     drones_per_station         = strat.get_drone_allocation()
 
+    log_data = {
+        "ground_sensor_locations":    [[int(v) for v in x] for x in ground_locs],
+        "charging_station_locations": [[int(v) for v in x] for x in charging_locs],
+        "drones_per_charging_station": [int(x) for x in drones_per_station],
+    }
+    if hasattr(strat, "get_device_counts"):
+        log_data["device_counts"] = strat.get_device_counts()
+        log_data["budget_millions"] = getattr(strat, "budget_millions", None)
+
     with open(log_path, "w") as f:
-        json.dump({
-            "ground_sensor_locations":    [[int(v) for v in x] for x in ground_locs],
-            "charging_station_locations": [[int(v) for v in x] for x in charging_locs],
-            "drones_per_charging_station": [int(x) for x in drones_per_station],
-        }, f, indent=2)
+        json.dump(log_data, f, indent=2)
     print(f"  [sensor] Saved to {Path(log_path).name}", flush=True)
     return (
         [tuple(int(v) for v in x) for x in ground_locs],
@@ -571,15 +631,38 @@ def main():
 
     suffix = f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy"
 
-    rescaled_avg = pool_burnmap_mean(avg_map, coverage_w)
-    rescaled_avg = np.repeat(rescaled_avg, operational_substeps, axis=0) / operational_substeps
-    rescaled_avg_path = str(AVG_MAP).replace(".npy", suffix)
-    np.save(rescaled_avg_path, rescaled_avg)
-
     rescaled_mask = pool_mask(mask, coverage_w,
                               mode=SIMULATION_PARAMETERS["mask_pooling_mode"])
     rescaled_mask_path = str(MASK_PATH).replace(".npy", suffix)
     np.save(rescaled_mask_path, rescaled_mask)
+
+    # Apply data-scale mask BEFORE pooling so that non-California cells (which
+    # can have very high WFPI values from neighbouring states) do not contaminate
+    # the block mean for border opt-cells.
+    avg_map_masked = avg_map * mask          # zero out non-CA cells at 1km scale
+
+    if SENSOR_POOLING == "proba":
+        # Treat WFPI/255 as per-cell fire probability; pool as P(at least one cell fires).
+        rescaled_avg = pool_burnmap_proba_at_least_one(avg_map_masked / 255.0, coverage_w)
+        # Re-normalise: the probabilities saturate near 1 for most cells.
+        # Stretch valid (non-zero) cells to [0, 255] to recover spatial contrast.
+        nz = rescaled_avg > 0
+        if nz.any():
+            p_min, p_max = rescaled_avg[nz].min(), rescaled_avg[nz].max()
+            if p_max > p_min:
+                rescaled_avg = np.where(
+                    nz,
+                    (rescaled_avg - p_min) / (p_max - p_min) * 255.0,
+                    0.0,
+                )
+    else:
+        rescaled_avg = pool_burnmap_mean(avg_map_masked, coverage_w)
+
+    rescaled_avg = np.repeat(rescaled_avg, operational_substeps, axis=0) / operational_substeps
+    rescaled_avg_path = str(AVG_MAP).replace(".npy", f"_{SENSOR_POOLING}{suffix}")
+    np.save(rescaled_avg_path, rescaled_avg)
+
+    print(f"Sensor pooling mode: {SENSOR_POOLING}", flush=True)
 
     # ── Valid scenario list ───────────────────────────────────────────────────
     all_scenario_files = sorted(SCENARII_DIR.glob("*.npy"))
@@ -589,7 +672,16 @@ def main():
                for k in ("offset", "date", "time"))
     ]
     print(
-        f"Scenarios with date+time: {len(valid_scenarios)}/{len(all_scenario_files)}\n",
+        f"Scenarios with date+time: {len(valid_scenarios)}/{len(all_scenario_files)}",
+        flush=True,
+    )
+
+    # ── Random subset selection ───────────────────────────────────────────────
+    rng = np.random.default_rng(RANDOM_SEED)
+    subset_idx = np.sort(rng.choice(len(valid_scenarios), size=BENCHMARK_SUBSET_SIZE, replace=False))
+    benchmark_scenarios = [valid_scenarios[i] for i in subset_idx]
+    print(
+        f"Random subset: {BENCHMARK_SUBSET_SIZE} scenarios (seed={RANDOM_SEED})\n",
         flush=True,
     )
 
@@ -614,7 +706,7 @@ def main():
     }
     base_custom = {
         "mask_filename":        rescaled_mask_path,
-        "recompute_logfile":    False,
+        "recompute_logfile":    True,   # benchmark uses RoutingLog; skip inner wrapper cache
         "recompute_kernel":     False,
         "use_linf_cost":        True,
         "regularization_param": 1e5,
@@ -631,6 +723,7 @@ def main():
             **base_custom,
             "reevaluation_step":    combo["params"]["reevaluation_step"],
             "optimization_horizon": combo["params"]["optimization_horizon"],
+            "burnmap_type":         "dynamic",  # avoid 200x tiling of burn map
         }
 
         print(f"\n{'='*70}", flush=True)
@@ -638,10 +731,12 @@ def main():
         print(f"{'='*70}\n", flush=True)
 
         # ── Sensor placement with allocation ──────────────────────────────────
+        sensor_cache_name = combo.get("sensor_cache_key", combo_name)
         sensor_log_path = str(
-            LOG_DIR / f"sensor_alloc_{combo_name}_{rescaled_N}x{rescaled_M}.json"
+            LOG_DIR / f"sensor_alloc_{sensor_cache_name}_{rescaled_N}x{rescaled_M}_{SENSOR_POOLING}.json"
         )
-        sensor_custom = {**combo_custom, "burnmap_filename": rescaled_avg_path}
+        sensor_custom = {**combo_custom, "burnmap_filename": rescaled_avg_path,
+                         **combo.get("sensor_params", {})}
 
         ground_locs_opt, charging_locs_opt, drones_per_station = \
             load_or_compute_sensor_placement(
@@ -657,10 +752,11 @@ def main():
             for x, y in charging_locs_opt
         ]
 
+        total_drones = sum(drones_per_station)
         print(
-            f"  Ground sensors: {ground_locs_opt}\n"
-            f"  Charging stations: {charging_locs_opt}\n"
-            f"  Drones per station: {drones_per_station}",
+            f"  Ground sensors ({len(ground_locs_opt)}): {ground_locs_opt}\n"
+            f"  Charging stations ({len(charging_locs_opt)}): {charging_locs_opt}\n"
+            f"  Drones per station: {drones_per_station}  (total: {total_drones})",
             flush=True,
         )
 
@@ -692,7 +788,7 @@ def main():
         # ── Scenario loop ─────────────────────────────────────────────────────
         n_skipped = n_sensor_only = n_routed = n_cached = 0
 
-        for sf in valid_scenarios:
+        for sf in benchmark_scenarios:
             name     = sf.stem.replace("_scenario1", "")
             date_str = config[f"date_{name}"]
             time_str = config[f"time_{name}"]
@@ -836,5 +932,92 @@ def main():
     print("\nDone.", flush=True)
 
 
+def run_sensor_placement_only(budget_millions: float, time_limit_seconds: float = 600.0):
+    """Run only sensor placement (Budget strategy) and save to cache. Used for 100M etc."""
+    LOG_DIR.mkdir(exist_ok=True)
+    TMP_DIR.mkdir(exist_ok=True)
+    print("Loading avg WFPI map ...", flush=True)
+    avg_map = np.load(str(AVG_MAP))
+    print("Loading mask ...", flush=True)
+    mask = np.load(str(MASK_PATH))
+    H, W = mask.shape
+    cell_size_m = SIMULATION_PARAMETERS["cell_size_m"]
+    speed = SIMULATION_PARAMETERS["drone_speed_m_per_min"]
+    coverage_r_m = SIMULATION_PARAMETERS["coverage_radius_m"]
+    operational_substeps = compute_operational_substeps(cell_size_m, speed, coverage_r_m)
+    coverage_w = round(coverage_r_m * 2 / cell_size_m)
+    if coverage_w % 2 == 0:
+        coverage_w -= 1
+    rescaled_N = H // coverage_w
+    rescaled_M = W // coverage_w
+    rescaled_max_battery = SIMULATION_PARAMETERS["max_battery_time"] * operational_substeps
+    suffix = f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy"
+    rescaled_mask_path = str(MASK_PATH).replace(".npy", suffix)
+    if not Path(rescaled_mask_path).exists():
+        rescaled_mask = pool_mask(mask, coverage_w, mode=SIMULATION_PARAMETERS["mask_pooling_mode"])
+        np.save(rescaled_mask_path, rescaled_mask)
+    rescaled_avg_path = str(AVG_MAP).replace(".npy", f"_{SENSOR_POOLING}{suffix}")
+    if not Path(rescaled_avg_path).exists():
+        avg_map_masked = avg_map * mask
+        rescaled_avg = pool_burnmap_mean(avg_map_masked, coverage_w)
+        rescaled_avg = np.repeat(rescaled_avg, operational_substeps, axis=0) / operational_substeps
+        np.save(rescaled_avg_path, rescaled_avg)
+    base_rescaled_auto = {
+        "N": H, "M": W,
+        "max_battery_distance": SIMULATION_PARAMETERS["max_battery_distance"],
+        "max_battery_time":     rescaled_max_battery,
+        "n_drones":             SIMULATION_PARAMETERS["n_drones"],
+        "n_ground_stations":    SIMULATION_PARAMETERS["n_ground_stations"],
+        "n_charging_stations":  SIMULATION_PARAMETERS["n_charging_stations"],
+        "speed_m_per_min":      speed,
+        "coverage_radius_m":    coverage_r_m,
+        "cell_size_m":          cell_size_m,
+        "transmission_range":   SIMULATION_PARAMETERS["transmission_range"],
+        "mask_filename":        rescaled_mask_path,
+        "N": rescaled_N, "M": rescaled_M,
+    }
+    base_custom = {
+        "mask_filename": rescaled_mask_path,
+        "recompute_logfile": True,
+        "recompute_kernel": False,
+        "use_linf_cost": True,
+        "regularization_param": 1e5,
+    }
+    combo_name = f"GaussianBudget{int(budget_millions)}M"
+    sensor_log_path = str(LOG_DIR / f"sensor_alloc_{combo_name}_{rescaled_N}x{rescaled_M}_{SENSOR_POOLING}.json")
+    sensor_custom = {
+        **base_custom,
+        "burnmap_filename":    rescaled_avg_path,
+        "budget_millions":     budget_millions,
+        "cost_sensor":         COST_SENSOR / 1_000_000,
+        "cost_station":        COST_STATION / 1_000_000,
+        "cost_drone":          COST_DRONE / 1_000_000,
+        "time_limit_seconds":   time_limit_seconds,
+    }
+    print(f"Running sensor placement only: budget={budget_millions}M, time limit={time_limit_seconds}s", flush=True)
+    load_or_compute_sensor_placement(
+        SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
+        base_rescaled_auto,
+        sensor_custom,
+        sensor_log_path,
+    )
+    print(f"Saved to {sensor_log_path}", flush=True)
+
+
 if __name__ == "__main__":
+    if "--sensor-only" in sys.argv:
+        try:
+            i = sys.argv.index("--budget")
+            budget = int(sys.argv[i + 1])
+        except (ValueError, IndexError):
+            budget = 100
+        time_limit = 600.0
+        if "--time-limit" in sys.argv:
+            try:
+                j = sys.argv.index("--time-limit")
+                time_limit = float(sys.argv[j + 1])
+            except (ValueError, IndexError):
+                pass
+        run_sensor_placement_only(budget_millions=budget, time_limit_seconds=time_limit)
+        sys.exit(0)
     main()

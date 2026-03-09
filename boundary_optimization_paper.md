@@ -68,7 +68,7 @@ Swap positions `i < j`: exchange `π_i` and `π_j`.
 
 ### Definition 4.2 (Shift)
 
-Shift positions `i < j`: remove `π_i`, shift `π_{i+1..j}` left by one, insert the removed node at position `j`.
+Shift positions `i < j`: remove `π_i`, shift `π_{i+1..j-1}` left by one, insert the removed node **before** the original position `j` (i.e., at position `j-1` in the new permutation).
 
 ### Theorem 4.3 (Swap Boundary)
 
@@ -79,52 +79,60 @@ Only the nodes at positions `i` and `j` are changed by a swap. A tour’s profit
 
 ### Theorem 4.4 (Shift Boundary)
 
-If positions `i < j` are non-depot nodes, then only tours that include positions `i-1` or `j` can change profit after shifting `i → j`.
+If positions `i < j` are non-depot nodes, then only tours that include positions `i-1` or `j-1` can change profit after shifting `i → j`.
 
 **Proof.**
-The shift removes `π_i` from its original location and inserts it immediately after `π_j`. Any tour containing position `i` must include `i-1` and sees `π_i` removed; any tour containing position `j` may extend to include `π_i` after insertion. Positions strictly between `i` and `j` preserve node order (only shifted), so their tour sequences are unchanged. Therefore, only tours containing `i-1` or `j` can change profit. ∎
+The shift removes `π_i` from its original location and inserts it immediately after `π_{j-1}` (before the original `π_j`). Any tour containing position `i` must include `i-1` and sees `π_i` removed; any tour containing position `j-1` may extend to include `π_i` after insertion. Positions strictly between `i` and `j-1` preserve node order (only shifted), so their tour sequences are unchanged. Therefore, only tours containing `i-1` or `j-1` can change profit. ∎
 
 ---
 
-## 5. Perfect Filtering Criterion
+## 5. Irrelevance-Based Shift Filter
 
-### Theorem 5.1 (Zero False Negatives)
+We replace profit-only checks with a conservative **irrelevance** criterion that guarantees no false negatives.
 
-Let `P` be the optimal profit for permutation `π`, and `P'` be the optimal profit after a local move. If **no affected tour** increases in profit, then `P' ≤ P`.
+### Definition 5.1 (irrelevant_once_removed)
+
+For a non-depot node at position `i`, define `irrelevant_once_removed(i)` as follows:
+
+1. If `node_i` is **blocking or dead**:
+   - If `is_blocking_once_removed(i)` is true, removal does **not** change any tour containing position `i-1` → **irrelevant**.
+   - If `is_blocking_once_removed(i)` is false, removal can extend a tour → **relevant**.
+2. If `node_i` is **not blocking/dead**, it belongs to a tour → **relevant**.
+
+### Definition 5.2 (irrelevant_once_inserted_at_position_j)
+
+Assume `irrelevant_once_removed(i)` is true. Let the shift insert `node_i` **before** position `j`. Then:
+
+- If the node at position `j-1` is **dead**, insertion at `j` does **not** change any tour → **irrelevant**.
+- If the node at position `j-1` is **not dead**, insertion **may** change a tour → **relevant**.
+
+Because `irrelevant_once_removed(i)` guarantees no tours change under removal, “deadness” of the node at `j-1` is invariant before/after removal (for the same node identity).
+
+### Theorem 5.3 (Safe Skip Criterion for Shift)
+
+If both `irrelevant_once_removed(i)` and `irrelevant_once_inserted_at_position_j(i, j)` are true, then shifting `i → j` does not change any tour and cannot increase the optimal profit.
 
 **Proof.**
-Unaffected tours have identical node sequences, hence identical profits. Affected tours have profits that are less than or equal to their previous values by assumption. Therefore, all tour profits in the new permutation are ≤ their original values. The DP maximizes a sum of tour profits; hence the optimal value cannot increase. ∎
-
-**Corollary.** A move should be evaluated with the full split procedure **only if** at least one affected tour increases in profit. This yields a perfect filter with zero false negatives.
+By Observation 4.4, only tours containing positions `i-1` or `j-1` can change. The first predicate guarantees no tour containing `i-1` changes under removal; the second guarantees no tour containing `j-1` changes under insertion. Therefore, no tour changes at all, and the DP optimum cannot increase. ∎
 
 ---
 
-## 6. Two-Stage Filter for Shift
+## 6. Candidate Reduction (Optional)
 
-### Definition 6.1 (Stage 1: Removal Test)
+### Observation 6.1 (Adjacency-Based Candidate Reduction)
 
-Given a shift candidate index `i`, Stage 1 constructs the permutation `π^(-i)` obtained by removing `π_i` and shifting positions `i+1..n` left by one. Stage 1 **recomputes only** the profits of tours containing position `i-1` in the original permutation. Stage 1 **succeeds** if at least one of these tours improves in profit under `π^(-i)`.
+If `irrelevant_once_removed(i)` is true, then insertion at `j` can only matter when the predecessor `π_{j-1}` is connected to `π_i` in the clients graph (i.e., `π_{j-1} ∈ left_neighbors(π_i)`).
 
-### Definition 6.2 (Stage 2: Insertion-Only Scan)
+**Justification.**
+Insertion can only affect a tour if the tour reaches `π_{j-1}` and can extend to `π_i`, which requires the edge `π_{j-1} → π_i`.
 
-If Stage 1 fails, Stage 2 evaluates shifts `i → j` but **restricts** candidate positions `j` to the current positions of left-neighbors of `π_i` in the clients graph. The left-neighbor list is randomized before iteration, and each candidate `j` is evaluated using the perfect filter.
+### Practical Rule
 
-### Observation 6.1 (Stage-2 Adjacency)
-
-If Stage 1 finds no improvement among tours containing position `i-1`, then a tour containing the former position `j` can improve **only if** the edge `π_j → π_i` is feasible in the clients graph.
-
-**Proof.**
-After shifting `π_i` to position `j`, the only new node that can extend a tour containing `π_j` is `π_i`. Extending requires edge `π_j → π_i`. If infeasible, the tour cannot include `π_i`, so its profit cannot increase. ∎
-
-### Algorithm 6.2 (Shift Filter)
-
-**Stage 1 (Removal Test).**
-Remove `π_i` and recompute profits only for tours containing position `i-1`. If any improves, run a full randomized scan over all `j`.
-
-**Stage 2 (Insertion-Only Scan).**
-If Stage 1 fails, restrict candidate `j` to positions of **left-neighbors** of `π_i`. Randomize the order of these neighbors, map them to positions via `node_to_position`, and evaluate only those `j`.
-
-This reduces the candidate scan from `O(n)` to `O(deg(π_i))` in sparse graphs without sacrificing correctness.
+When `irrelevant_once_removed(i)` holds, restrict candidate positions to
+```
+j = position(node) + 1  for node ∈ left_neighbors(π_i)
+```
+This reduces the scan from `O(n)` to `O(deg(π_i))` in sparse graphs.
 
 ---
 
@@ -161,19 +169,17 @@ These tests are O(1) with a constant-time adjacency lookup.
 ## Appendix A: Pseudocode (Shift Filter)
 
 ```text
-SHIFT_FILTER(i):
-  # Stage 1: removal-only test
-  remove π_i → π^(-i)
-  if any tour containing position i-1 improves on π^(-i):
-      for j in shuffled(all positions except i):
-          evaluate full shift i → j with perfect filter
-      return
+SHIFT_FILTER(i, j):
+  if irrelevant_once_removed(i) && irrelevant_once_inserted_at_position_j(i, j):
+      skip move
+  else:
+      evaluate full shift i → j
 
-  # Stage 2: left-neighbor restriction
-  for node_j in shuffled(left_neighbors(π_i)):
-      j = position(node_j)
-      if j <= i: continue
-      evaluate full shift i → j with perfect filter
+OPTIONAL CANDIDATE REDUCTION:
+  if irrelevant_once_removed(i):
+      for node in shuffled(left_neighbors(π_i)):
+          j = position(node) + 1
+          evaluate SHIFT_FILTER(i, j)
 ```
 
 ---
@@ -188,3 +194,14 @@ SWAP_BLOCKING_FILTER(i, j):
   # If no change, skip swap
 ```
 
+---
+
+## Appendix C: Prior “Perfect Filter” (Deprecated)
+
+This appendix records the earlier **profit-only filter** for historical reference. It is **incorrect** because it can miss improvements caused by changes in tour overlap structure (i.e., different combinations become feasible even if no individual tour profit increases).
+
+**Prior criterion (deprecated):**
+> Evaluate a shift only if at least one affected tour increases in profit.
+
+**Why it fails:**  
+Tour profits can stay the same or decrease while **tour lengths/overlaps change**, enabling the DP to select a different combination with higher total profit.
