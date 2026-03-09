@@ -4,21 +4,27 @@ Benchmark on California 2020 Dataset — Time-Aware Yearly WFPI Burn Map
 
 Pipeline
 --------
-1. Sensor/charging placement with drone allocation (once per strategy, cached).
-2. Drone clusters: connected components of charging stations whose inter-station
+1. **Setup (single-threaded):** load static resources, precompute rescaled
+   mask and avg burn map.  These are written once before any parallel work.
+2. Sensor/charging placement with drone allocation (once per strategy, cached).
+3. Drone clusters: connected components of charging stations whose inter-station
    L∞ distance in opt-space is ≤ max_battery_substeps.  Each cluster stores
    its stations and the number of drones allocated to it.
-3. For every fire scenario:
-   a. Convert ignition point to opt-space.
-   b. Check ground sensors — if fire ignition or spread ever hits a sensor,
-      record detection immediately (no routing needed).
-   c. Check drone clusters — if ignition point is within L∞ distance
-      max_battery_substeps of any station in a cluster, run routing for
-      that cluster.  Otherwise the fire is unreachable → undetected, skip.
-4. Routing is cached per (cluster_fingerprint, YYYYMMDD_HH) in one JSON log
+4. **Pre-scan (single-threaded):** for every benchmark scenario, resolve the
+   target cluster and rounded sim-start hour (log_key).
+5. **Wave assignment:** scenarios that share the same (cluster, log_key) are
+   placed in different waves so they never run concurrently.  All scenarios
+   within a wave can safely run in parallel.
+6. **Parallel execution:** for each wave, a ``ThreadPoolExecutor`` dispatches
+   workers that compute routing (if not cached) and replay simulation.
+   Thread safety is ensured by:
+   - RoutingLog objects use a per-instance lock for all reads/writes.
+   - Temp burn-map files include a UUID so no two workers write the same path.
+   - Rescaled mask/avg files are precomputed in step 1 and only read by workers.
+7. Routing is cached per (cluster_fingerprint, YYYYMMDD_HH) in one JSON log
    file per cluster.  Scenarios that share the same cluster AND the same
    rounded sim-start hour reuse the cached routing.
-5. Simulation is replayed from the cached routing.
+8. Simulation is replayed from the cached routing.
 
 Prerequisites
 -------------
@@ -31,11 +37,14 @@ Run from the project root:
 import sys
 import os
 import json
+import uuid
+import threading
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -105,6 +114,9 @@ SENSOR_POOLING = "mean"
 # Random subset of fires to benchmark
 BENCHMARK_SUBSET_SIZE = 100
 RANDOM_SEED           = 42
+
+# Parallelism
+MAX_WORKERS = os.cpu_count() or 4
 
 
 # ── Strategy combinations ──────────────────────────────────────────────────────
@@ -287,10 +299,16 @@ def load_or_compute_sensor_placement(strategy_cls, rescaled_auto_params: dict,
 # ── Routing log ────────────────────────────────────────────────────────────────
 
 class RoutingLog:
-    """JSON file keyed by 'YYYYMMDD_HH', one per (strategy, cluster)."""
+    """Thread-safe JSON file keyed by 'YYYYMMDD_HH', one per (strategy, cluster).
+
+    A lock serialises all reads and writes so that multiple threads can
+    safely operate on the same RoutingLog (e.g. different log_keys on the
+    same cluster running in parallel).
+    """
 
     def __init__(self, path: str):
         self.path = path
+        self._lock = threading.Lock()
         if Path(path).exists():
             with open(path) as f:
                 self.data = json.load(f)
@@ -298,19 +316,22 @@ class RoutingLog:
             self.data = {}
 
     def has(self, key: str, min_steps: int) -> bool:
-        entry = self.data.get(key)
-        return entry is not None and len(entry.get("actions_history", [])) >= min_steps
+        with self._lock:
+            entry = self.data.get(key)
+            return entry is not None and len(entry.get("actions_history", [])) >= min_steps
 
     def get(self, key: str) -> dict:
-        return self.data[key]
+        with self._lock:
+            return self.data[key]
 
     def put(self, key: str, initial_locs: list, actions_history: list):
-        self.data[key] = {
-            "initial_drone_locations": initial_locs,
-            "actions_history":         actions_history,
-        }
-        with open(self.path, "w") as f:
-            json.dump(self.data, f, indent=2)
+        with self._lock:
+            self.data[key] = {
+                "initial_drone_locations": initial_locs,
+                "actions_history":         actions_history,
+            }
+            with open(self.path, "w") as f:
+                json.dump(self.data, f, indent=2)
 
 
 # ── Action normalisation ───────────────────────────────────────────────────────
@@ -785,9 +806,8 @@ def main():
             )
             routing_logs[cluster["fingerprint"]] = RoutingLog(log_path)
 
-        # ── Scenario loop ─────────────────────────────────────────────────────
-        n_skipped = n_sensor_only = n_routed = n_cached = 0
-
+        # ── Pre-scan: compute metadata for each scenario ────────────────────
+        scenario_tasks = []
         for sf in benchmark_scenarios:
             name     = sf.stem.replace("_scenario1", "")
             date_str = config[f"date_{name}"]
@@ -803,17 +823,64 @@ def main():
             )
             log_key = f"{sim_start.strftime('%Y%m%d')}_{sim_start.hour:02d}"
 
-            # Convert ignition to opt-space
             pt = np.load(str(sf))
             fire_row, fire_col = int(pt[0]), int(pt[1])
             fire_opt = (fire_row // coverage_w, fire_col // coverage_w)
 
-            # Find cluster
             cluster = fire_cluster(fire_opt, clusters, rescaled_max_battery)
 
+            scenario_tasks.append({
+                "sf":        sf,
+                "name":      name,
+                "date_str":  date_str,
+                "offset":    offset,
+                "sim_start": sim_start,
+                "log_key":   log_key,
+                "fire_opt":  fire_opt,
+                "cluster":   cluster,
+            })
+
+        # ── Assign waves so same (cluster, log_key) never run together ────
+        # Two scenarios conflict if they share the same cluster fingerprint
+        # AND the same log_key (same rounded sim-start hour).  Within a wave
+        # no two conflicting scenarios run, so at most one thread touches a
+        # given RoutingLog entry at a time.
+        conflict_groups = defaultdict(list)
+        for i, task in enumerate(scenario_tasks):
+            if task["cluster"] is not None:
+                key = (task["cluster"]["fingerprint"], task["log_key"])
+                conflict_groups[key].append(i)
+            else:
+                task["wave"] = 0
+
+        n_waves = 1
+        for indices in conflict_groups.values():
+            for wave_idx, idx in enumerate(indices):
+                scenario_tasks[idx]["wave"] = wave_idx
+                n_waves = max(n_waves, wave_idx + 1)
+
+        wave_sizes = defaultdict(int)
+        for task in scenario_tasks:
+            wave_sizes[task["wave"]] += 1
+        print(
+            f"  Pre-scan complete: {len(scenario_tasks)} tasks, "
+            f"{n_waves} wave(s) (sizes: {dict(sorted(wave_sizes.items()))})",
+            flush=True,
+        )
+
+        # ── Worker: process one scenario (thread-safe) ────────────────────
+        def process_scenario(task):
+            sf        = task["sf"]
+            name      = task["name"]
+            date_str  = task["date_str"]
+            offset    = task["offset"]
+            sim_start = task["sim_start"]
+            log_key   = task["log_key"]
+            cluster   = task["cluster"]
+
+            status = None
+
             if cluster is None:
-                # ── No drone can reach this fire ──────────────────────────────
-                # Still check ground sensors by loading the scenario.
                 scenario = load_scenario_npy(
                     str(sf), grid_height=H, grid_width=W,
                     num_timesteps=N_SCENARIO_DATA_STEPS,
@@ -822,49 +889,54 @@ def main():
                     scenario, ground_locs_data, offset
                 )
                 results["routed"] = False
-                n_sensor_only += 1
-                if results["device"] == "undetected":
-                    n_skipped += 1
+                status = "sensor_only"
 
             else:
-                # ── Fire is reachable by this cluster ─────────────────────────
                 rlog = routing_logs[cluster["fingerprint"]]
-                total_substeps_needed = (offset + N_SCENARIO_DATA_STEPS) * operational_substeps
+                total_substeps_needed = (
+                    (offset + N_SCENARIO_DATA_STEPS) * operational_substeps
+                )
 
                 if not rlog.has(log_key, total_substeps_needed):
-                    # Build and rescale burn map for this (date, hour)
-                    bm = build_burn_map(yearly_map, sim_start, MAX_ROUTING_DATA_STEPS)
+                    bm = build_burn_map(
+                        yearly_map, sim_start, MAX_ROUTING_DATA_STEPS
+                    )
                     rescaled_bm = pool_burnmap_mean(bm, coverage_w)
-                    rescaled_bm = (np.repeat(rescaled_bm, operational_substeps, axis=0)
-                                   / operational_substeps)
-                    tmp_path = str(TMP_DIR / f"yearly_{log_key}.npy")
+                    rescaled_bm = (
+                        np.repeat(rescaled_bm, operational_substeps, axis=0)
+                        / operational_substeps
+                    )
+                    tmp_path = str(
+                        TMP_DIR / f"yearly_{log_key}_{uuid.uuid4().hex[:8]}.npy"
+                    )
                     np.save(tmp_path, rescaled_bm)
 
-                    # Build cluster-specific auto params
                     cluster_auto = {
                         **base_rescaled_auto,
-                        "n_drones":                  cluster["n_drones"],
-                        "n_charging_stations":       len(cluster["stations_opt"]),
-                        "ground_sensor_locations":   ground_locs_opt,
+                        "n_drones":                    cluster["n_drones"],
+                        "n_charging_stations":         len(cluster["stations_opt"]),
+                        "ground_sensor_locations":     ground_locs_opt,
                         "charging_stations_locations": cluster["stations_opt"],
                     }
-                    routing_custom = {**combo_custom, "burnmap_filename": tmp_path}
+                    routing_custom = {
+                        **combo_custom,
+                        "burnmap_filename": tmp_path,
+                    }
 
                     initial_norm, actions_hist = compute_routing(
                         RoutingCls, cluster_auto, routing_custom,
                         MAX_ROUTING_DATA_STEPS, operational_substeps,
                     )
                     rlog.put(log_key, initial_norm, actions_hist)
-                    n_routed += 1
+                    status = "routed"
                     print(
                         f"  [{log_key}] cluster={cluster['fingerprint'][:12]}… "
                         f"routing computed ({len(actions_hist)} substeps)",
                         flush=True,
                     )
                 else:
-                    n_cached += 1
+                    status = "cached"
 
-                # Cluster-specific charging stations at data scale
                 cluster_charging_data = [
                     (x * coverage_w + coverage_w // 2,
                      y * coverage_w + coverage_w // 2)
@@ -876,20 +948,20 @@ def main():
                     num_timesteps=N_SCENARIO_DATA_STEPS,
                 )
                 results = run_simulation(
-                    scenario          = scenario,
-                    starting_time     = offset,
-                    routing_entry     = rlog.get(log_key),
-                    ground_locs_data  = ground_locs_data,
-                    charging_locs_data= cluster_charging_data,
+                    scenario           = scenario,
+                    starting_time      = offset,
+                    routing_entry      = rlog.get(log_key),
+                    ground_locs_data   = ground_locs_data,
+                    charging_locs_data = cluster_charging_data,
                     N=H, M=W,
-                    coverage_width_cells  = coverage_w,
-                    operational_substeps  = operational_substeps,
-                    max_battery_distance  = SIMULATION_PARAMETERS["max_battery_distance"],
-                    max_battery_time      = SIMULATION_PARAMETERS["max_battery_time"],
+                    coverage_width_cells = coverage_w,
+                    operational_substeps = operational_substeps,
+                    max_battery_distance = SIMULATION_PARAMETERS["max_battery_distance"],
+                    max_battery_time     = SIMULATION_PARAMETERS["max_battery_time"],
                 )
                 results["routed"] = True
 
-            all_results.append({
+            return {
                 "strategy_combo": combo_name,
                 "scenario_name":  name,
                 "date":           date_str,
@@ -897,8 +969,48 @@ def main():
                 "log_key":        log_key,
                 "offset":         offset,
                 "cluster":        cluster["fingerprint"] if cluster else "none",
+                "_status":        status,
                 **results,
-            })
+            }
+
+        # ── Execute waves in parallel ─────────────────────────────────────
+        n_skipped = n_sensor_only = n_routed = n_cached = 0
+
+        for wave in range(n_waves):
+            wave_tasks = [t for t in scenario_tasks if t["wave"] == wave]
+            if not wave_tasks:
+                continue
+            print(
+                f"  Wave {wave}/{n_waves-1}: {len(wave_tasks)} scenarios "
+                f"(workers={min(MAX_WORKERS, len(wave_tasks))})",
+                flush=True,
+            )
+
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futures = {
+                    executor.submit(process_scenario, t): t
+                    for t in wave_tasks
+                }
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                    except Exception as exc:
+                        task = futures[future]
+                        print(
+                            f"  ERROR processing {task['name']}: {exc}",
+                            flush=True,
+                        )
+                        continue
+                    status = result.pop("_status")
+                    if status == "routed":
+                        n_routed += 1
+                    elif status == "cached":
+                        n_cached += 1
+                    elif status == "sensor_only":
+                        n_sensor_only += 1
+                        if result["device"] == "undetected":
+                            n_skipped += 1
+                    all_results.append(result)
 
         print(
             f"\n  Done: {n_routed} routing computations, "
