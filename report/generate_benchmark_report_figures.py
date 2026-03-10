@@ -429,6 +429,56 @@ def main():
     else:
         print(f"Pyrologix resampled map not found ({PYROLOGIX_RESAMPLED.name}); skip Pyrologix figures.")
 
+    # ── BP (burn probability) placement figures (20M, 100M, 500M) ─────────────────
+    BP_RESAMPLED = DATASET_DIR / "static_risk_burn_prob_resampled.npy"
+    if BP_RESAMPLED.exists():
+        bp_map = np.load(str(BP_RESAMPLED))
+        if bp_map.ndim == 3:
+            bp_map = bp_map[0]
+        background_bp = np.where(mask_arr > 0, bp_map, 0.0)
+        for budget in (20, 100, 500):
+            sensor_log_bp = LOG_DIR / f"sensor_alloc_GaussianBudget{budget}M_{rescaled_N}x{rescaled_M}_burnprob.json"
+            if not sensor_log_bp.exists():
+                print(f"BP (burn prob) {budget}M cache not found ({sensor_log_bp.name}); skip.")
+                continue
+            with open(sensor_log_bp) as f:
+                data_bp = json.load(f)
+            ground_bp = [tuple(x) for x in data_bp["ground_sensor_locations"]]
+            charging_bp = [tuple(x) for x in data_bp["charging_station_locations"]]
+            drones_bp = data_bp["drones_per_charging_station"]
+            clusters_bp = compute_clusters(charging_bp, drones_bp, rescaled_max_battery)
+            sensors_bp = [(r * coverage_w + coverage_w // 2, c * coverage_w + coverage_w // 2) for r, c in ground_bp]
+            stations_bp = [(r * coverage_w + coverage_w // 2, c * coverage_w + coverage_w // 2) for r, c in charging_bp]
+            ground_opt_set_bp = set(ground_bp)
+            detected_bp = [(fire_rows[i], fire_cols[i]) for i in range(len(fire_rows)) if fire_opts[i] in ground_opt_set_bp]
+            non_disc_bp = []
+            discoverable_bp = []
+            for i, fopt in enumerate(fire_opts):
+                if fopt in ground_opt_set_bp:
+                    continue
+                if fire_cluster(fopt, clusters_bp, rescaled_max_battery) is None:
+                    non_disc_bp.append((fire_rows[i], fire_cols[i]))
+                else:
+                    discoverable_bp.append((fire_rows[i], fire_cols[i]))
+            out_bp = report_dir / f"benchmark_fire_map_burnprob_{budget}M.png"
+            _plot_benchmark_overview(
+                background_bp,
+                mask_arr,
+                clusters_bp,
+                sensors_bp,
+                stations_bp,
+                detected_bp,
+                discoverable_bp,
+                non_disc_bp,
+                one_way_reach_opt,
+                coverage_w,
+                out_bp,
+                title=f"Sensor placement (BP burn probability, {budget}M budget)",
+            )
+            print(f"Saved: {out_bp}")
+    else:
+        print(f"BP resampled map not found ({BP_RESAMPLED.name}); skip BP figures.")
+
     print("Done.")
 
 
