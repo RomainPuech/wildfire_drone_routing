@@ -15,15 +15,18 @@ Pipeline
 5. **Wave assignment:** scenarios that share the same (cluster, log_key) are
    placed in different waves so they never run concurrently.  All scenarios
    within a wave can safely run in parallel.
-6. **Parallel execution:** for each wave, a ``ThreadPoolExecutor`` dispatches
-   workers that compute routing (if not cached) and replay simulation.
-   Thread safety is ensured by:
-   - RoutingLog objects use a per-instance lock for all reads/writes.
+6. **Parallel execution:** for each wave, a ``ProcessPoolExecutor`` (spawn)
+   dispatches workers that compute routing (if not cached) and replay
+   simulation.  Each worker process has its own Julia runtime.
+   Process safety is ensured by:
+   - Each (cluster, log_key) pair has its own routing-log JSON file, so
+     no two workers ever write the same file.
    - Temp burn-map files include a UUID so no two workers write the same path.
    - Rescaled mask/avg files are precomputed in step 1 and only read by workers.
-7. Routing is cached per (cluster_fingerprint, YYYYMMDD_HH) in one JSON log
-   file per cluster.  Scenarios that share the same cluster AND the same
-   rounded sim-start hour reuse the cached routing.
+   - The yearly WFPI map is loaded independently (memory-mapped) per worker.
+7. Routing is cached per (cluster_fingerprint, YYYYMMDD_HH) in one JSON file
+   per pair.  Scenarios that share the same cluster AND the same rounded
+   sim-start hour reuse the cached routing.
 8. Simulation is replayed from the cached routing.
 
 Prerequisites
@@ -38,13 +41,14 @@ import sys
 import os
 import json
 import uuid
-import threading
+import multiprocessing
+from multiprocessing import get_context
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -131,7 +135,7 @@ STRATEGY_COMBINATIONS = [
     {
         "name":   "GaussianBudget20M_TOP",
         "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
-        "drone":  wrappers.DroneRoutingTOPMaskedLogged,
+        "drone":  "DroneRoutingTOPMaskedLogged",
         "params": {"reevaluation_step": 5, "optimization_horizon": 10},
         "sensor_params": {
             "budget_millions": BUDGET_TOTAL / 1_000_000,
@@ -296,42 +300,181 @@ def load_or_compute_sensor_placement(strategy_cls, rescaled_auto_params: dict,
     )
 
 
-# ── Routing log ────────────────────────────────────────────────────────────────
+# ── Routing log (one file per (cluster, log_key)) ─────────────────────────────
+# Each (cluster_fingerprint, log_key) pair gets its own JSON file so that
+# parallel worker processes never write to the same file.
 
-class RoutingLog:
-    """Thread-safe JSON file keyed by 'YYYYMMDD_HH', one per (strategy, cluster).
+def _routing_log_path(log_dir, base_cls_name, oh, rs, cluster_fp, log_key):
+    return os.path.join(
+        log_dir,
+        f"routing_yearly_{base_cls_name}_{oh}OH_{rs}RS_"
+        f"cluster_{cluster_fp}_time_{log_key}.json",
+    )
 
-    A lock serialises all reads and writes so that multiple threads can
-    safely operate on the same RoutingLog (e.g. different log_keys on the
-    same cluster running in parallel).
+
+def _routing_log_has(path, min_steps):
+    if not os.path.exists(path):
+        return False
+    with open(path) as f:
+        data = json.load(f)
+    return len(data.get("actions_history", [])) >= min_steps
+
+
+def _routing_log_read(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _routing_log_write(path, initial_locs, actions_history):
+    with open(path, "w") as f:
+        json.dump(
+            {"initial_drone_locations": initial_locs,
+             "actions_history":         actions_history},
+            f, indent=2,
+        )
+
+
+# ── Worker process state ──────────────────────────────────────────────────────
+_worker_ctx = {}
+
+
+def _worker_init(yearly_map_path, shared_ctx):
+    """Initialise per-worker state (runs once per spawned worker process).
+
+    Loads the yearly WFPI map (memory-mapped) and stores the shared context
+    so that ``process_scenario`` can access it without pickling large objects
+    for every task.
     """
+    global _worker_ctx
+    _worker_ctx = dict(shared_ctx)
+    _worker_ctx["yearly_map"] = np.load(yearly_map_path, mmap_mode="r")
 
-    def __init__(self, path: str):
-        self.path = path
-        self._lock = threading.Lock()
-        if Path(path).exists():
-            with open(path) as f:
-                self.data = json.load(f)
-        else:
-            self.data = {}
 
-    def has(self, key: str, min_steps: int) -> bool:
-        with self._lock:
-            entry = self.data.get(key)
-            return entry is not None and len(entry.get("actions_history", [])) >= min_steps
+def process_scenario(task):
+    """Process a single fire scenario in a worker process.
 
-    def get(self, key: str) -> dict:
-        with self._lock:
-            return self.data[key]
+    Reads shared state from the module-level ``_worker_ctx`` (set by
+    ``_worker_init``) and per-scenario data from *task*.
+    """
+    ctx = _worker_ctx
+    yearly_map         = ctx["yearly_map"]
+    H                  = ctx["H"]
+    W                  = ctx["W"]
+    coverage_w         = ctx["coverage_w"]
+    operational_substeps = ctx["operational_substeps"]
+    base_rescaled_auto = ctx["base_rescaled_auto"]
+    combo_custom       = ctx["combo_custom"]
+    combo_name         = ctx["combo_name"]
+    ground_locs_opt    = ctx["ground_locs_opt"]
+    ground_locs_data   = ctx["ground_locs_data"]
+    tmp_dir            = ctx["tmp_dir"]
+    routing_cls_name   = ctx["routing_cls_name"]
 
-    def put(self, key: str, initial_locs: list, actions_history: list):
-        with self._lock:
-            self.data[key] = {
-                "initial_drone_locations": initial_locs,
-                "actions_history":         actions_history,
+    RoutingCls = getattr(wrappers, routing_cls_name)
+
+    sf              = task["sf"]
+    name            = task["name"]
+    date_str        = task["date_str"]
+    offset          = task["offset"]
+    sim_start       = task["sim_start"]
+    log_key         = task["log_key"]
+    cluster         = task["cluster"]
+    routing_log_file = task["routing_log_file"]
+
+    status = None
+
+    if cluster is None:
+        scenario = load_scenario_npy(
+            sf, grid_height=H, grid_width=W,
+            num_timesteps=N_SCENARIO_DATA_STEPS,
+        )
+        results = check_ground_sensor_detection(
+            scenario, ground_locs_data, offset
+        )
+        results["routed"] = False
+        status = "sensor_only"
+
+    else:
+        total_substeps_needed = (
+            (offset + N_SCENARIO_DATA_STEPS) * operational_substeps
+        )
+
+        if not _routing_log_has(routing_log_file, total_substeps_needed):
+            bm = build_burn_map(
+                yearly_map, sim_start, MAX_ROUTING_DATA_STEPS
+            )
+            rescaled_bm = pool_burnmap_mean(bm, coverage_w)
+            rescaled_bm = (
+                np.repeat(rescaled_bm, operational_substeps, axis=0)
+                / operational_substeps
+            )
+            tmp_path = os.path.join(
+                tmp_dir, f"yearly_{log_key}_{uuid.uuid4().hex[:8]}.npy"
+            )
+            np.save(tmp_path, rescaled_bm)
+
+            cluster_auto = {
+                **base_rescaled_auto,
+                "n_drones":                    cluster["n_drones"],
+                "n_charging_stations":         len(cluster["stations_opt"]),
+                "ground_sensor_locations":     ground_locs_opt,
+                "charging_stations_locations": cluster["stations_opt"],
             }
-            with open(self.path, "w") as f:
-                json.dump(self.data, f, indent=2)
+            routing_custom = {
+                **combo_custom,
+                "burnmap_filename": tmp_path,
+            }
+
+            initial_norm, actions_hist = compute_routing(
+                RoutingCls, cluster_auto, routing_custom,
+                MAX_ROUTING_DATA_STEPS, operational_substeps,
+            )
+            _routing_log_write(routing_log_file, initial_norm, actions_hist)
+            status = "routed"
+            print(
+                f"  [{log_key}] cluster={cluster['fingerprint'][:12]}… "
+                f"routing computed ({len(actions_hist)} substeps)",
+                flush=True,
+            )
+        else:
+            status = "cached"
+
+        cluster_charging_data = [
+            (x * coverage_w + coverage_w // 2,
+             y * coverage_w + coverage_w // 2)
+            for x, y in cluster["stations_opt"]
+        ]
+
+        routing_entry = _routing_log_read(routing_log_file)
+        scenario = load_scenario_npy(
+            sf, grid_height=H, grid_width=W,
+            num_timesteps=N_SCENARIO_DATA_STEPS,
+        )
+        results = run_simulation(
+            scenario           = scenario,
+            starting_time      = offset,
+            routing_entry      = routing_entry,
+            ground_locs_data   = ground_locs_data,
+            charging_locs_data = cluster_charging_data,
+            N=H, M=W,
+            coverage_width_cells = coverage_w,
+            operational_substeps = operational_substeps,
+            max_battery_distance = SIMULATION_PARAMETERS["max_battery_distance"],
+            max_battery_time     = SIMULATION_PARAMETERS["max_battery_time"],
+        )
+        results["routed"] = True
+
+    return {
+        "strategy_combo": combo_name,
+        "scenario_name":  name,
+        "date":           date_str,
+        "sim_start_hour": sim_start.hour,
+        "log_key":        log_key,
+        "offset":         offset,
+        "cluster":        cluster["fingerprint"] if cluster else "none",
+        "_status":        status,
+        **results,
+    }
 
 
 # ── Action normalisation ───────────────────────────────────────────────────────
@@ -737,9 +880,10 @@ def main():
 
     # ── Strategy loop ─────────────────────────────────────────────────────────
     for combo in STRATEGY_COMBINATIONS:
-        combo_name = combo["name"]
-        SensorCls  = combo["sensor"]
-        RoutingCls = combo["drone"]
+        combo_name         = combo["name"]
+        SensorCls          = combo["sensor"]
+        routing_cls_name   = combo["drone"]          # string
+        RoutingCls         = getattr(wrappers, routing_cls_name)
         combo_custom = {
             **base_custom,
             "reevaluation_step":    combo["params"]["reevaluation_step"],
@@ -793,18 +937,10 @@ def main():
                 flush=True,
             )
 
-        # ── Open one routing log per cluster ──────────────────────────────────
-        routing_logs = {}
+        # ── Routing log naming ─────────────────────────────────────────────
         base_routing_cls = wrappers._deep_unwrap(RoutingCls).__name__
         oh = combo["params"]["optimization_horizon"]
         rs = combo["params"]["reevaluation_step"]
-        for cluster in clusters:
-            log_path = str(
-                LOG_DIR /
-                f"routing_yearly_{base_routing_cls}_{oh}OH_{rs}RS_"
-                f"cluster_{cluster['fingerprint']}.json"
-            )
-            routing_logs[cluster["fingerprint"]] = RoutingLog(log_path)
 
         # ── Pre-scan: compute metadata for each scenario ────────────────────
         scenario_tasks = []
@@ -829,22 +965,29 @@ def main():
 
             cluster = fire_cluster(fire_opt, clusters, rescaled_max_battery)
 
+            routing_log_file = None
+            if cluster is not None:
+                routing_log_file = _routing_log_path(
+                    str(LOG_DIR), base_routing_cls, oh, rs,
+                    cluster["fingerprint"], log_key,
+                )
+
             scenario_tasks.append({
-                "sf":        sf,
-                "name":      name,
-                "date_str":  date_str,
-                "offset":    offset,
-                "sim_start": sim_start,
-                "log_key":   log_key,
-                "fire_opt":  fire_opt,
-                "cluster":   cluster,
+                "sf":              str(sf),
+                "name":            name,
+                "date_str":        date_str,
+                "offset":          offset,
+                "sim_start":       sim_start,
+                "log_key":         log_key,
+                "fire_opt":        fire_opt,
+                "cluster":         cluster,
+                "routing_log_file": routing_log_file,
             })
 
         # ── Assign waves so same (cluster, log_key) never run together ────
-        # Two scenarios conflict if they share the same cluster fingerprint
-        # AND the same log_key (same rounded sim-start hour).  Within a wave
-        # no two conflicting scenarios run, so at most one thread touches a
-        # given RoutingLog entry at a time.
+        # Each (cluster, log_key) pair has its own routing log file (Option B).
+        # Two scenarios that share the same pair would both read/write the same
+        # file, so they must not run concurrently.
         conflict_groups = defaultdict(list)
         for i, task in enumerate(scenario_tasks):
             if task["cluster"] is not None:
@@ -868,125 +1011,43 @@ def main():
             flush=True,
         )
 
-        # ── Worker: process one scenario (thread-safe) ────────────────────
-        def process_scenario(task):
-            sf        = task["sf"]
-            name      = task["name"]
-            date_str  = task["date_str"]
-            offset    = task["offset"]
-            sim_start = task["sim_start"]
-            log_key   = task["log_key"]
-            cluster   = task["cluster"]
+        # ── Shared context for worker processes ───────────────────────────
+        shared_ctx = {
+            "H":                   H,
+            "W":                   W,
+            "coverage_w":          coverage_w,
+            "operational_substeps": operational_substeps,
+            "rescaled_max_battery": rescaled_max_battery,
+            "base_rescaled_auto":  base_rescaled_auto,
+            "combo_custom":        combo_custom,
+            "combo_name":          combo_name,
+            "ground_locs_opt":     ground_locs_opt,
+            "ground_locs_data":    ground_locs_data,
+            "routing_cls_name":    routing_cls_name,
+            "tmp_dir":             str(TMP_DIR),
+        }
 
-            status = None
-
-            if cluster is None:
-                scenario = load_scenario_npy(
-                    str(sf), grid_height=H, grid_width=W,
-                    num_timesteps=N_SCENARIO_DATA_STEPS,
-                )
-                results = check_ground_sensor_detection(
-                    scenario, ground_locs_data, offset
-                )
-                results["routed"] = False
-                status = "sensor_only"
-
-            else:
-                rlog = routing_logs[cluster["fingerprint"]]
-                total_substeps_needed = (
-                    (offset + N_SCENARIO_DATA_STEPS) * operational_substeps
-                )
-
-                if not rlog.has(log_key, total_substeps_needed):
-                    bm = build_burn_map(
-                        yearly_map, sim_start, MAX_ROUTING_DATA_STEPS
-                    )
-                    rescaled_bm = pool_burnmap_mean(bm, coverage_w)
-                    rescaled_bm = (
-                        np.repeat(rescaled_bm, operational_substeps, axis=0)
-                        / operational_substeps
-                    )
-                    tmp_path = str(
-                        TMP_DIR / f"yearly_{log_key}_{uuid.uuid4().hex[:8]}.npy"
-                    )
-                    np.save(tmp_path, rescaled_bm)
-
-                    cluster_auto = {
-                        **base_rescaled_auto,
-                        "n_drones":                    cluster["n_drones"],
-                        "n_charging_stations":         len(cluster["stations_opt"]),
-                        "ground_sensor_locations":     ground_locs_opt,
-                        "charging_stations_locations": cluster["stations_opt"],
-                    }
-                    routing_custom = {
-                        **combo_custom,
-                        "burnmap_filename": tmp_path,
-                    }
-
-                    initial_norm, actions_hist = compute_routing(
-                        RoutingCls, cluster_auto, routing_custom,
-                        MAX_ROUTING_DATA_STEPS, operational_substeps,
-                    )
-                    rlog.put(log_key, initial_norm, actions_hist)
-                    status = "routed"
-                    print(
-                        f"  [{log_key}] cluster={cluster['fingerprint'][:12]}… "
-                        f"routing computed ({len(actions_hist)} substeps)",
-                        flush=True,
-                    )
-                else:
-                    status = "cached"
-
-                cluster_charging_data = [
-                    (x * coverage_w + coverage_w // 2,
-                     y * coverage_w + coverage_w // 2)
-                    for x, y in cluster["stations_opt"]
-                ]
-
-                scenario = load_scenario_npy(
-                    str(sf), grid_height=H, grid_width=W,
-                    num_timesteps=N_SCENARIO_DATA_STEPS,
-                )
-                results = run_simulation(
-                    scenario           = scenario,
-                    starting_time      = offset,
-                    routing_entry      = rlog.get(log_key),
-                    ground_locs_data   = ground_locs_data,
-                    charging_locs_data = cluster_charging_data,
-                    N=H, M=W,
-                    coverage_width_cells = coverage_w,
-                    operational_substeps = operational_substeps,
-                    max_battery_distance = SIMULATION_PARAMETERS["max_battery_distance"],
-                    max_battery_time     = SIMULATION_PARAMETERS["max_battery_time"],
-                )
-                results["routed"] = True
-
-            return {
-                "strategy_combo": combo_name,
-                "scenario_name":  name,
-                "date":           date_str,
-                "sim_start_hour": sim_start.hour,
-                "log_key":        log_key,
-                "offset":         offset,
-                "cluster":        cluster["fingerprint"] if cluster else "none",
-                "_status":        status,
-                **results,
-            }
-
-        # ── Execute waves in parallel ─────────────────────────────────────
+        # ── Execute waves in parallel (ProcessPoolExecutor + spawn) ───────
         n_skipped = n_sensor_only = n_routed = n_cached = 0
+        ctx = get_context("spawn")
 
         for wave in range(n_waves):
             wave_tasks = [t for t in scenario_tasks if t["wave"] == wave]
             if not wave_tasks:
                 continue
+            n_workers = min(MAX_WORKERS, len(wave_tasks))
             print(
                 f"  Wave {wave}/{n_waves-1}: {len(wave_tasks)} scenarios "
-                f"(workers={min(MAX_WORKERS, len(wave_tasks))})",
+                f"(workers={n_workers})",
                 flush=True,
             )
 
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            with ProcessPoolExecutor(
+                max_workers=n_workers,
+                mp_context=ctx,
+                initializer=_worker_init,
+                initargs=(str(YEARLY_MAP), shared_ctx),
+            ) as executor:
                 futures = {
                     executor.submit(process_scenario, t): t
                     for t in wave_tasks
