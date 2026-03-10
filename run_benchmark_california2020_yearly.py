@@ -34,7 +34,11 @@ Prerequisites
   python code/dataset_creation/nature_dataset_creation/augment_config_with_times.py
 
 Run from the project root:
-  python -u run_benchmark_california2020_yearly.py
+  python -u run_benchmark_california2020_yearly.py --budget 20   # 20M (default)
+  python -u run_benchmark_california2020_yearly.py --budget 100  # 100M
+  python -u run_benchmark_california2020_yearly.py --budget 500  # 500M
+
+  python -u run_benchmark_california2020_yearly.py --sensor-only --budget 100  # precompute sensor placement only
 """
 
 import sys
@@ -123,42 +127,29 @@ RANDOM_SEED           = 42
 MAX_WORKERS = os.cpu_count() or 4
 
 
-# ── Strategy combinations ──────────────────────────────────────────────────────
-STRATEGY_COMBINATIONS = [
-    # {
-    #     "name":   "GaussianAlloc_TOP",
-    #     "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation,
-    #     "drone":  wrappers.DroneRoutingTOPMaskedLogged,
-    #     "params": {"reevaluation_step": 5, "optimization_horizon": 10},
-    # },
-    # TOP run (uncomment to run TOP; comment MaxCoverageMasked below to run only TOP):
-    {
-        "name":   "GaussianBudget20M_TOP",
-        "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
-        "drone":  "DroneRoutingTOPMaskedLogged",
-        "params": {"reevaluation_step": 5, "optimization_horizon": 10},
-        "sensor_params": {
-            "budget_millions": BUDGET_TOTAL / 1_000_000,
-            "cost_sensor":     COST_SENSOR  / 1_000_000,
-            "cost_station":    COST_STATION / 1_000_000,
-            "cost_drone":      COST_DRONE   / 1_000_000,
+# ── Strategy combo from budget ──────────────────────────────────────────────────
+# Budget is selected via CLI (--budget 20 | 100 | 500). One combo per run.
+
+def build_strategy_combinations(budget_millions: float):
+    """Single combo: Gaussian budget placement + TOP masked, routing capped at 1 min."""
+    return [
+        {
+            "name":   f"GaussianBudget{int(budget_millions)}M_TOP",
+            "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
+            "drone":  "DroneRoutingTOPMaskedLogged",
+            "params": {
+                "reevaluation_step": 5,
+                "optimization_horizon": 10,
+                "time_limit_seconds": 60,
+            },
+            "sensor_params": {
+                "budget_millions": float(budget_millions),
+                "cost_sensor":     COST_SENSOR  / 1_000_000,
+                "cost_station":    COST_STATION / 1_000_000,
+                "cost_drone":      COST_DRONE   / 1_000_000,
+            },
         },
-    },
-    # MaxCoverage run (comment out TOP above and uncomment this to run only MaxCoverage):
-    # {
-    #     "name":   "GaussianBudget20M_MaxCoverageMasked",
-    #     "sensor": SensorPlacementMaxCoverageGaussianTimeMaskedBudget,
-    #     "drone":  wrappers.DroneRoutingMaxCoverageResetStaticMaskedLogged,
-    #     "params": {"reevaluation_step": 5, "optimization_horizon": 10},
-    #     "sensor_params": {
-    #         "budget_millions": BUDGET_TOTAL / 1_000_000,
-    #         "cost_sensor":     COST_SENSOR  / 1_000_000,
-    #         "cost_station":    COST_STATION / 1_000_000,
-    #         "cost_drone":      COST_DRONE   / 1_000_000,
-    #     },
-    #     "sensor_cache_key": "GaussianBudget20M_TOP",  # reuse same sensor placement as TOP run
-    # },
-]
+    ]
 
 
 # ── Frame-index helpers ────────────────────────────────────────────────────────
@@ -752,9 +743,12 @@ def run_simulation(scenario: np.ndarray,
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-def main():
+def main(budget_millions: float = 20.0):
     LOG_DIR.mkdir(exist_ok=True)
     TMP_DIR.mkdir(exist_ok=True)
+
+    strategy_combinations = build_strategy_combinations(budget_millions)
+    print(f"Budget: {int(budget_millions)}M", flush=True)
 
     # ── Static resources ──────────────────────────────────────────────────────
     print("Loading yearly WFPI map (memory-mapped) ...", flush=True)
@@ -879,7 +873,7 @@ def main():
     all_results = []
 
     # ── Strategy loop ─────────────────────────────────────────────────────────
-    for combo in STRATEGY_COMBINATIONS:
+    for combo in strategy_combinations:
         combo_name         = combo["name"]
         SensorCls          = combo["sensor"]
         routing_cls_name   = combo["drone"]          # string
@@ -890,6 +884,8 @@ def main():
             "optimization_horizon": combo["params"]["optimization_horizon"],
             "burnmap_type":         "dynamic",  # avoid 200x tiling of burn map
         }
+        if "time_limit_seconds" in combo["params"]:
+            combo_custom["time_limit_seconds"] = combo["params"]["time_limit_seconds"]
 
         print(f"\n{'='*70}", flush=True)
         print(f"  STRATEGY: {combo_name}", flush=True)
@@ -1178,19 +1174,35 @@ def run_sensor_placement_only(budget_millions: float, time_limit_seconds: float 
 
 
 if __name__ == "__main__":
-    if "--sensor-only" in sys.argv:
-        try:
-            i = sys.argv.index("--budget")
-            budget = int(sys.argv[i + 1])
-        except (ValueError, IndexError):
-            budget = 100
-        time_limit = 600.0
-        if "--time-limit" in sys.argv:
-            try:
-                j = sys.argv.index("--time-limit")
-                time_limit = float(sys.argv[j + 1])
-            except (ValueError, IndexError):
-                pass
-        run_sensor_placement_only(budget_millions=budget, time_limit_seconds=time_limit)
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Yearly benchmark on California 2020 (100 fires, parallel, TOP masked, 1 min routing cap)."
+    )
+    parser.add_argument(
+        "--budget",
+        type=int,
+        choices=[20, 100, 500],
+        default=20,
+        help="Total budget in millions (default: 20)",
+    )
+    parser.add_argument(
+        "--sensor-only",
+        action="store_true",
+        help="Run only sensor placement for the given budget and exit.",
+    )
+    parser.add_argument(
+        "--time-limit",
+        type=float,
+        default=600.0,
+        metavar="SECONDS",
+        help="Sensor placement time limit in seconds (default: 600); used only with --sensor-only.",
+    )
+    args = parser.parse_args()
+
+    if args.sensor_only:
+        run_sensor_placement_only(
+            budget_millions=float(args.budget),
+            time_limit_seconds=args.time_limit,
+        )
         sys.exit(0)
-    main()
+    main(budget_millions=float(args.budget))
