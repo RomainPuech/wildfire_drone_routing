@@ -20,30 +20,30 @@ Budget-optimized sensor placement on the California 2020 grid (261×161 operatio
 
 | | WFPI (mean) | Pyrologix | BP (burn prob) |
 |---|-------------|-----------|----------------|
-| **Ground sensors** | 0 | **15** | *(run BP script)* |
-| **Charging stations** | 66 | **58** | *(run BP script)* |
-| **Drones** | 202 | **196** | *(run BP script)* |
-| **MIP gap** | 0.28% | **0.41%** (time limit) | *(run BP script)* |
+| **Ground sensors** | 0 | **15** | **29** |
+| **Charging stations** | 66 | **58** | **57** |
+| **Drones** | 202 | **196** | **171** |
+| **MIP gap** | 0.28% | **0.41%** (time limit) | **0.11%** (time limit) |
 | **Placement map** | [benchmark_fire_map_budget.png](benchmark_fire_map_budget.png) | [benchmark_fire_map_pyrologix_20M.png](benchmark_fire_map_pyrologix_20M.png) | [benchmark_fire_map_burnprob_20M.png](benchmark_fire_map_burnprob_20M.png) |
 
 ### 100M budget
 
 | | WFPI (mean) | Pyrologix | BP (burn prob) |
 |---|-------------|-----------|----------------|
-| **Ground sensors** | 188 | **175** | *(run BP script)* |
-| **Charging stations** | 86 | **68** | *(run BP script)* |
-| **Drones** | 1366 | **1446** | *(run BP script)* |
-| **MIP gap** | 0.01% | **0.01%** (time limit) | *(run BP script)* |
+| **Ground sensors** | 188 | **175** | **187** |
+| **Charging stations** | 86 | **68** | **77** |
+| **Drones** | 1366 | **1446** | **1395** |
+| **MIP gap** | 0.01% | **0.01%** (time limit) | **0.1%** (time limit) |
 | **Placement map** | [benchmark_fire_map_budget_100M.png](benchmark_fire_map_budget_100M.png) | [benchmark_fire_map_pyrologix_100M.png](benchmark_fire_map_pyrologix_100M.png) | [benchmark_fire_map_burnprob_100M.png](benchmark_fire_map_burnprob_100M.png) |
 
 ### 500M budget
 
 | | WFPI (mean) | Pyrologix | BP (burn prob) |
 |---|-------------|-----------|----------------|
-| **Ground sensors** | 1832 | **30** | *(run BP script)* |
-| **Charging stations** | 265 | **237** | *(run BP script)* |
-| **Drones** | 2412 | **9130** | *(run BP script)* |
-| **MIP gap** | 0.0% | **0.0%** (optimal) | *(run BP script)* |
+| **Ground sensors** | 1832 | **30** | **274** |
+| **Charging stations** | 265 | **237** | **234** |
+| **Drones** | 2412 | **9130** | **8747** |
+| **MIP gap** | 0.0% | **0.0%** (optimal) | **0.0%** (optimal) |
 | **Placement map** | [benchmark_fire_map_budget_500M.png](benchmark_fire_map_budget_500M.png) | [benchmark_fire_map_pyrologix_500M.png](benchmark_fire_map_pyrologix_500M.png) | [benchmark_fire_map_burnprob_500M.png](benchmark_fire_map_burnprob_500M.png) |
 
 *Pyrologix 500M: budget used 495.05M (candidate limit); solved to optimality in ~8 s.*
