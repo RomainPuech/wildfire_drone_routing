@@ -128,6 +128,7 @@ California2020Dataset.  A fire is **kept** only if:
 | After stage-1 (boundary + urban) | 1,048 |
 | Removed — out of WFPI grid bounds | 0 |
 | Removed — WFPI masked cell (urban / nodata / outside CA) | 63 |
-| **Kept after stage-2** | **985** |
+| Excluded — discovery on missing WFPI zip date | 53 |
+| **Kept after stage-2 (in dataset)** | **932** |
 
 **WFPI-overlay plot:** `california_2021_ignition_points_wfpi.png`

@@ -16,6 +16,7 @@ Outputs (per year):
 """
 
 import os, sys, zipfile, tempfile, json
+from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -39,10 +40,26 @@ CSV_PATH     = os.path.join(DATA_DIR, "USFS_ignition_points.csv")
 CA_TRACTS    = os.path.join(DATA_DIR, "tl_2024_06_tract/tl_2024_06_tract.shp")
 URBAN_SHP    = os.path.join(DATA_DIR, "tl_2025_us_uac20/tl_2025_us_uac20.shp")
 WFPI_ZIP_DIR = os.path.join(DATA_DIR, "2020_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA")
+WFPI_2021_D2_DIR = os.path.join(DATA_DIR, "2021_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA")
 DATASET_DIR  = os.path.join(PROJECT_ROOT, "California2020Dataset")
 MASK_PATH    = os.path.join(DATASET_DIR, "mask_union_burnable_no_snow_excluded_day1.npy")
 WFPI_AVG     = os.path.join(DATASET_DIR, "static_risk_wfpi_avg.npy")
 REPORT_DIR   = os.path.join(PROJECT_ROOT, "report")
+
+
+def get_missing_2021_wfpi_dates():
+    """Return sorted list of YYYYMMDD for which 2021 D2 zip is missing."""
+    d2_dir = Path(WFPI_2021_D2_DIR)
+    if not d2_dir.exists():
+        return []
+    have = set()
+    for f in d2_dir.glob("wfpi-forecast-2_data_*_*.zip"):
+        parts = f.stem.split("_")
+        if len(parts) >= 4 and len(parts[3]) == 8:
+            have.add(parts[3])
+    all_2021 = set((date(2021, 1, 1) + timedelta(days=i)).strftime("%Y%m%d") for i in range(365))
+    return sorted(all_2021 - have)
+
 
 # ── Step 1: Recover WFPI grid transform ───────────────────────────────────────
 print("[1/6] Recovering WFPI grid transform …")
@@ -196,6 +213,24 @@ for YEAR in (2020, 2021):
     print(f"    WFPI masked cell:   {drop_reasons['in_masked_cell']:,}")
     print(f"    After stage-2: {len(kept_gdf):,}")
 
+    # For 2021 only: exclude fires whose discovery date has no WFPI zip (use nearest-neighbour in dataset)
+    excluded_missing_wfpi_gdf = pd.DataFrame()
+    n_excluded_missing_wfpi = 0
+    if YEAR == 2021:
+        missing_dates = set(get_missing_2021_wfpi_dates())
+        if missing_dates:
+            kept_gdf["_date_str"] = kept_gdf["discovery_dt"].apply(
+                lambda x: x.strftime("%Y%m%d") if hasattr(x, "strftime") else str(x)[:10].replace("-", "")
+            )
+            on_missing = kept_gdf["_date_str"].isin(missing_dates)
+            excluded_missing_wfpi_gdf = kept_gdf[on_missing].copy()
+            kept_gdf = kept_gdf[~on_missing].copy()
+            kept_gdf = kept_gdf.drop(columns=["_date_str"], errors="ignore")
+            n_excluded_missing_wfpi = len(excluded_missing_wfpi_gdf)
+            excluded_missing_wfpi_gdf = excluded_missing_wfpi_gdf.drop(columns=["_date_str"], errors="ignore")
+            print(f"    Excluded (missing WFPI zip date): {n_excluded_missing_wfpi:,}")
+            print(f"    Kept (in dataset): {len(kept_gdf):,}")
+
     results[YEAR] = {
         "n_raw":            n_raw,
         "n_out_ca":         n_out_ca,
@@ -209,6 +244,8 @@ for YEAR in (2020, 2021):
         "wfpi_dropped_gdf": wfpi_dropped_gdf,
         "non_urban_gdf":    non_urban_gdf,
         "kept_gdf":         kept_gdf,
+        "excluded_missing_wfpi_gdf": excluded_missing_wfpi_gdf,
+        "n_excluded_missing_wfpi": n_excluded_missing_wfpi,
     }
 
 # ── Step 5: Generate WFPI-overlay plots ───────────────────────────────────────
@@ -264,6 +301,8 @@ for YEAR in (2020, 2021):
     urban_fires_gdf  = r["urban_fires_gdf"]
     n_final          = r["n_final"]
     n_wfpi           = r["drop_oob"] + r["drop_masked"]
+    excluded_missing_wfpi_gdf = r.get("excluded_missing_wfpi_gdf", pd.DataFrame())
+    n_excluded_missing = r.get("n_excluded_missing_wfpi", 0)
 
     fig, ax = plt.subplots(figsize=(10, 13))
 
@@ -299,6 +338,15 @@ for YEAR in (2020, 2021):
             zorder=4, label=f"WFPI masked / stage-2 (n={n_wfpi:,})"
         )
 
+    # ── 2021 only: excluded (discovery on missing WFPI zip date) ──
+    if YEAR == 2021 and not excluded_missing_wfpi_gdf.empty:
+        ax.scatter(
+            excluded_missing_wfpi_gdf["LONGDD83"], excluded_missing_wfpi_gdf["LATDD83"],
+            c="#9b59b6", s=28, marker="D", linewidths=0.5, alpha=0.9,
+            edgecolors="white", zorder=4.5,
+            label=f"Excluded — missing WFPI zip date (n={n_excluded_missing:,})"
+        )
+
     # ── Kept fires coloured by size class ──
     for cls in SIZE_CLASS_ORDER:
         subset = kept_gdf[kept_gdf["SIZECLASS"] == cls]
@@ -329,10 +377,11 @@ for YEAR in (2020, 2021):
     ax.set_ylim(32.2, 42.2)
     ax.set_xlabel("Longitude", fontsize=10)
     ax.set_ylabel("Latitude", fontsize=10)
+    title_line2 = f"{n_final:,} kept  ·  {n_wfpi:,} WFPI-masked  ·  {r['n_out_ca'] + r['n_urban']:,} stage-1 removed"
+    if YEAR == 2021 and n_excluded_missing > 0:
+        title_line2 += f"  ·  {n_excluded_missing:,} excluded (missing WFPI date)"
     ax.set_title(
-        f"California {YEAR} — All Filter Stages on WFPI Background\n"
-        f"{n_final:,} kept  ·  {n_wfpi:,} WFPI-masked  ·  "
-        f"{r['n_out_ca'] + r['n_urban']:,} stage-1 removed",
+        f"California {YEAR} — All Filter Stages on WFPI Background\n{title_line2}",
         fontsize=12, fontweight="bold", pad=10
     )
     ax.grid(True, linestyle="--", alpha=0.3, zorder=0)
@@ -353,6 +402,7 @@ for YEAR in (2020, 2021):
     with open(md_path) as f:
         existing = f.read()
 
+    excluded_row = (f"| Excluded — discovery on missing WFPI zip date | {r['n_excluded_missing_wfpi']:,} |\n" if r.get("n_excluded_missing_wfpi", 0) > 0 else "")
     wfpi_section = f"""
 ---
 
@@ -376,7 +426,7 @@ California2020Dataset.  A fire is **kept** only if:
 | After stage-1 (boundary + urban) | {r['n_stage1']:,} |
 | Removed — out of WFPI grid bounds | {r['drop_oob']:,} |
 | Removed — WFPI masked cell (urban / nodata / outside CA) | {r['drop_masked']:,} |
-| **Kept after stage-2** | **{r['n_final']:,}** |
+{excluded_row}| **Kept after stage-2 (in dataset)** | **{r['n_final']:,}** |
 
 **WFPI-overlay plot:** `california_{YEAR}_ignition_points_wfpi.png`
 """

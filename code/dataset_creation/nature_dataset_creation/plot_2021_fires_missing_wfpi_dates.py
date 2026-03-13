@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-Plot 2021 final filtered fires on the Pyrologix burn map.
+Plot 2021 filtered fires whose discovery date falls on a day with missing WFPI zip.
 
-Masked zones (mask == 0) are shown as white. Uses the same grid and filtering
-as filter_wfpi_and_plot.py (Day 1 mask, 2021 USFS ignition points).
+Background: 2021 WFPI average (California2021Dataset), masked zones white.
+Points: only fires on the 27 dates that have no 2021 WFPI zip (nearest-neighbour used).
 
-Output: report/california_2021_ignition_points_pyrologix.png
+Output: report/california_2021_fires_missing_wfpi_dates.png
 """
 
 import os
-import sys
 import zipfile
 import tempfile
-from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -21,11 +19,11 @@ import rasterio.transform
 from rasterio.warp import reproject, Resampling, calculate_default_transform
 from rasterio.crs import CRS as RioCRS
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from pathlib import Path
 from pyproj import Transformer
 from shapely.geometry import Point
 from affine import Affine
+from datetime import date, timedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../../.."))
@@ -36,10 +34,11 @@ URBAN_SHP = os.path.join(DATA_DIR, "tl_2025_us_uac20/tl_2025_us_uac20.shp")
 WFPI_ZIP_DIR = os.path.join(DATA_DIR, "2020_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA")
 WFPI_2021_D2_DIR = os.path.join(DATA_DIR, "2021_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA")
 DATASET_DIR = os.path.join(PROJECT_ROOT, "California2020Dataset")
+DATASET_2021 = os.path.join(PROJECT_ROOT, "California2021Dataset")
 MASK_PATH = os.path.join(DATASET_DIR, "mask_union_burnable_no_snow_excluded_day1.npy")
-PYROLOGIX_PATH = os.path.join(DATASET_DIR, "static_risk_pyrologix_resampled.npy")
+WFPI_AVG_2021 = os.path.join(DATASET_2021, "static_risk_wfpi_avg.npy")
 REPORT_DIR = os.path.join(PROJECT_ROOT, "report")
-OUT_PNG = os.path.join(REPORT_DIR, "california_2021_ignition_points_pyrologix.png")
+OUT_PNG = os.path.join(REPORT_DIR, "california_2021_fires_missing_wfpi_dates.png")
 
 SIZE_CLASS_ORDER = list("ABCDEFGHIJK")
 SIZE_CLASS_LABELS = {
@@ -53,19 +52,21 @@ SIZE_CLASS_LABELS = {
 def get_missing_2021_wfpi_dates():
     """Return set of YYYYMMDD for which 2021 D2 zip is missing."""
     d2_dir = Path(WFPI_2021_D2_DIR)
-    if not d2_dir.exists():
-        return set()
     have = set()
     for f in d2_dir.glob("wfpi-forecast-2_data_*_*.zip"):
         parts = f.stem.split("_")
         if len(parts) >= 4 and len(parts[3]) == 8:
             have.add(parts[3])
     all_2021 = set((date(2021, 1, 1) + timedelta(days=i)).strftime("%Y%m%d") for i in range(365))
-    return all_2021 - have
+    return sorted(all_2021 - have)
 
 
 def main():
-    print("Loading grid transform and mask …")
+    missing_dates = get_missing_2021_wfpi_dates()
+    print(f"Missing 2021 WFPI zip dates: {len(missing_dates)}")
+
+    # Grid and mask (same as filter_wfpi_and_plot)
+    print("Loading grid and mask …")
     sample_zip = next(Path(WFPI_ZIP_DIR).glob("wfpi-forecast-2_data_*.zip"), None)
     if not sample_zip:
         raise FileNotFoundError(f"No WFPI zip in {WFPI_ZIP_DIR}")
@@ -100,17 +101,19 @@ def main():
     )
     transformer = Transformer.from_crs("EPSG:4326", WFPI_CRS, always_xy=True)
 
-    def latlon_to_rowcol(lat, lon):
+    def to_rowcol(lat, lon):
         x, y = transformer.transform(lon, lat)
         r, c = rasterio.transform.rowcol(CROPPED_T, x, y)
         return int(r), int(c)
 
     mask = np.load(MASK_PATH)
-    pyrologix = np.load(PYROLOGIX_PATH)[0]  # (H, W)
-    # Masked zones → white (nan)
-    pyro_display = np.where(mask == 1, pyrologix.astype(np.float32), np.nan)
+    # Background: 2021 WFPI avg; masked zones white
+    wfpi_avg = np.load(WFPI_AVG_2021)
+    wfpi_2d = wfpi_avg[0] if wfpi_avg.ndim == 3 else wfpi_avg
+    wfpi_display = np.where(mask == 1, wfpi_2d.astype(np.float32), np.nan)
 
-    print("Filtering 2021 fires (stage-1 + stage-2) …")
+    # Filter 2021 fires (stage-1 + stage-2)
+    print("Filtering 2021 fires …")
     df_all = pd.read_csv(CSV_PATH, low_memory=False)
     urban_gdf = gpd.read_file(URBAN_SHP).to_crs("EPSG:4326")
     urban_gdf["geometry"] = urban_gdf.buffer(0)
@@ -134,14 +137,12 @@ def main():
     in_ca = gpd.sjoin(fire_gdf, ca_boundary[["geometry"]], how="inner", predicate="within")
     fire_gdf = fire_gdf.loc[in_ca.index]
     in_urban = gpd.sjoin(fire_gdf, urban_gdf[["geometry"]], how="inner", predicate="within")
-    non_urban = fire_gdf[~fire_gdf.index.isin(in_urban.index)]
+    non_urban = fire_gdf[~fire_gdf.index.isin(in_urban.index)].copy()
 
-    # Stage-2: same as filter_wfpi_and_plot (WFPI grid + mask)
     rows, cols = [], []
     for lat, lon in zip(non_urban["LATDD83"], non_urban["LONGDD83"]):
-        r, c = latlon_to_rowcol(lat, lon)
-        rows.append(r)
-        cols.append(c)
+        r, c = to_rowcol(lat, lon)
+        rows.append(r); cols.append(c)
     non_urban = non_urban.copy()
     non_urban["_row"] = rows
     non_urban["_col"] = cols
@@ -150,34 +151,30 @@ def main():
         & (non_urban["_col"] >= 0) & (non_urban["_col"] < GRID_W)
     )
     in_bounds_gdf = non_urban[in_bounds].copy()
-    in_mask = in_bounds_gdf.apply(
-        lambda r: mask[int(r["_row"]), int(r["_col"])] == 1, axis=1
-    )
+    in_mask = in_bounds_gdf.apply(lambda r: mask[int(r["_row"]), int(r["_col"])] == 1, axis=1)
     kept_gdf = in_bounds_gdf[in_mask].copy()
-    # Exclude fires on missing WFPI zip dates (same as dataset)
-    missing_dates = set(get_missing_2021_wfpi_dates())
-    if missing_dates:
-        kept_gdf["_date_str"] = kept_gdf["discovery_dt"].apply(
-            lambda x: x.strftime("%Y%m%d") if hasattr(x, "strftime") else str(x)[:10].replace("-", "")
-        )
-        kept_gdf = kept_gdf[~kept_gdf["_date_str"].isin(missing_dates)].copy()
-        kept_gdf = kept_gdf.drop(columns=["_date_str"], errors="ignore")
-    n_kept = len(kept_gdf)
-    print(f"  2021 final filtered fires (in dataset): {n_kept}")
 
-    # Reproject Pyrologix to EPSG:4326 for display
+    # Discovery date as YYYYMMDD
+    kept_gdf["_date_str"] = kept_gdf["discovery_dt"].apply(
+        lambda x: x.strftime("%Y%m%d") if hasattr(x, "strftime") else str(x)[:10].replace("-", "")
+    )
+    missing_set = set(missing_dates)
+    on_missing_gdf = kept_gdf[kept_gdf["_date_str"].isin(missing_set)].copy()
+    n = len(on_missing_gdf)
+    print(f"  Fires on missing-WFPI dates: {n}")
+
+    # Reproject WFPI to EPSG:4326
     dst_crs = RioCRS.from_epsg(4326)
     dst_transform, dst_W, dst_H = calculate_default_transform(
         WFPI_CRS, dst_crs, GRID_W, GRID_H,
-        left=CROPPED_T.c,
-        top=CROPPED_T.f,
+        left=CROPPED_T.c, top=CROPPED_T.f,
         right=CROPPED_T.c + GRID_W * CROPPED_T.a,
         bottom=CROPPED_T.f + GRID_H * CROPPED_T.e,
     )
-    pyro_geo = np.full((dst_H, dst_W), np.nan, dtype=np.float32)
+    wfpi_geo = np.full((dst_H, dst_W), np.nan, dtype=np.float32)
     reproject(
-        source=pyro_display,
-        destination=pyro_geo,
+        source=wfpi_display,
+        destination=wfpi_geo,
         src_transform=CROPPED_T,
         src_crs=WFPI_CRS,
         dst_transform=dst_transform,
@@ -194,7 +191,7 @@ def main():
     # Plot
     fig, ax = plt.subplots(figsize=(10, 13))
     im = ax.imshow(
-        pyro_geo,
+        wfpi_geo,
         extent=[lon_left, lon_right, lat_bottom, lat_top],
         origin="upper",
         cmap="YlOrRd",
@@ -204,32 +201,36 @@ def main():
         vmin=0,
         vmax=255,
     )
-    ax.set_facecolor("white")  # masked zones show as white (nan)
+    ax.set_facecolor("white")
     ca_boundary.plot(ax=ax, color="none", edgecolor="#555555", linewidth=0.8, zorder=2)
 
     CMAP = plt.cm.plasma_r
     pt_colors = {cls: CMAP(i / (len(SIZE_CLASS_ORDER) - 1)) for i, cls in enumerate(SIZE_CLASS_ORDER)}
     pt_sizes = {cls: max(8, 8 + 4 * i) for i, cls in enumerate(SIZE_CLASS_ORDER)}
     for cls in SIZE_CLASS_ORDER:
-        subset = kept_gdf[kept_gdf["SIZECLASS"] == cls] if "SIZECLASS" in kept_gdf.columns else pd.DataFrame()
+        subset = on_missing_gdf[on_missing_gdf["SIZECLASS"] == cls] if "SIZECLASS" in on_missing_gdf.columns else pd.DataFrame()
         if subset.empty:
             continue
         ax.scatter(
             subset["LONGDD83"], subset["LATDD83"],
             c=[pt_colors[cls]], s=pt_sizes[cls],
-            alpha=0.85, linewidths=0.3, edgecolors="white",
+            alpha=0.9, linewidths=0.4, edgecolors="white",
             zorder=4,
             label=f"{SIZE_CLASS_LABELS.get(cls, cls)}  (n={len(subset):,})",
         )
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, shrink=0.4, anchor=(1.0, 0.85))
-    cbar.set_label("Pyrologix ignition prob (resampled, 0–255)", fontsize=8)
+    cbar.set_label("2021 WFPI average (0–255)", fontsize=8)
     ax.legend(loc="lower right", fontsize=7, title="Fire size class", title_fontsize=8, framealpha=0.92, edgecolor="#cccccc", markerscale=1.2)
     ax.set_xlim(-124.8, -113.8)
     ax.set_ylim(32.2, 42.2)
     ax.set_xlabel("Longitude", fontsize=10)
     ax.set_ylabel("Latitude", fontsize=10)
-    ax.set_title(f"California 2021 — Final filtered fires on Pyrologix burn map\nn = {n_kept:,} fires  ·  masked zones in white", fontsize=12, fontweight="bold", pad=10)
+    ax.set_title(
+        f"California 2021 — Fires on dates with missing WFPI zip\n"
+        f"n = {n} fires on {len(missing_dates)} missing dates  ·  masked zones in white",
+        fontsize=12, fontweight="bold", pad=10,
+    )
     ax.grid(True, linestyle="--", alpha=0.3, zorder=0)
     plt.tight_layout()
     os.makedirs(REPORT_DIR, exist_ok=True)
