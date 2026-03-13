@@ -85,7 +85,7 @@ budgets. Background is the Pyrologix ignition probability map.
 | Budget | Status | Gap | Preprocess | Model creation | Solve | Allocation summary |
 |--------|--------|-----|------------|----------------|-------|--------------------|
 | 20M | `TIME_LIMIT` | **0.37%** | 2.37 s | 3.59 s | 601.61 s | 0 sensors, 40 stations, 280 drones |
-| 100M | `TIME_LIMIT` | **9.6%** | 2.28 s | 3.08 s | 1801.61 s | 0 sensors, 232 stations, 1304 drones |
+| 100M | `TIME_LIMIT` | **13.0%** | 2.61 s | 6.59 s | 1801.69 s | 0 sensors, 214 stations, 1358 drones |
 | 500M | `TIME_LIMIT` | unusable | 3.02 s | 3.80 s | 602.20 s | no useful incumbent found |
 
 Notes:
@@ -93,8 +93,10 @@ Notes:
 - The 500M run returned objective `-0.0` and an empty placement. That should be
   treated as **failure to find a meaningful feasible solution within the cap**,
   not as a valid benchmark result.
-- The 100M entry above reflects the **30-minute rerun** (`1800 s` cap), which
-  substantially improved the gap relative to the original 10-minute run.
+- The 100M entry above reflects the **fixed 30-minute rerun** (`1800 s` cap)
+  with two changes relative to earlier runs: masked cells no longer contribute
+  to the objective, and the candidate filter keeps the top **50%** of cells
+  instead of the top 20%.
 
 ---
 
@@ -138,8 +140,8 @@ Every selected charging station received the full cap of **7 drones**.
 | Component | Count | Unit cost | Subtotal |
 |-----------|------:|----------:|--------:|
 | Ground sensors | 0 | 100k | 0.00M |
-| Charging stations | 232 | 150k | 34.80M |
-| Drones | 1304 | 50k | 65.20M |
+| Charging stations | 214 | 150k | 32.10M |
+| Drones | 1358 | 50k | 67.90M |
 | **Total** | | | **100.00M** |
 
 The drone allocation is non-uniform, with many stations at the cap of 7 drones
@@ -149,13 +151,13 @@ and a spread from 1 to 7 drones per selected station.
 
 | Metric | Value |
 |--------|-------|
-| Feasible station-cell pairs | 49,194 |
-| Station-level drone binaries | 15,666 |
-| Preprocessing | 2.28 s |
-| Model creation | 3.08 s |
-| Solving | 1801.61 s |
+| Feasible station-cell pairs | 122,775 |
+| Station-level drone binaries | 39,158 |
+| Preprocessing | 2.61 s |
+| Model creation | 6.59 s |
+| Solving | 1801.69 s |
 | Termination | `TIME_LIMIT` |
-| **MIP gap** | **9.6%** |
+| **MIP gap** | **13.0%** |
 
 ### Plots
 
@@ -166,10 +168,11 @@ and a spread from 1 to 7 drones per selected station.
 ### Interpretation
 
 At 100M, the heuristic StationMax formulation remains substantially harder than
-at 20M, but the longer `1800 s` run improves the gap from **27.47%** (10-minute
-run) to **9.6%**. The incumbent also changes noticeably, shifting from a
-sensor-heavy / more-station-heavy 10-minute incumbent to a pure station+drone
-allocation with fewer stations and more drones.
+at 20M. After fixing the objective so masked cells cannot contribute and
+loosening the candidate pre-filter to the top **50%** of cells, the model grew
+substantially (`122,775` feasible pairs and `39,158` station-level drone
+binaries) and the 30-minute run ended at **13.0%** gap. The incumbent remained
+a pure station+drone allocation with no ground sensors.
 
 ---
 
@@ -219,13 +222,16 @@ These plots are included only to show that the returned incumbent was empty.
 1. The new greedy-kernel StationMax formulation is practical at **20M**: the
    model builds in a few seconds and ends with a very small gap (`0.37%`) under
    the 10-minute cap.
-2. At **100M**, the same formulation becomes significantly harder than at 20M,
-   but a longer `30-minute` solve improves the gap to **9.6%**, which is much
-   better than the original 10-minute result (`27.47%`).
+2. At **100M**, the same formulation becomes significantly harder than at 20M.
+   With the fixed objective and a top-50% candidate pool, the 30-minute run
+   ends at **13.0%** gap. This is still much better than the original 10-minute
+   result (`27.47%`), but worse than the earlier 30-minute run on the smaller
+   top-20% candidate set (`9.6%`).
 3. At **500M**, the formulation is not usable under the 10-minute cap in its
    current form: no meaningful incumbent was found.
 4. The preprocessing itself is **not** the bottleneck. Even with heuristic
    per-station kernels, preprocessing/model creation remained around `2–4 s`.
    The difficulty comes from the MILP search at larger budgets.
-5. The 100M case appears potentially usable with a larger time budget, whereas
-   the 500M case still looks too hard under the current formulation and cap.
+5. The 100M case appears potentially usable with a larger time budget, but the
+   candidate-set size has a strong effect on solve difficulty. The 500M case
+   still looks too hard under the current formulation and cap.
