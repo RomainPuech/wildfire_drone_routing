@@ -274,6 +274,145 @@ function compute_masked_kernel_from_point(start_x, start_y, n_steps, mask, N, M)
 end
 
 
+function shortest_masked_path_within_reach(start::Tuple{Int,Int}, goal::Tuple{Int,Int}, mask, N::Int, M::Int, reach::Int)
+    if start == goal
+        return [start]
+    end
+
+    min_x = max(1, start[1] - reach)
+    max_x = min(N, start[1] + reach)
+    min_y = max(1, start[2] - reach)
+    max_y = min(M, start[2] + reach)
+
+    moves = [
+        (-1, -1), (-1, 0), (-1, 1),
+        (0, -1),           (0, 1),
+        (1, -1),  (1, 0),  (1, 1),
+    ]
+
+    queue = [start]
+    head = 1
+    parent = Dict{Tuple{Int,Int}, Tuple{Int,Int}}()
+    dist = Dict{Tuple{Int,Int}, Int}(start => 0)
+
+    while head <= length(queue)
+        current = queue[head]
+        head += 1
+        current_dist = dist[current]
+        if current_dist >= reach
+            continue
+        end
+
+        for (dx, dy) in moves
+            nxt = (current[1] + dx, current[2] + dy)
+            if !(min_x <= nxt[1] <= max_x && min_y <= nxt[2] <= max_y)
+                continue
+            end
+            if mask[nxt...] <= 0 || haskey(dist, nxt)
+                continue
+            end
+            parent[nxt] = current
+            dist[nxt] = current_dist + 1
+            if nxt == goal
+                path = [goal]
+                node = goal
+                while node != start
+                    node = parent[node]
+                    push!(path, node)
+                end
+                reverse!(path)
+                return path
+            end
+            push!(queue, nxt)
+        end
+    end
+
+    return Tuple{Int,Int}[]
+end
+
+
+function build_station_greedy_kernels(station::Tuple{Int,Int}, mask, N::Int, M::Int, reach::Int, kmax::Int)
+    min_x = max(1, station[1] - reach)
+    max_x = min(N, station[1] + reach)
+    min_y = max(1, station[2] - reach)
+    max_y = min(M, station[2] + reach)
+
+    templates = Vector{Vector{Tuple{Int,Int}}}()
+    template_keys = Set{String}()
+
+    for i_point in min_x:max_x
+        for j_point in min_y:max_y
+            if mask[i_point, j_point] <= 0
+                continue
+            end
+            goal = (i_point, j_point)
+            path = shortest_masked_path_within_reach(station, goal, mask, N, M, reach)
+            if isempty(path)
+                continue
+            end
+            key = join(["$(p[1])_$(p[2])" for p in path], ";")
+            if !(key in template_keys)
+                push!(templates, path)
+                push!(template_keys, key)
+            end
+        end
+    end
+
+    if isempty(templates)
+        return Dict{Tuple{Int,Int}, Int}(), Dict{Tuple{Int,Int}, Vector{Int}}()
+    end
+
+    first_cover_level = Dict{Tuple{Int,Int}, Int}()
+    delta_levels = Dict{Tuple{Int,Int}, Vector{Int}}()
+    covered = Set{Tuple{Int,Int}}()
+    used = falses(length(templates))
+
+    for level in 1:kmax
+        best_idx = 0
+        best_gain = -1
+        best_length = -1
+
+        for idx in eachindex(templates)
+            if used[idx]
+                continue
+            end
+            gain = 0
+            for cell in templates[idx]
+                if !(cell in covered)
+                    gain += 1
+                end
+            end
+            tpl_len = length(templates[idx])
+            if gain > best_gain || (gain == best_gain && tpl_len > best_length)
+                best_gain = gain
+                best_length = tpl_len
+                best_idx = idx
+            end
+        end
+
+        if best_idx == 0 || best_gain <= 0
+            break
+        end
+
+        used[best_idx] = true
+        for cell in templates[best_idx]
+            if !(cell in covered)
+                push!(covered, cell)
+                first_cover_level[cell] = level
+            end
+        end
+    end
+
+    for (cell, first_level) in first_cover_level
+        levels = zeros(Int, kmax)
+        levels[first_level] = 1
+        delta_levels[cell] = levels
+    end
+
+    return first_cover_level, delta_levels
+end
+
+
 """
 Max_Coverage_Kernel_Masked: Sensor placement optimization with mask-aware coverage kernels.
 
@@ -1137,6 +1276,284 @@ function Max_Coverage_Kernel_Masked_Budget(static_map_file, budget_millions, cos
     println("  Ground sensors:     ", n_sensors,  " (cost ", round(n_sensors * cost_sensor_millions, digits=2), "M)")
     println("  Charging stations:  ", n_stations, " (cost ", round(n_stations * cost_station_millions, digits=2), "M)")
     println("  Drones:             ", n_drones,   " (cost ", round(n_drones * cost_drone_millions, digits=2), "M)")
+    println("  Budget used:        ", round(budget_used, digits=2), "M / ", budget_millions, "M")
+
+    println("\n=== TIMING SUMMARY ===")
+    println("  Preprocessing:   ", round(time_preprocessing_end - time_preprocessing_start, digits=2), " seconds")
+    println("  Model creation:  ", round(time_model_creation_end - time_model_creation_start, digits=2), " seconds")
+    println("  Solving:         ", round(time_solve_end - time_solve_start, digits=2), " seconds")
+    println("  TOTAL:           ", round((time_ns() / 1e9) - time_start, digits=2), " seconds")
+    println("======================\n")
+    flush(stdout)
+
+    return selected_x_indices, selected_y_indices, drone_allocations
+end
+
+
+function Max_Coverage_Kernel_Masked_Budget_StationMax(static_map_file, budget_millions, cost_sensor_millions, cost_station_millions, cost_drone_millions, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=63, time_limit_seconds=600.0, max_drones_per_station=7, candidate_percentile=0.80)
+    """
+    Budget-constrained placement variant where coverage from different charging
+    stations does not add. For each cell, only the best contributing station is
+    counted; multi-drone coverage at the same station still grows with capped
+    linear increments derived from the single-drone kernel.
+
+    Only cell-station pairs with L∞ distance <= floor(kernel_size_x / 2) are
+    kept, matching a one-way reach based on half the battery life.
+    """
+
+    time_start = time_ns() / 1e9
+    time_preprocessing_start = time_ns() / 1e9
+
+    static_map = load_burn_map(static_map_file)
+    T, N, M = size(static_map)
+
+    println("=== Max_Coverage_Kernel_Masked_Budget_StationMax ===")
+    println("static_map_file=", static_map_file)
+    println("budget=", budget_millions, "M")
+    println("costs: sensor=", cost_sensor_millions, "M, station=", cost_station_millions, "M, drone=", cost_drone_millions, "M")
+    println("recompute_kernel=", recompute_kernel)
+    println("max_drones_per_station=", max_drones_per_station)
+    println("candidate_percentile=", candidate_percentile)
+
+    if T != 1
+        println("Averaging first ", min(10, T), " time steps")
+        avg_risk = zeros(N, M)
+        for i in 1:N, j in 1:M
+            avg_risk[i,j] = (1 / min(10, T)) * sum(static_map[t, i, j] for t in 1:min(10, T))
+        end
+        static_map = avg_risk
+    else
+        static_map = static_map[1, :, :]
+    end
+
+    if !isnothing(mask_file) && mask_file != ""
+        mask = load_mask(mask_file)
+    else
+        mask = ones(N, M)
+    end
+
+    I_all_feasible = [(i[1], i[2]) for i in findall(mask .> 0.0)]
+    I = I_all_feasible
+    println("Total feasible points: ", length(I_all_feasible))
+
+    max_possible_grounds  = floor(Int, budget_millions / cost_sensor_millions)
+    max_possible_charging = floor(Int, budget_millions / cost_station_millions)
+    max_possible_drones   = floor(Int, budget_millions / cost_drone_millions)
+    println("Max possible: sensors=", max_possible_grounds,
+            ", stations=", max_possible_charging,
+            ", drones=", max_possible_drones)
+
+    if max_possible_grounds == 0 && max_possible_charging == 0
+        println("WARNING: Budget too small for any device. Returning empty placements.")
+        return Tuple{Int,Int}[], Tuple{Int,Int}[], Int[]
+    end
+
+    ground_risks = [(loc, static_map[loc...]) for loc in I_all_feasible]
+    ground_risk_values = [r for (_, r) in ground_risks]
+    ground_risk_threshold = length(ground_risk_values) > 0 ? quantile(ground_risk_values, candidate_percentile) : 0.0
+    I_prime = [loc for (loc, risk) in ground_risks if risk >= ground_risk_threshold]
+    println("Ground sensor candidates (top ", round((1 - candidate_percentile) * 100, digits=1), "% by risk): ", length(I_prime), " / ", length(I_all_feasible))
+
+    charging_potentials = Dict{Tuple{Int,Int}, Float64}()
+    for (cx, cy) in I_all_feasible
+        coverage_potential = 0.0
+        for dx in max(-cx + 1, -kernel_size_x):min(N - cx, kernel_size_x)
+            for dy in max(-cy + 1, -kernel_size_y):min(M - cy, kernel_size_y)
+                target_x, target_y = cx + dx, cy + dy
+                if 1 <= target_x <= N && 1 <= target_y <= M
+                    if mask[target_x, target_y] <= 0
+                        continue
+                    end
+                    kernel_weight = get(kernel, (dx, dy), 0.0)
+                    if kernel_weight > 0
+                        coverage_potential += kernel_weight * static_map[target_x, target_y]
+                    end
+                end
+            end
+        end
+        charging_potentials[(cx, cy)] = coverage_potential
+    end
+
+    charging_potential_values = collect(values(charging_potentials))
+    charging_potential_threshold = length(charging_potential_values) > 0 ? quantile(charging_potential_values, candidate_percentile) : 0.0
+    I_second = [loc for (loc, potential) in charging_potentials if potential >= charging_potential_threshold]
+    println("Charging station candidates (top ", round((1 - candidate_percentile) * 100, digits=1), "% by coverage potential): ", length(I_second), " / ", length(I_all_feasible))
+
+    if length(I_prime) < max_possible_grounds
+        println("WARNING: Not enough ground candidates (", length(I_prime), ") for max possible (", max_possible_grounds, "). Using all feasible.")
+        I_prime = I_all_feasible
+    end
+    if length(I_second) < max_possible_charging
+        println("WARNING: Not enough charging candidates (", length(I_second), ") for max possible (", max_possible_charging, "). Using all feasible.")
+        I_second = I_all_feasible
+    end
+
+    if isempty(I_all_feasible)
+        println("WARNING: No feasible cells. Returning empty placements.")
+        return Tuple{Int,Int}[], Tuple{Int,Int}[], Int[]
+    end
+
+    I_prime_set = Set(I_prime)
+
+    per_location_kernels = Dict{Tuple{Int,Int}, Dict{Tuple{Int,Int}, Float64}}()
+    if recompute_kernel
+        println("Computing per-location kernels using masked DP (n_steps=$n_steps)...")
+        kernel_start_time = time_ns() / 1e9
+        for (idx, (cx, cy)) in enumerate(I_second)
+            per_location_kernels[(cx, cy)] = compute_masked_kernel_from_point(cx, cy, n_steps, mask, N, M)
+            if idx % 100 == 0
+                println("  Computed kernel for $idx / $(length(I_second)) locations")
+            end
+        end
+        println("Kernel computation took ", (time_ns() / 1e9) - kernel_start_time, " seconds")
+    end
+
+    one_way_reach = floor(Int, kernel_size_x / 2)
+    println("Pair pruning radius (L∞ one-way reach): ", one_way_reach)
+
+    feasible_pairs = Tuple{Tuple{Int,Int}, Tuple{Int,Int}}[]
+    cell_to_pairs = Dict{Tuple{Int,Int}, Vector{Tuple{Tuple{Int,Int}, Tuple{Int,Int}}}}()
+    station_to_pairs = Dict{Tuple{Int,Int}, Vector{Tuple{Tuple{Int,Int}, Tuple{Int,Int}}}}()
+    pair_first_cover_level = Dict{Tuple{Tuple{Int,Int}, Tuple{Int,Int}}, Int}()
+    pair_delta_levels = Dict{Tuple{Tuple{Int,Int}, Tuple{Int,Int}}, Vector{Int}}()
+    station_drone_caps = Dict{Tuple{Int,Int}, Int}()
+
+    for station in I_second
+        local_pairs = Tuple{Tuple{Int,Int}, Tuple{Int,Int}}[]
+        first_cover_level, delta_levels = build_station_greedy_kernels(
+            station, mask, N, M, one_way_reach, max_drones_per_station
+        )
+
+        for (cell, first_level) in first_cover_level
+            pair = (cell, station)
+            push!(feasible_pairs, pair)
+            push!(local_pairs, pair)
+            if !haskey(cell_to_pairs, cell)
+                cell_to_pairs[cell] = Tuple{Tuple{Int,Int}, Tuple{Int,Int}}[]
+            end
+            push!(cell_to_pairs[cell], pair)
+            pair_first_cover_level[pair] = first_level
+            pair_delta_levels[pair] = delta_levels[cell]
+        end
+
+        if !isempty(local_pairs)
+            station_to_pairs[station] = local_pairs
+            station_drone_caps[station] = min(max_possible_drones, max(1, max_drones_per_station))
+        end
+    end
+
+    I_second = [station for station in I_second if haskey(station_to_pairs, station)]
+    I_second_set = Set(I_second)
+    I_common = [loc for loc in I_prime if loc in I_second_set]
+
+    println("Stations with at least one feasible pair: ", length(I_second))
+    println("Feasible station-cell pairs kept: ", length(feasible_pairs))
+    if !isempty(I_second)
+        cap_values = [station_drone_caps[s] for s in I_second]
+        println("Per-station drone cap: min=", minimum(cap_values), ", max=", maximum(cap_values), ", mean=", round(mean(cap_values), digits=2))
+    end
+
+    station_levels = Tuple{Tuple{Int,Int}, Int}[]
+    for station in I_second
+        for level in 1:station_drone_caps[station]
+            push!(station_levels, (station, level))
+        end
+    end
+    println("Station-drone binary levels: ", length(station_levels))
+
+    time_preprocessing_end = time_ns() / 1e9
+    println("Preprocessing took ", round(time_preprocessing_end - time_preprocessing_start, digits=2), " seconds")
+    flush(stdout)
+
+    time_model_creation_start = time_ns() / 1e9
+
+    model = Model(Gurobi.Optimizer)
+    set_silent(model)
+    if time_limit_seconds > 0
+        set_time_limit_sec(model, time_limit_seconds)
+        println("Gurobi time limit set to ", time_limit_seconds, " seconds")
+        flush(stdout)
+    end
+
+    xg    = @variable(model, [i in I_prime], Bin)
+    z     = @variable(model, [sl in station_levels], Bin)
+    u     = @variable(model, [pair in feasible_pairs], Bin)
+    w     = @variable(model, [pair in feasible_pairs])
+    theta = @variable(model, [i in I])
+
+    @objective(model, Max, sum(static_map[point...] * theta[point] for point in I))
+
+    @constraint(model,
+        cost_sensor_millions * sum(xg) +
+        cost_station_millions * sum(z[(station, 1)] for station in I_second) +
+        cost_drone_millions * sum(z[sl] for sl in station_levels) <= budget_millions)
+
+    @constraint(model, [i in I_common], xg[i] + z[(i, 1)] <= 1)
+    @constraint(model, [station in I_second, level in 1:(station_drone_caps[station] - 1)],
+        z[(station, level)] >= z[(station, level + 1)])
+
+    @constraint(model, [pair in feasible_pairs], u[pair] <= z[(pair[2], pair_first_cover_level[pair])])
+    @constraint(model, [pair in feasible_pairs], w[pair] >= 0)
+    @constraint(model, [pair in feasible_pairs], w[pair] <= u[pair])
+    @constraint(model, [pair in feasible_pairs],
+        w[pair] <= sum(
+            pair_delta_levels[pair][level] *
+            z[(pair[2], level)]
+            for level in 1:station_drone_caps[pair[2]]
+        ))
+
+    @constraint(model, [cell in keys(cell_to_pairs)],
+        sum(u[pair] for pair in cell_to_pairs[cell]) <= 1)
+
+    @constraint(model, [i in I], 0 <= theta[i] <= 1)
+    @constraint(model, [cell in I; cell in I_prime_set],
+        theta[cell] <= xg[cell] + sum(w[pair] for pair in get(cell_to_pairs, cell, Tuple{Tuple{Int,Int}, Tuple{Int,Int}}[])))
+    @constraint(model, [cell in I; !(cell in I_prime_set)],
+        theta[cell] <= sum(w[pair] for pair in get(cell_to_pairs, cell, Tuple{Tuple{Int,Int}, Tuple{Int,Int}}[])))
+
+    time_model_creation_end = time_ns() / 1e9
+    println("Model creation took ", round(time_model_creation_end - time_model_creation_start, digits=2), " seconds")
+    flush(stdout)
+
+    time_solve_start = time_ns() / 1e9
+    optimize!(model)
+    time_solve_end = time_ns() / 1e9
+    println("Solving took ", round(time_solve_end - time_solve_start, digits=2), " seconds")
+
+    status = termination_status(model)
+    println("Termination status: ", status)
+    if has_values(model)
+        obj_val = objective_value(model)
+        obj_bound = objective_bound(model)
+        gap = abs(obj_bound - obj_val) / max(abs(obj_val), 1e-10) * 100.0
+        println("Objective value:  ", round(obj_val, digits=4))
+        println("Objective bound:  ", round(obj_bound, digits=4))
+        println("MIP gap:          ", round(gap, digits=2), "%")
+    else
+        println("No integer-feasible solution found within time limit!")
+    end
+    flush(stdout)
+
+    if !has_values(model)
+        println("ERROR: no feasible solution — returning empty placements.")
+        flush(stdout)
+        return Tuple{Int,Int}[], Tuple{Int,Int}[], Int[]
+    end
+
+    selected_x_indices = [(i[1] - 1, i[2] - 1) for i in I_prime if value(xg[i]) > 0.5]
+    selected_y_indices = [(station[1] - 1, station[2] - 1) for station in I_second if value(z[(station, 1)]) > 0.5]
+    drone_allocations = [sum(Int(round(value(z[(station, level)]))) for level in 1:station_drone_caps[station])
+                         for station in I_second if value(z[(station, 1)]) > 0.5]
+
+    n_sensors = length(selected_x_indices)
+    n_stations = length(selected_y_indices)
+    n_drones = sum(drone_allocations; init=0)
+    budget_used = n_sensors * cost_sensor_millions + n_stations * cost_station_millions + n_drones * cost_drone_millions
+
+    println("\n=== BUDGET ALLOCATION ===")
+    println("  Ground sensors:     ", n_sensors, " (cost ", round(n_sensors * cost_sensor_millions, digits=2), "M)")
+    println("  Charging stations:  ", n_stations, " (cost ", round(n_stations * cost_station_millions, digits=2), "M)")
+    println("  Drones:             ", n_drones, " (cost ", round(n_drones * cost_drone_millions, digits=2), "M)")
     println("  Budget used:        ", round(budget_used, digits=2), "M / ", budget_millions, "M")
 
     println("\n=== TIMING SUMMARY ===")

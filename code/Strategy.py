@@ -2734,6 +2734,57 @@ def count_paths_convolution(N, M, n, time_steps=1):
 
     return mapping
 
+
+def count_hitting_probability_kernel(max_steps: int):
+    """
+    Return a translation-invariant kernel mapping (dx, dy) -> probability that a
+    random walk starting at the origin visits the target offset within
+    `max_steps` steps.
+
+    The walk uses the same 9 moves as the legacy convolution kernel:
+    8-neighborhood plus staying in place, all equiprobable.
+    """
+    size = 2 * max_steps + 1
+    origin = max_steps
+    offsets = [(dx, dy) for dx in range(-max_steps, max_steps + 1)
+               for dy in range(-max_steps, max_steps + 1)]
+    moves = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+    move_prob = 1.0 / len(moves)
+    mapping = {}
+
+    for target_dx, target_dy in offsets:
+        target_x = origin + target_dx
+        target_y = origin + target_dy
+        if target_x == origin and target_y == origin:
+            mapping[(target_dx, target_dy)] = 1.0
+            continue
+
+        # DP over paths that have NOT hit the target yet.
+        alive = np.zeros((size, size), dtype=np.float64)
+        alive[origin, origin] = 1.0
+        hit_prob = 0.0
+
+        for _ in range(max_steps):
+            nxt = np.zeros_like(alive)
+            for x in range(size):
+                for y in range(size):
+                    p = alive[x, y]
+                    if p == 0.0:
+                        continue
+                    for mx, my in moves:
+                        nx = x + mx
+                        ny = y + my
+                        if 0 <= nx < size and 0 <= ny < size:
+                            if nx == target_x and ny == target_y:
+                                hit_prob += p * move_prob
+                            else:
+                                nxt[nx, ny] += p * move_prob
+            alive = nxt
+
+        mapping[(target_dx, target_dy)] = min(max(hit_prob, 0.0), 1.0)
+
+    return mapping
+
 class SensorPlacementMaxCoverageGaussianTime(SensorPlacementStrategy):
     strategy_name = "SensorPlacementMaxCoverageGaussianTime"
     def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
@@ -3096,6 +3147,107 @@ class SensorPlacementMaxCoverageGaussianTimeMaskedBudget(SensorPlacementStrategy
         self.n_charging_stations = len(self.charging_station_locations)
         self.n_drones            = int(sum(self.drones_per_charging_station)) if self.drones_per_charging_station else 0
         self.budget_millions     = budget_millions
+
+        budget_used = (self.n_ground_sensors * cost_sensor
+                       + self.n_charging_stations * cost_station
+                       + self.n_drones * cost_drone)
+        print(f"Budget allocation: {self.n_ground_sensors} sensors, "
+              f"{self.n_charging_stations} stations, {self.n_drones} drones")
+        print(f"Budget used: {budget_used:.2f}M / {budget_millions}M")
+        print("ground sensor locations")
+        print(self.ground_sensor_locations)
+        print("charging station locations")
+        print(self.charging_station_locations)
+        print("drones per charging station")
+        print(self.drones_per_charging_station)
+
+    def get_drone_allocation(self):
+        """Returns the number of drones allocated to each charging station."""
+        return self.drones_per_charging_station
+
+    def get_device_counts(self):
+        """Returns the number of each device type chosen by the optimiser."""
+        return {
+            "n_ground_sensors": self.n_ground_sensors,
+            "n_charging_stations": self.n_charging_stations,
+            "n_drones": self.n_drones,
+        }
+
+
+class SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMax(SensorPlacementStrategy):
+    strategy_name = "SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMax"
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        Budget-constrained placement variant where each cell only receives drone
+        coverage from its best charging station. Same-station multi-drone
+        contributions are still precomputed as capped constants.
+        """
+        self.ground_sensor_locations = []
+        self.charging_station_locations = []
+
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+        if "budget_millions" not in custom_initialization_parameters:
+            raise ValueError("budget_millions is not defined")
+
+        mask_filename = custom_initialization_parameters.get("mask_filename", None)
+        max_battery = automatic_initialization_parameters["max_battery_time"]
+        one_way_reach = max_battery // 2
+        n_steps = custom_initialization_parameters.get("n_steps", one_way_reach)
+        recompute_kernel = False
+        if custom_initialization_parameters.get("recompute_kernel", False):
+            print("Warning: recompute_kernel is ignored for StationMax; using calibrated open-grid hitting kernel.", flush=True)
+
+        budget_millions = custom_initialization_parameters["budget_millions"]
+        cost_sensor = custom_initialization_parameters.get("cost_sensor", 0.1)
+        cost_station = custom_initialization_parameters.get("cost_station", 0.15)
+        cost_drone = custom_initialization_parameters.get("cost_drone", 0.05)
+
+        burnmap = load_scenario(custom_initialization_parameters["burnmap_filename"])
+        T, N, M = burnmap.shape
+
+        kernel = count_hitting_probability_kernel(one_way_reach)
+        kernel_size_x = max_battery
+        kernel_size_y = max_battery
+
+        max_drones_per_station = custom_initialization_parameters.get(
+            "max_drones_per_station", max_battery
+        )
+        candidate_percentile = custom_initialization_parameters.get(
+            "candidate_percentile",
+            0.50 if abs(budget_millions - 100.0) < 1e-9 else 0.80,
+        )
+        print(f"SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMax: "
+              f"budget={budget_millions}M, costs=sensor:{cost_sensor}M station:{cost_station}M drone:{cost_drone}M, "
+              f"one_way_reach={one_way_reach}, max_drones_per_station={max_drones_per_station}, "
+              f"candidate_percentile={candidate_percentile}, "
+              f"recompute_kernel={recompute_kernel}, n_steps={n_steps}")
+        time_limit = custom_initialization_parameters.get("time_limit_seconds", 600.0)
+        x_vars, y_vars, drone_allocations = jl.Max_Coverage_Kernel_Masked_Budget_StationMax(
+            custom_initialization_parameters["burnmap_filename"],
+            budget_millions,
+            cost_sensor,
+            cost_station,
+            cost_drone,
+            kernel,
+            kernel_size_x,
+            kernel_size_y,
+            mask_filename,
+            recompute_kernel,
+            n_steps,
+            time_limit,
+            max_drones_per_station,
+            candidate_percentile,
+        )
+
+        self.ground_sensor_locations = list(x_vars)
+        self.charging_station_locations = list(y_vars)
+        self.drones_per_charging_station = [int(x) for x in drone_allocations]
+
+        self.n_ground_sensors = len(self.ground_sensor_locations)
+        self.n_charging_stations = len(self.charging_station_locations)
+        self.n_drones = int(sum(self.drones_per_charging_station)) if self.drones_per_charging_station else 0
+        self.budget_millions = budget_millions
 
         budget_used = (self.n_ground_sensors * cost_sensor
                        + self.n_charging_stations * cost_station
