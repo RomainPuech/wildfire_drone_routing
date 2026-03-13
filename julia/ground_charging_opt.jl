@@ -135,6 +135,7 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
     else
         mask = ones(N, M)
     end
+    static_map .*= mask
 
     # Grid points
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -224,52 +225,24 @@ Compute coverage kernel from a single starting point using iterative DP that res
 Returns a dictionary mapping (target_x, target_y) -> coverage_probability
 """
 function compute_masked_kernel_from_point(start_x, start_y, n_steps, mask, N, M)
-    # Initialize DP array
-    dp = zeros(Float64, N, M)
-    dp[start_x, start_y] = 1.0
-    
-    # 8-neighborhood offsets
-    neighbor_offsets = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
-    
-    # Run DP for n_steps iterations
-    for _ in 1:n_steps
-        dp_new = zeros(Float64, N, M)
-        for i in 1:N, j in 1:M
-            if mask[i, j] > 0  # Only process valid cells
-                # Collect valid neighbors
-                valid_neighbors = []
-                for (di, dj) in neighbor_offsets
-                    ni, nj = i + di, j + dj
-                    if 1 <= ni <= N && 1 <= nj <= M && mask[ni, nj] > 0
-                        push!(valid_neighbors, (ni, nj))
-                    end
-                end
-                # Include staying in place
-                push!(valid_neighbors, (i, j))
-                
-                # Accumulate probability from valid neighbors
-                for (ni, nj) in valid_neighbors
-                    dp_new[i, j] += dp[ni, nj] / length(valid_neighbors)
-                end
-            end
-        end
-        dp = dp_new
-    end
-    
-    # Normalize by the value at the origin (for consistency with convolution approach)
-    origin_value = dp[start_x, start_y]
-    if origin_value > 0
-        dp = dp ./ origin_value
-    end
-    
-    # Return as dictionary mapping (x, y) -> coverage
+    # Uniform coverage kernel for coordinated drone patrol, mask-aware.
+    #
+    # Weight = 1/B for every reachable cell within L∞ distance n_steps
+    # that is not blocked by the mask.  B = 2*n_steps + 1 (full battery).
+    # With B coordinated drones, all reachable cells are fully saturated.
+
+    R = n_steps               # patrol range = max_battery // 2
+    B = 2 * R + 1             # full battery = zone side length
+    w = 1.0 / B
+
     result = Dict{Tuple{Int,Int}, Float64}()
-    for i in 1:N, j in 1:M
-        if dp[i, j] > 1e-10  # Only store non-negligible values
-            result[(i, j)] = min(dp[i, j], 1.0)
+    for di in -R:R, dj in -R:R
+        ni, nj = start_x + di, start_y + dj
+        if 1 <= ni <= N && 1 <= nj <= M && mask[ni, nj] > 0
+            result[(ni, nj)] = w
         end
     end
-    
+
     return result
 end
 
@@ -288,7 +261,7 @@ Arguments:
 - recompute_kernel: If true, compute per-location kernels using masked DP
 - n_steps: Number of DP steps for kernel computation (only used if recompute_kernel=true)
 """
-function Max_Coverage_Kernel_Masked(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=63, time_limit_seconds=600.0)
+function Max_Coverage_Kernel_Masked(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=3, time_limit_seconds=600.0)
 
     time_start = time_ns() / 1e9 
     time_preprocessing_start = time_ns() / 1e9
@@ -317,6 +290,7 @@ function Max_Coverage_Kernel_Masked(static_map_file, N_grounds, N_charging, n_dr
     else
         mask = ones(N, M)
     end
+    static_map .*= mask
 
     # Grid points
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -326,8 +300,8 @@ function Max_Coverage_Kernel_Masked(static_map_file, N_grounds, N_charging, n_dr
     println("Total feasible points: ", length(I_all_feasible))
     
     # ========== PRE-FILTERING FOR EFFICIENCY ==========
-    # Keep top 20% candidates to reduce problem size
-    candidate_percentile = 0.80  # Keep top 20% (above 80th percentile)
+    # Pre-filtering: keep top X% candidates to reduce problem size if needed
+    candidate_percentile = 0.00  # Keep 100% of cells (no filtering)
     
     # --- Filter ground sensor candidates by immediate cell risk (top 20%) ---
     ground_risks = [(loc, static_map[loc...]) for loc in I_all_feasible]
@@ -557,6 +531,7 @@ function Max_Coverage_Kernel_WithAllocation(static_map_file, N_grounds, N_chargi
     else
         mask = ones(N, M)
     end
+    static_map .*= mask
 
     # Grid points
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -633,7 +608,7 @@ function Max_Coverage_Kernel_WithAllocation(static_map_file, N_grounds, N_chargi
 end
 
 
-function Max_Coverage_Kernel_Masked_WithAllocation(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=63, time_limit_seconds=600.0)
+function Max_Coverage_Kernel_Masked_WithAllocation(static_map_file, N_grounds, N_charging, n_drones, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=3, time_limit_seconds=600.0)
     """
     Same as Max_Coverage_Kernel_Masked but uses nc[i] (number of drones) in coverage constraints
     and returns drone allocations as a third value.
@@ -666,6 +641,7 @@ function Max_Coverage_Kernel_Masked_WithAllocation(static_map_file, N_grounds, N
     else
         mask = ones(N, M)
     end
+    static_map .*= mask
 
     # Grid points
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -675,8 +651,8 @@ function Max_Coverage_Kernel_Masked_WithAllocation(static_map_file, N_grounds, N
     println("Total feasible points: ", length(I_all_feasible))
     
     # ========== PRE-FILTERING FOR EFFICIENCY ==========
-    # Keep top 20% candidates to reduce problem size
-    candidate_percentile = 0.80  # Keep top 20% (above 80th percentile)
+    # Pre-filtering: keep top X% candidates to reduce problem size if needed
+    candidate_percentile = 0.00  # Keep 100% of cells (no filtering)
     
     # --- Filter ground sensor candidates by immediate cell risk (top 20%) ---
     ground_risks = [(loc, static_map[loc...]) for loc in I_all_feasible]
@@ -886,7 +862,7 @@ function Max_Coverage_Kernel_Masked_WithAllocation(static_map_file, N_grounds, N
 end
 
 
-function Max_Coverage_Kernel_Masked_Budget(static_map_file, budget_millions, cost_sensor_millions, cost_station_millions, cost_drone_millions, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=63, time_limit_seconds=600.0)
+function Max_Coverage_Kernel_Masked_Budget(static_map_file, budget_millions, cost_sensor_millions, cost_station_millions, cost_drone_millions, kernel, kernel_size_x, kernel_size_y, mask_file, recompute_kernel=false, n_steps=3, time_limit_seconds=600.0)
     """
     Budget-constrained sensor/drone placement.  Instead of fixing the number of
     ground sensors, charging stations and drones, the optimiser allocates them
@@ -927,6 +903,7 @@ function Max_Coverage_Kernel_Masked_Budget(static_map_file, budget_millions, cos
     else
         mask = ones(N, M)
     end
+    static_map .*= mask
 
     # ── Grid points ───────────────────────────────────────────────────────────
     I = [(x, y) for x in 1:N for y in 1:M]
@@ -946,8 +923,8 @@ function Max_Coverage_Kernel_Masked_Budget(static_map_file, budget_millions, cos
         return Tuple{Int,Int}[], Tuple{Int,Int}[], Int[]
     end
 
-    # ── Pre-filtering for efficiency (top 20% candidates) ─────────────────────
-    candidate_percentile = 0.80
+    # ── Pre-filtering: keep top X% candidates to reduce problem size if needed
+    candidate_percentile = 0.00  # Keep 100% of cells (no filtering)
 
     ground_risks = [(loc, static_map[loc...]) for loc in I_all_feasible]
     ground_risk_values = [r for (_, r) in ground_risks]

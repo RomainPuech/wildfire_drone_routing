@@ -2711,27 +2711,30 @@ from scipy.ndimage import convolve
 import matplotlib.pyplot as plt
 import numpy as np
 
-def count_paths_convolution(N, M, n, time_steps=1):
+def count_paths_convolution(N, M, n):
     """
-    N: Grid height
-    M: Grid width
-    n: max size of the grid to consider / max reach of the drones
-    time_steps: Number of time steps to consider
-    Returns:
-        mapping: Dictionary mapping (x,y) to the probability of the cell being covered at time t
+    Uniform coverage kernel for coordinated drone patrol.
+
+    With battery B and patrol range R = B // 2, the reachable zone is
+    (2R+1) x (2R+1) = B x B cells.  Each drone visits B distinct cells
+    per charge cycle, so B drones saturate the full zone.  Weight per
+    cell = 1/B for all reachable cells.
+
+    Parameters
+    ----------
+    N, M : int   Grid height / width (unused, kept for API compatibility).
+    n    : int   Patrol range (max_battery_time // 2).
+
+    Returns
+    -------
+    mapping : dict  (dx, dy) -> float
     """
-    N_prime, M_prime = min(2*N+1,2*n), min(2*M+1,2*n) #TODO think about these
-    dp = np.zeros((N_prime, M_prime), dtype=np.float64)
-    origin = (N_prime//2, M_prime//2) # origin is the middle of the grid
-    dp[origin[0], origin[1]] = 1
-
-    kernel = np.ones((3, 3), dtype=np.float64)
-    for _ in range(n):
-        dp = convolve(dp, kernel, mode='constant', cval=0.0)
-    
-    origin_value = dp[origin[0], origin[1]]
-    mapping = {(x - origin[0],y - origin[1]): min(dp[x,y]*time_steps/origin_value, 1.00) for x in range(N_prime) for y in range(M_prime)}
-
+    B = 2 * n + 1       # full battery = zone side length
+    w = 1.0 / B
+    mapping = {}
+    for dx in range(-n, n + 1):
+        for dy in range(-n, n + 1):
+            mapping[(dx, dy)] = w
     return mapping
 
 class SensorPlacementMaxCoverageGaussianTime(SensorPlacementStrategy):
@@ -2763,16 +2766,12 @@ class SensorPlacementMaxCoverageGaussianTime(SensorPlacementStrategy):
         middle_point = (N//2, M//2)
 
 
-        # create the kernel using max_battery_time as the drone's max reach (number of steps per charge)
         max_battery = automatic_initialization_parameters["max_battery_time"]
-        kernel = count_paths_convolution(N, M, max_battery, 10)
-        kernel_size_x = max_battery
-        kernel_size_y = max_battery
-        # print("kernel=\n", kernel)
+        patrol_range = max_battery // 2
+        kernel = count_paths_convolution(N, M, patrol_range)
+        kernel_size_x = patrol_range
+        kernel_size_y = patrol_range
 
-
-        # Call the Julia optimization function
-        # print("calling julia optimization model")
         x_vars, y_vars = jl.Max_Coverage_Kernel(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"], automatic_initialization_parameters["n_drones"], kernel, kernel_size_x, kernel_size_y, custom_initialization_parameters["mask_filename"])
         # print("optimization finished")
         
@@ -2814,33 +2813,27 @@ class SensorPlacementMaxCoverageGaussianTimeMasked(SensorPlacementStrategy):
                 "mask_filename": mask file name (cells with mask=0 are blocked)
                 "recompute_kernel": If True, compute per-location kernels using masked DP (slower but more accurate)
                                     If False, use fixed kernel approximation (faster but less accurate near mask boundaries)
-                "n_steps": Number of DP steps for kernel computation (default max_battery_time, only used if recompute_kernel=True)
+                "n_steps": Number of DP steps for kernel computation (default max_battery_time // 2, only used if recompute_kernel=True)
         """
-        # Initialize empty lists (skip parent's random initialization)
         self.ground_sensor_locations = []
         self.charging_station_locations = []
 
         if "burnmap_filename" not in custom_initialization_parameters:
             raise ValueError("burnmap_filename is not defined")
 
-        # Get mask filename
         mask_filename = custom_initialization_parameters.get("mask_filename", None)
-        
-        # Get recompute_kernel flag (default False for efficiency)
         recompute_kernel = custom_initialization_parameters.get("recompute_kernel", False)
         
-        # Get n_steps for DP computation (defaults to max_battery_time = drone's max reach per charge)
         max_battery = automatic_initialization_parameters["max_battery_time"]
-        n_steps = custom_initialization_parameters.get("n_steps", max_battery)
+        patrol_range = max_battery // 2
+        n_steps = custom_initialization_parameters.get("n_steps", patrol_range)
 
-        # load the burnmap
         burnmap = load_scenario(custom_initialization_parameters["burnmap_filename"])
         T, N, M = burnmap.shape
 
-        # create the kernel (used if recompute_kernel=False)
-        kernel = count_paths_convolution(N, M, max_battery, 10)
-        kernel_size_x = max_battery
-        kernel_size_y = max_battery
+        kernel = count_paths_convolution(N, M, patrol_range)
+        kernel_size_x = patrol_range
+        kernel_size_y = patrol_range
 
         print(f"SensorPlacementMaxCoverageGaussianTimeMasked: recompute_kernel={recompute_kernel}, n_steps={n_steps}")
 
@@ -2896,16 +2889,12 @@ class SensorPlacementMaxCoverageGaussianTimeWithAllocation(SensorPlacementStrate
         middle_point = (N//2, M//2)
 
 
-        # create the kernel using max_battery_time as the drone's max reach (number of steps per charge)
         max_battery = automatic_initialization_parameters["max_battery_time"]
-        kernel = count_paths_convolution(N, M, max_battery, 10)
-        kernel_size_x = max_battery
-        kernel_size_y = max_battery
-        # print("kernel=\n", kernel)
+        patrol_range = max_battery // 2
+        kernel = count_paths_convolution(N, M, patrol_range)
+        kernel_size_x = patrol_range
+        kernel_size_y = patrol_range
 
-
-        # Call the Julia optimization function with allocation
-        # print("calling julia optimization model")
         x_vars, y_vars, drone_allocations = jl.Max_Coverage_Kernel_WithAllocation(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"], automatic_initialization_parameters["n_drones"], kernel, kernel_size_x, kernel_size_y, custom_initialization_parameters["mask_filename"])
         # print("optimization finished")
         
@@ -2950,33 +2939,27 @@ class SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation(SensorPlacement
                 "mask_filename": mask file name (cells with mask=0 are blocked)
                 "recompute_kernel": If True, compute per-location kernels using masked DP (slower but more accurate)
                                     If False, use fixed kernel approximation (faster but less accurate near mask boundaries)
-                "n_steps": Number of DP steps for kernel computation (default max_battery_time, only used if recompute_kernel=True)
+                "n_steps": Number of DP steps for kernel computation (default max_battery_time // 2, only used if recompute_kernel=True)
         """
-        # Initialize empty lists (skip parent's random initialization)
         self.ground_sensor_locations = []
         self.charging_station_locations = []
 
         if "burnmap_filename" not in custom_initialization_parameters:
             raise ValueError("burnmap_filename is not defined")
 
-        # Get mask filename
         mask_filename = custom_initialization_parameters.get("mask_filename", None)
-        
-        # Get recompute_kernel flag (default False for efficiency)
         recompute_kernel = custom_initialization_parameters.get("recompute_kernel", False)
         
-        # Get n_steps for DP computation (defaults to max_battery_time = drone's max reach per charge)
         max_battery = automatic_initialization_parameters["max_battery_time"]
-        n_steps = custom_initialization_parameters.get("n_steps", max_battery)
+        patrol_range = max_battery // 2
+        n_steps = custom_initialization_parameters.get("n_steps", patrol_range)
 
-        # load the burnmap
         burnmap = load_scenario(custom_initialization_parameters["burnmap_filename"])
         T, N, M = burnmap.shape
 
-        # create the kernel (used if recompute_kernel=False)
-        kernel = count_paths_convolution(N, M, max_battery, 10)
-        kernel_size_x = max_battery
-        kernel_size_y = max_battery
+        kernel = count_paths_convolution(N, M, patrol_range)
+        kernel_size_x = patrol_range
+        kernel_size_y = patrol_range
 
         print(f"SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation: recompute_kernel={recompute_kernel}, n_steps={n_steps}")
 
@@ -3040,7 +3023,7 @@ class SensorPlacementMaxCoverageGaussianTimeMaskedBudget(SensorPlacementStrategy
                 "cost_station":     cost per charging station in millions (default 0.15 = $150k)
                 "cost_drone":       cost per drone in millions (default 0.05 = $50k)
                 "recompute_kernel": bool (default False)
-                "n_steps":          int  (default max_battery_time)
+                "n_steps":          int  (default max_battery_time // 2)
                 "time_limit_seconds": float (default 600)
         """
         self.ground_sensor_locations = []
@@ -3054,7 +3037,8 @@ class SensorPlacementMaxCoverageGaussianTimeMaskedBudget(SensorPlacementStrategy
         mask_filename    = custom_initialization_parameters.get("mask_filename", None)
         recompute_kernel = custom_initialization_parameters.get("recompute_kernel", False)
         max_battery      = automatic_initialization_parameters["max_battery_time"]
-        n_steps          = custom_initialization_parameters.get("n_steps", max_battery)
+        patrol_range     = max_battery // 2
+        n_steps          = custom_initialization_parameters.get("n_steps", patrol_range)
 
         budget_millions  = custom_initialization_parameters["budget_millions"]
         cost_sensor      = custom_initialization_parameters.get("cost_sensor", 0.1)
@@ -3064,9 +3048,9 @@ class SensorPlacementMaxCoverageGaussianTimeMaskedBudget(SensorPlacementStrategy
         burnmap = load_scenario(custom_initialization_parameters["burnmap_filename"])
         T, N, M = burnmap.shape
 
-        kernel = count_paths_convolution(N, M, max_battery, 10)
-        kernel_size_x = max_battery
-        kernel_size_y = max_battery
+        kernel = count_paths_convolution(N, M, patrol_range)
+        kernel_size_x = patrol_range
+        kernel_size_y = patrol_range
 
         print(f"SensorPlacementMaxCoverageGaussianTimeMaskedBudget: "
               f"budget={budget_millions}M, costs=sensor:{cost_sensor}M station:{cost_station}M drone:{cost_drone}M, "
