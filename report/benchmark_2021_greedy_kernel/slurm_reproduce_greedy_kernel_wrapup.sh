@@ -10,11 +10,9 @@
 # Triggered by afterany on the array job: runs even if some tasks failed.
 # Copies whichever budget figures exist and rebuilds the PDF from those.
 
-set -o pipefail   # -e and -u intentionally omitted: we log failures and continue
-
-# System profile scripts (e.g. /etc/profile.d/256term.sh) reference variables
-# like $XTERM_VERSION that may be unset in a batch job. Keep -u off for the
-# whole wrapup since we also intentionally allow unset vars in failure checks.
+# Load environment first (no strict mode — system profile scripts reference
+# unset vars and may return non-zero; -e also intentionally omitted so that
+# partial failures are logged rather than silently aborting the wrapup).
 source /etc/profile
 module load community-modules
 module load miniforge/25.11.0-0
@@ -25,14 +23,14 @@ conda activate wf
 
 export PATH="${HOME}/.local/bin:$PATH"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPORT_DIR="${PROJECT_ROOT}/report"
 SUBREPORT_DIR="${REPORT_DIR}/benchmark_2021_greedy_kernel"
 LOG_DIR="${PROJECT_ROOT}/California2021Dataset/logs"
 
 cd "${PROJECT_ROOT}"
-mkdir -p logs
+mkdir -p "${PROJECT_ROOT}/logs"
 
 FAILED=0
 
