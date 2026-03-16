@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -l
 #SBATCH --job-name=wf_greedy_wrapup
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
@@ -7,22 +7,25 @@
 
 # Triggered by afterany on the array job: runs even if some tasks failed.
 # Copies whichever budget figures exist and rebuilds the PDF from those.
-
-set -o pipefail   # -e and -u intentionally omitted: we log failures and continue
+#
+# -e and -u intentionally omitted from set: we log failures and continue.
+# PROJECT_ROOT uses SLURM_SUBMIT_DIR (not BASH_SOURCE) for the same reason
+# as the other scripts in this chain.
 
 source /etc/profile.d/modules.sh
 module load anaconda/Python-ML-2025a
 
 export PATH="${HOME}/.local/bin:$PATH"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+set -o pipefail
+
+PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
 REPORT_DIR="${PROJECT_ROOT}/report"
 SUBREPORT_DIR="${REPORT_DIR}/benchmark_2021_greedy_kernel"
 LOG_DIR="${PROJECT_ROOT}/California2021Dataset/logs"
 
 cd "${PROJECT_ROOT}"
-mkdir -p logs
+mkdir -p "${PROJECT_ROOT}/logs"
 
 FAILED=0
 

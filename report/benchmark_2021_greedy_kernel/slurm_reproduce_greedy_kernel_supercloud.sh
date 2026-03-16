@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -l
 #SBATCH --job-name=wf_greedy_stationmax
 #SBATCH --output=logs/%x-%A_%a.out
 #SBATCH --error=logs/%x-%A_%a.err
@@ -8,8 +8,10 @@
 
 # CPUs: each array task gets 32. PDF: use submit_greedy_benchmark_supercloud.sh to run
 # the full chain (preprocess → array → wrapup) with proper Slurm dependencies.
-
-set -euo pipefail
+#
+# #!/bin/bash -l  (login shell) ensures MODULEPATH is initialized on compute
+# nodes. PROJECT_ROOT uses SLURM_SUBMIT_DIR instead of BASH_SOURCE because
+# Slurm copies scripts to a temp path before execution.
 
 source /etc/profile.d/modules.sh
 module load anaconda/Python-ML-2025a
@@ -19,7 +21,7 @@ module load gurobi
 
 export PATH="${HOME}/.local/bin:$PATH"
 
-mkdir -p logs
+set -euo pipefail
 
 # Map array index -> (budget, time_limit)
 BUDGETS=(20 100 500)
@@ -32,8 +34,8 @@ TIME_LIMIT="${TIME_LIMITS[$IDX]}"
 echo "SLURM job $SLURM_JOB_ID, array index $IDX"
 echo "Running greedy-kernel StationMax benchmark for budget=${BUDGET}M, time_limit=${TIME_LIMIT}s"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
+mkdir -p "${PROJECT_ROOT}/logs"
 
 REPORT_DIR="${PROJECT_ROOT}/report"
 LOG_DIR="${PROJECT_ROOT}/California2021Dataset/logs"

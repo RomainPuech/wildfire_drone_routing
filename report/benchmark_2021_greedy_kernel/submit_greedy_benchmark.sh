@@ -14,11 +14,13 @@ cd "${PROJECT_ROOT}"
 
 mkdir -p logs
 
-PREPROCESS_JOB=$(sbatch "${SCRIPT_DIR}/slurm_preprocess_benchmark_2021.sh" | awk '{print $4}')
+# --chdir ensures SLURM_SUBMIT_DIR inside each job equals PROJECT_ROOT,
+# regardless of the compute node's default working directory.
+PREPROCESS_JOB=$(sbatch --chdir="${PROJECT_ROOT}" "${SCRIPT_DIR}/slurm_preprocess_benchmark_2021.sh" | awk '{print $4}')
 echo "Submitted preprocessing job ${PREPROCESS_JOB}"
 
-ARRAY_JOB=$(sbatch --dependency=afterok:${PREPROCESS_JOB} "${SCRIPT_DIR}/slurm_reproduce_greedy_kernel.sh" | awk '{print $4}')
+ARRAY_JOB=$(sbatch --chdir="${PROJECT_ROOT}" --dependency=afterok:${PREPROCESS_JOB} "${SCRIPT_DIR}/slurm_reproduce_greedy_kernel.sh" | awk '{print $4}')
 echo "Submitted array job ${ARRAY_JOB} (depends on preprocessing ${PREPROCESS_JOB})"
 
-WRAPUP_JOB=$(sbatch --dependency=afterany:${ARRAY_JOB} "${SCRIPT_DIR}/slurm_reproduce_greedy_kernel_wrapup.sh" | awk '{print $4}')
+WRAPUP_JOB=$(sbatch --chdir="${PROJECT_ROOT}" --dependency=afterany:${ARRAY_JOB} "${SCRIPT_DIR}/slurm_reproduce_greedy_kernel_wrapup.sh" | awk '{print $4}')
 echo "Submitted wrap-up job ${WRAPUP_JOB} (runs after array finishes, even on partial failure)"
