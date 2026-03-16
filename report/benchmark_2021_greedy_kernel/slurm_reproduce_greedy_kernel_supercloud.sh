@@ -16,7 +16,6 @@
 source /etc/profile.d/modules.sh
 module load anaconda/Python-ML-2025a
 module load julia
-module load mpi/openmpi-5.0.5
 module load gurobi
 
 export PATH="${HOME}/.local/bin:$PATH"

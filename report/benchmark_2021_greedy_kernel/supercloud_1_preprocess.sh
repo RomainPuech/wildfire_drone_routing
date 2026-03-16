@@ -5,5 +5,8 @@
 
 source /etc/profile.d/modules.sh
 module load anaconda/Python-ML-2025a
+module load julia
+module load mpi/openmpi-5.0.7
+module load gurobi
 
 python -u preprocess_benchmark_2021.py
