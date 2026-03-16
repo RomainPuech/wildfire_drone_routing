@@ -10,8 +10,11 @@
 # Triggered by afterany on the array job: runs even if some tasks failed.
 # Copies whichever budget figures exist and rebuilds the PDF from those.
 
-set -uo pipefail   # -e intentionally omitted: we log failures and continue
+set -o pipefail   # -e and -u intentionally omitted: we log failures and continue
 
+# System profile scripts (e.g. /etc/profile.d/256term.sh) reference variables
+# like $XTERM_VERSION that may be unset in a batch job. Keep -u off for the
+# whole wrapup since we also intentionally allow unset vars in failure checks.
 source /etc/profile
 module load community-modules
 module load miniforge/25.11.0-0

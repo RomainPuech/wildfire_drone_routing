@@ -10,8 +10,12 @@
 # Runs before the budget array job so that shared .npy files are written
 # exactly once, avoiding race conditions between parallel workers.
 
-set -euo pipefail
+set -eo pipefail
 
+# System profile scripts (e.g. /etc/profile.d/256term.sh) reference variables
+# like $XTERM_VERSION that may be unset in a batch job. Disable -u while
+# sourcing them, then re-enable it for the rest of the script.
+set +u
 source /etc/profile
 module load community-modules
 module load miniforge/25.11.0-0
@@ -19,6 +23,7 @@ module load miniforge/25.11.0-0
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate wf
+set -u
 
 export PATH="${HOME}/.local/bin:$PATH"
 

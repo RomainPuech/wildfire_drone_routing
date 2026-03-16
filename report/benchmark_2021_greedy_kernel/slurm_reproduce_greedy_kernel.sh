@@ -11,8 +11,12 @@
 # CPUs: each array task gets 32. PDF: use submit_greedy_benchmark.sh to run array + wrap-up after all finish.
 # Submit from project root: sbatch report/benchmark_2021_greedy_kernel/slurm_reproduce_greedy_kernel.sh
 
-set -euo pipefail
+set -eo pipefail
 
+# System profile scripts (e.g. /etc/profile.d/256term.sh) reference variables
+# like $XTERM_VERSION that may be unset in a batch job. Disable -u while
+# sourcing them, then re-enable it for the rest of the script.
+set +u
 source /etc/profile
 module load community-modules
 module load miniforge/25.11.0-0
@@ -22,6 +26,7 @@ module load gurobi
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate wf
+set -u
 
 export PATH="${HOME}/.local/bin:$PATH"
 
