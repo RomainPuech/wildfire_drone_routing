@@ -70,6 +70,7 @@ function NEW_SENSOR_STRATEGY(risk_pertime_file, N_grounds, N_charging)
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     
     # Variables 
     x = @variable(model, [i in I_prime], Bin) # ground sensor variables
@@ -151,6 +152,7 @@ function Max_Coverage_Kernel(static_map_file, N_grounds, N_charging, n_drones, k
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     
     # Variables 
     xg = @variable(model, [i in I_prime], Bin) # ground sensor variables
@@ -607,6 +609,7 @@ function Max_Coverage_Kernel_Masked(static_map_file, N_grounds, N_charging, n_dr
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     if time_limit_seconds > 0
         set_time_limit_sec(model, time_limit_seconds)
         println("Gurobi time limit set to ", time_limit_seconds, " seconds")
@@ -758,6 +761,7 @@ function Max_Coverage_Kernel_WithAllocation(static_map_file, N_grounds, N_chargi
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     
     # Variables 
     xg = @variable(model, [i in I_prime], Bin) # ground sensor variables
@@ -958,6 +962,7 @@ function Max_Coverage_Kernel_Masked_WithAllocation(static_map_file, N_grounds, N
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     if time_limit_seconds > 0
         set_time_limit_sec(model, time_limit_seconds)
         println("Gurobi time limit set to ", time_limit_seconds, " seconds")
@@ -1215,6 +1220,7 @@ function Max_Coverage_Kernel_Masked_Budget(static_map_file, budget_millions, cos
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     if time_limit_seconds > 0
         set_time_limit_sec(model, time_limit_seconds)
         println("Gurobi time limit set to ", time_limit_seconds, " seconds")
@@ -1526,6 +1532,7 @@ function Max_Coverage_Kernel_Masked_Budget_StationMax(static_map_file, budget_mi
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     if time_limit_seconds > 0
         set_time_limit_sec(model, time_limit_seconds)
         println("Gurobi time limit set to ", time_limit_seconds, " seconds")
@@ -1798,6 +1805,7 @@ function Max_Coverage_Kernel_Masked_Budget_StationMax_Uniform(static_map_file, b
 
     model = Model(Gurobi.Optimizer)
     set_silent(model)
+    set_optimizer_attribute(model, "Threads", parse(Int, get(ENV, "SLURM_CPUS_PER_TASK", "32")))
     if time_limit_seconds > 0
         set_time_limit_sec(model, time_limit_seconds)
         println("Gurobi time limit set to ", time_limit_seconds, " seconds")
