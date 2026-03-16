@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -l
 #SBATCH -p sched_mit_sloan_batch
 #SBATCH --job-name=wf_preprocess
 #SBATCH --output=logs/%x-%j.out
@@ -9,9 +9,12 @@
 
 # Runs before the budget array job so that shared .npy files are written
 # exactly once, avoiding race conditions between parallel workers.
+#
+# #!/bin/bash -l  (login shell) ensures MODULEPATH is initialized on compute
+# nodes, matching the behavior of an interactive login session.
+# PROJECT_ROOT uses SLURM_SUBMIT_DIR (set by Slurm to the sbatch call dir)
+# rather than BASH_SOURCE, because Slurm copies scripts to /var/spool/... .
 
-# Load environment first (no strict mode yet — system profile scripts
-# reference unset vars and may return non-zero; matches the known-working example).
 source /etc/profile
 module load community-modules
 module load miniforge/25.11.0-0
@@ -25,10 +28,8 @@ export PATH="${HOME}/.local/bin:$PATH"
 # Strict mode on now that the environment is fully set up.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
 cd "${PROJECT_ROOT}"
-
 mkdir -p "${PROJECT_ROOT}/logs"
 
 echo "Running preprocessing step..."

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -l
 #SBATCH -p sched_mit_sloan_batch
 #SBATCH --job-name=wf_greedy_wrapup
 #SBATCH --output=logs/%x-%j.out
@@ -9,10 +9,10 @@
 
 # Triggered by afterany on the array job: runs even if some tasks failed.
 # Copies whichever budget figures exist and rebuilds the PDF from those.
+#
+# #!/bin/bash -l  (login shell) ensures MODULEPATH is initialized.
+# -e intentionally omitted so partial failures are logged, not silently aborted.
 
-# Load environment first (no strict mode — system profile scripts reference
-# unset vars and may return non-zero; -e also intentionally omitted so that
-# partial failures are logged rather than silently aborting the wrapup).
 source /etc/profile
 module load community-modules
 module load miniforge/25.11.0-0
@@ -23,8 +23,7 @@ conda activate wf
 
 export PATH="${HOME}/.local/bin:$PATH"
 
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
 REPORT_DIR="${PROJECT_ROOT}/report"
 SUBREPORT_DIR="${REPORT_DIR}/benchmark_2021_greedy_kernel"
 LOG_DIR="${PROJECT_ROOT}/California2021Dataset/logs"
