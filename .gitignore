@@ -47,3 +47,5 @@ code/dataset_creation/nature_dataset_creation/data/*
 California2021Dataset_Day1*
 California2021Dataset*.npy
 California2021Dataset*
+logs/*
+*__MACOSX/*
