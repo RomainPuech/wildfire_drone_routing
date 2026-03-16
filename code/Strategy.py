@@ -3259,6 +3259,107 @@ class SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMax(SensorPlaceme
         }
 
 
+class SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMaxUniform(SensorPlacementStrategy):
+    strategy_name = "SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMaxUniform"
+    def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        """
+        Budget-constrained StationMax placement where different stations do not
+        add coverage, but same-station multi-drone coverage follows a mask-aware
+        uniform kernel over the station's reachable feasible zone.
+        """
+        self.ground_sensor_locations = []
+        self.charging_station_locations = []
+
+        if "burnmap_filename" not in custom_initialization_parameters:
+            raise ValueError("burnmap_filename is not defined")
+        if "budget_millions" not in custom_initialization_parameters:
+            raise ValueError("budget_millions is not defined")
+
+        mask_filename = custom_initialization_parameters.get("mask_filename", None)
+        max_battery = automatic_initialization_parameters["max_battery_time"]
+        one_way_reach = max_battery // 2
+        n_steps = custom_initialization_parameters.get("n_steps", one_way_reach)
+        recompute_kernel = False
+        if custom_initialization_parameters.get("recompute_kernel", False):
+            print("Warning: recompute_kernel is ignored for StationMaxUniform; using mask-aware uniform station kernels.", flush=True)
+
+        budget_millions = custom_initialization_parameters["budget_millions"]
+        cost_sensor = custom_initialization_parameters.get("cost_sensor", 0.1)
+        cost_station = custom_initialization_parameters.get("cost_station", 0.15)
+        cost_drone = custom_initialization_parameters.get("cost_drone", 0.05)
+
+        burnmap = load_scenario(custom_initialization_parameters["burnmap_filename"])
+        T, N, M = burnmap.shape
+
+        kernel = count_paths_convolution(N, M, one_way_reach)
+        kernel_size_x = max_battery
+        kernel_size_y = max_battery
+
+        max_drones_per_station = custom_initialization_parameters.get(
+            "max_drones_per_station", max_battery
+        )
+        candidate_percentile = custom_initialization_parameters.get(
+            "candidate_percentile",
+            0.50 if abs(budget_millions - 100.0) < 1e-9 else 0.80,
+        )
+        print(f"SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMaxUniform: "
+              f"budget={budget_millions}M, costs=sensor:{cost_sensor}M station:{cost_station}M drone:{cost_drone}M, "
+              f"one_way_reach={one_way_reach}, max_drones_per_station={max_drones_per_station}, "
+              f"candidate_percentile={candidate_percentile}, "
+              f"recompute_kernel={recompute_kernel}, n_steps={n_steps}")
+        time_limit = custom_initialization_parameters.get("time_limit_seconds", 600.0)
+        x_vars, y_vars, drone_allocations = jl.Max_Coverage_Kernel_Masked_Budget_StationMax_Uniform(
+            custom_initialization_parameters["burnmap_filename"],
+            budget_millions,
+            cost_sensor,
+            cost_station,
+            cost_drone,
+            kernel,
+            kernel_size_x,
+            kernel_size_y,
+            mask_filename,
+            recompute_kernel,
+            n_steps,
+            time_limit,
+            max_drones_per_station,
+            candidate_percentile,
+        )
+
+        self.ground_sensor_locations = list(x_vars)
+        self.charging_station_locations = list(y_vars)
+        self.drones_per_charging_station = [int(x) for x in drone_allocations]
+
+        self.n_ground_sensors = len(self.ground_sensor_locations)
+        self.n_charging_stations = len(self.charging_station_locations)
+        self.n_drones = int(sum(self.drones_per_charging_station)) if self.drones_per_charging_station else 0
+        self.budget_millions = budget_millions
+
+        budget_used = (self.n_ground_sensors * cost_sensor
+                       + self.n_charging_stations * cost_station
+                       + self.n_drones * cost_drone)
+        print(f"Budget allocation: {self.n_ground_sensors} sensors, "
+              f"{self.n_charging_stations} stations, {self.n_drones} drones")
+        print(f"Budget used: {budget_used:.2f}M / {budget_millions}M")
+        print("ground sensor locations")
+        print(self.ground_sensor_locations)
+        print("charging station locations")
+        print(self.charging_station_locations)
+        print("drones per charging station")
+        print(self.drones_per_charging_station)
+
+    def get_drone_allocation(self):
+        """Returns the number of drones allocated to each charging station."""
+        return self.drones_per_charging_station
+
+    def get_device_counts(self):
+        """Returns the number of each device type chosen by the optimiser."""
+        return {
+            "n_ground_sensors": self.n_ground_sensors,
+            "n_charging_stations": self.n_charging_stations,
+            "n_drones": self.n_drones,
+        }
+
+
 
 
 

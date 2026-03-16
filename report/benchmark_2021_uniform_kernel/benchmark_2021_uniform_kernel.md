@@ -141,27 +141,31 @@ per strategy (`log_key="pyrologix"`).
 
 | | **\$20M** | **\$100M** | **\$500M** |
 |---|---:|---:|---:|
-| Ground sensors | 0 | 0 | 2187 |
-| Charging stations | 40 | 200 | 375 |
-| Drones | 280 | 1400 | 2379 |
-| Budget used | \$20.00M | \$100.00M | \$393.90M |
-| MIP gap | 0.0% | 0.01% | 0.0% |
-| Solve time | 2.4 s | 19.6 s | 2.6 s |
+| Ground sensors | 0 | 0 | 12 |
+| Charging stations | 40 | 200 | 1183 |
+| Drones | 280 | 1400 | 2016 |
+| Budget used | \$20.00M | \$100.00M | \$279.45M |
+| MIP gap | 0.0% | 0.01% | 0.01% |
+| Solve time | 2.3 s | 19.6 s | 12.4 s |
 | Clusters | 9 | 1 | 1 |
 
 All three placements are **provably optimal** (MIP gap $\leq$ 0.01\%).
+For budgets above \$300M, the placement objective now includes a small
+regularization term `-0.1 × budget_used`, so the 500M run prefers lower-cost
+solutions when coverage is already saturated.
 
 ## 5.2 Drone allocation
 
 | | **\$20M** | **\$100M** | **\$500M** |
 |---|---|---|---|
-| Stations with 7 drones | 40 (all) | 200 (all) | 316 |
-| Stations with 0 drones | 0 | 0 | 10 |
-| Stations with 1–6 drones | 0 | 0 | 49 |
+| Stations with 7 drones | 40 (all) | 200 (all) | 11 |
+| Stations with 0 drones | 0 | 0 | 0 |
+| Stations with 1–6 drones | 0 | 0 | 1172 |
 
 At \$20M and \$100M, the ILP assigns exactly 7 drones to every station (full zone
-saturation).  At \$500M, the budget saturates — not all stations need 7 drones
-because the remaining cells are already covered by ground sensors.
+saturation).  At \$500M, the budget regularization spreads the solution across
+many stations with mostly small per-station drone counts instead of forcing
+full 7-drone saturation everywhere.
 
 ## 5.3 Coverage efficiency (100M, before vs. after fix)
 
@@ -187,11 +191,11 @@ cost-effective than ground sensors.  The 9 clusters target the highest-risk area
 covering 85.3\% of all feasible cells with near-zero overlap.  All stations
 merge into one connected cluster.
 
-**\$500M:** The optimizer saturates at \$393.9M — it cannot usefully spend the
-remaining \$106.1M because all worthwhile placements are exhausted.  2,187
-ground sensors blanket the interior of the covered zone, providing guaranteed
-single-cell detection.  375 stations with 2,379 drones cover virtually all
-burnable area.
+**\$500M:** With the new budget regularization active above \$300M, the optimizer
+now stops at \$279.45M instead of spending the full budget. The selected layout
+uses only 12 ground sensors, together with 1,183 charging stations and 2,016
+drones, indicating that near-maximal coverage can be maintained without the
+previous dense blanket of ground sensors.
 
 \newpage
 
@@ -241,7 +245,7 @@ reach on a single charge).
 
 ### Data scale (1 km/cell)
 
-![500M placement — data scale.  1 cluster, 375 stations, 2379 drones, 2187 ground sensors.  Budget saturates at \$393.9M.](california_2021_sensor_clusters_500M.png){ width=95% }
+![500M placement — data scale.  1 cluster, 1183 stations, 2016 drones, 12 ground sensors.  Budget used: \$279.45M.](california_2021_sensor_clusters_500M.png){ width=95% }
 
 ### Operational scale (5 km/cell)
 
