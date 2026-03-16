@@ -1,25 +1,16 @@
-# How to run
+# How to run (MIT Supercloud)
 
-Run from the **project root** (`wildfire_drone_routing/`).
-
-## Engaging cluster
-
-```bash
-bash report/benchmark_2021_greedy_kernel/submit_greedy_benchmark.sh
-```
-
-## MIT Supercloud
+Submit all three scripts from the **project root** (`wildfire_drone_routing/`),
+waiting for each job to finish before submitting the next.
 
 ```bash
-bash report/benchmark_2021_greedy_kernel/submit_greedy_benchmark_supercloud.sh
+sbatch report/benchmark_2021_greedy_kernel/supercloud_1_preprocess.sh
+# wait for it to finish, then:
+sbatch report/benchmark_2021_greedy_kernel/supercloud_2_benchmarks.sh
+# wait for it to finish, then:
+sbatch report/benchmark_2021_greedy_kernel/supercloud_3_wrapup.sh
 ```
 
----
-
-Both submit scripts run the same 3-job chain:
-
-1. **preprocess** – computes shared `.npy` files once (≤ 15 min, serial)
-2. **array[0-2]** – runs 20M / 100M / 500M placements in parallel (≤ 1 h each), starts after step 1
-3. **wrapup** – copies figures and builds the PDF, starts after the array finishes (even on partial failure)
-
-Logs are written to `logs/` in the project root.
+- **Step 1** – pre-computes the shared `.npy` rescaled files (~5 min)
+- **Step 2** – runs 20M, 100M, 500M placements sequentially and generates plots (~1–2 h)
+- **Step 3** – copies figures into the report folder and builds the PDF
