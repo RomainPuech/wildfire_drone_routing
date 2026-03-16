@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
+#SBATCH -p sched_mit_sloan_batch
 #SBATCH --job-name=wf_greedy_stationmax
-#SBATCH --output=logs/wf_greedy_stationmax_%A_%a.out
-#SBATCH --error=logs/wf_greedy_stationmax_%A_%a.err
+#SBATCH --output=logs/%x-%A_%a.out
+#SBATCH --error=logs/%x-%A_%a.err
 #SBATCH --array=0-2
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
-#SBATCH --time=02:00:00
-#SBATCH --partition=compute
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=64G
+#SBATCH --time=1:00:00
 
-# Optional: load your modules / env here
-# module load anaconda
-# source activate wf
-
+# CPUs: each array task gets 32. PDF: use submit_greedy_benchmark.sh to run array + wrap-up after all finish.
 # Submit from project root: sbatch report/benchmark_2021_greedy_kernel/slurm_reproduce_greedy_kernel.sh
-# Or from this folder: sbatch slurm_reproduce_greedy_kernel.sh
-# Slurm logs go to logs/ relative to the directory from which you run sbatch.
 
 set -euo pipefail
+
+source /etc/profile
+module load community-modules
+module load miniforge/25.11.0-0
+module load julia/1.9.1
+module load gurobi
+
+CONDA_BASE=$(conda info --base)
+source "$CONDA_BASE/etc/profile.d/conda.sh"
+conda activate wf
+
+export PATH="${HOME}/.local/bin:$PATH"
 
 mkdir -p logs
 
@@ -35,9 +41,6 @@ echo "Running greedy-kernel StationMax benchmark for budget=${BUDGET}M, time_lim
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-PYTHON_JL="/opt/anaconda3/envs/wf/bin/python-jl"
-PYTHON_BIN="python"
-
 REPORT_DIR="${PROJECT_ROOT}/report"
 LOG_DIR="${PROJECT_ROOT}/California2021Dataset/logs"
 
@@ -47,14 +50,14 @@ cd "${PROJECT_ROOT}"
 rm -f "${LOG_DIR}/sensor_alloc_GaussianBudget${BUDGET}M_StationMax_261x161_mean.json"
 
 # 1) Run the placement benchmark for this budget
-"${PYTHON_JL}" "${PROJECT_ROOT}/test_budget_placement_station_max_2021.py" \
+python-jl "${PROJECT_ROOT}/test_budget_placement_station_max_2021.py" \
   --budget "${BUDGET}" \
   --time-limit "${TIME_LIMIT}"
 
 # 2) Generate the plots for this budget
 TAG="_greedy_${BUDGET}M"
 
-"${PYTHON_BIN}" "${PROJECT_ROOT}/visualize_sensor_placement_2021.py" \
+python "${PROJECT_ROOT}/visualize_sensor_placement_2021.py" \
   "${LOG_DIR}/sensor_alloc_GaussianBudget${BUDGET}M_StationMax_261x161_mean.json" \
   --scale both \
   --tag "${TAG}"
