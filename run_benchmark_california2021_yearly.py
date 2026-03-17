@@ -794,42 +794,43 @@ def main(budget_millions: float = 20.0):
 
     suffix = f"_rescaled_{rescaled_N}x{rescaled_M}_{operational_substeps}substeps.npy"
 
-    rescaled_mask = pool_mask(mask, coverage_w,
-                              mode=SIMULATION_PARAMETERS["mask_pooling_mode"])
     rescaled_mask_path = str(MASK_PATH).replace(".npy", suffix)
-    np.save(rescaled_mask_path, rescaled_mask)
+    if not Path(rescaled_mask_path).exists():
+        rescaled_mask = pool_mask(mask, coverage_w,
+                                  mode=SIMULATION_PARAMETERS["mask_pooling_mode"])
+        np.save(rescaled_mask_path, rescaled_mask)
 
     # Apply data-scale mask BEFORE pooling so that non-California cells (which
     # can have very high WFPI values from neighbouring states) do not contaminate
     # the block mean for border opt-cells.
     avg_map_masked = avg_map * mask          # zero out non-CA cells at 1km scale
 
-    if SENSOR_POOLING == "proba":
-        # Treat Pyrologix/255 as per-cell fire probability; pool as P(at least one cell fires).
-        rescaled_placement_1frame = pool_burnmap_proba_at_least_one(avg_map_masked / 255.0, coverage_w)
-        # Re-normalise: probabilities saturate near 1 for most cells.
-        # Stretch valid (non-zero) cells to [0, 255] to recover spatial contrast.
-        nz = rescaled_placement_1frame > 0
-        if nz.any():
-            p_min, p_max = rescaled_placement_1frame[nz].min(), rescaled_placement_1frame[nz].max()
-            if p_max > p_min:
-                rescaled_placement_1frame = np.where(
-                    nz,
-                    (rescaled_placement_1frame - p_min) / (p_max - p_min) * 255.0,
-                    0.0,
-                )
-    else:
-        rescaled_placement_1frame = pool_burnmap_mean(avg_map_masked, coverage_w)  # (1, rescaled_N, rescaled_M)
-
-    # ── Sensor placement burn map: tiled to operational_substeps frames ───────
-    rescaled_avg = np.repeat(rescaled_placement_1frame, operational_substeps, axis=0) / operational_substeps
     rescaled_avg_path = str(PLACEMENT_MAP).replace(".npy", f"_{SENSOR_POOLING}{suffix}")
-    np.save(rescaled_avg_path, rescaled_avg)
-
-    # ── Routing burn map: single frame, passed with burnmap_type="static" ─────
-    # Strategy will tile it 200× internally → sufficient frames for all routing steps.
     rescaled_routing_path = str(PLACEMENT_MAP).replace(".npy", f"_{SENSOR_POOLING}_routing{suffix}")
-    np.save(rescaled_routing_path, rescaled_placement_1frame)
+
+    if not Path(rescaled_avg_path).exists():
+        if SENSOR_POOLING == "proba":
+            # Treat Pyrologix/255 as per-cell fire probability; pool as P(at least one cell fires).
+            rescaled_placement_1frame = pool_burnmap_proba_at_least_one(avg_map_masked / 255.0, coverage_w)
+            # Re-normalise: probabilities saturate near 1 for most cells.
+            nz = rescaled_placement_1frame > 0
+            if nz.any():
+                p_min, p_max = rescaled_placement_1frame[nz].min(), rescaled_placement_1frame[nz].max()
+                if p_max > p_min:
+                    rescaled_placement_1frame = np.where(
+                        nz,
+                        (rescaled_placement_1frame - p_min) / (p_max - p_min) * 255.0,
+                        0.0,
+                    )
+        else:
+            rescaled_placement_1frame = pool_burnmap_mean(avg_map_masked, coverage_w)  # (1, rescaled_N, rescaled_M)
+        rescaled_avg = np.repeat(rescaled_placement_1frame, operational_substeps, axis=0) / operational_substeps
+        np.save(rescaled_avg_path, rescaled_avg)
+    else:
+        rescaled_placement_1frame = np.load(rescaled_avg_path)[:1] * operational_substeps
+
+    if not Path(rescaled_routing_path).exists():
+        np.save(rescaled_routing_path, rescaled_placement_1frame)
 
     print(f"Sensor/routing pooling mode: {SENSOR_POOLING} (Pyrologix)", flush=True)
 

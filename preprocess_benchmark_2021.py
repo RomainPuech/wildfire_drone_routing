@@ -100,20 +100,32 @@ def main():
     rescaled_avg_path = Path(str(PLACEMENT_MAP).replace(".npy", f"_{SENSOR_POOLING}{suffix}"))
     if rescaled_avg_path.exists():
         print(f"Rescaled risk map already exists, skipping: {rescaled_avg_path}", flush=True)
+        rescaled_placement_1frame = np.load(str(rescaled_avg_path))[:1] * operational_substeps
     else:
         print(f"Computing rescaled risk map -> {rescaled_avg_path}", flush=True)
         avg_map = np.load(str(PLACEMENT_MAP))
         avg_map_masked = avg_map * mask
-        rescaled_avg = pool_burnmap_mean(avg_map_masked, coverage_w)
-        rescaled_avg = np.repeat(rescaled_avg, operational_substeps, axis=0) / operational_substeps
+        rescaled_placement_1frame = pool_burnmap_mean(avg_map_masked, coverage_w)
+        rescaled_avg = np.repeat(rescaled_placement_1frame, operational_substeps, axis=0) / operational_substeps
         tmp = rescaled_avg_path.with_suffix(".tmp.npy")
         np.save(str(tmp), rescaled_avg)
         tmp.rename(rescaled_avg_path)
         print("Done.", flush=True)
 
+    rescaled_routing_path = Path(str(PLACEMENT_MAP).replace(".npy", f"_{SENSOR_POOLING}_routing{suffix}"))
+    if rescaled_routing_path.exists():
+        print(f"Rescaled routing map already exists, skipping: {rescaled_routing_path}", flush=True)
+    else:
+        print(f"Computing rescaled routing map -> {rescaled_routing_path}", flush=True)
+        tmp = rescaled_routing_path.with_suffix(".tmp.npy")
+        np.save(str(tmp), rescaled_placement_1frame)
+        tmp.rename(rescaled_routing_path)
+        print("Done.", flush=True)
+
     print("\nPreprocessing complete.", flush=True)
     print(f"  Rescaled mask:     {rescaled_mask_path}", flush=True)
     print(f"  Rescaled risk map: {rescaled_avg_path}", flush=True)
+    print(f"  Rescaled routing:  {rescaled_routing_path}", flush=True)
 
 
 if __name__ == "__main__":

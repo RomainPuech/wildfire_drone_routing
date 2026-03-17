@@ -14,21 +14,21 @@ LOG_DIR="${PROJECT_ROOT}/California2021Dataset/logs"
 run_budget() {
   local budget="$1"
   local time_limit="$2"
-  local tag="_greedy_${budget}M"
+  local tag="_greedy_uniform_${budget}M"
 
   echo
   echo "======================================================================"
-  echo "Running greedy-kernel StationMax benchmark for ${budget}M (time limit: ${time_limit}s)"
+  echo "Running greedy-uniform StationMax benchmark for ${budget}M (time limit: ${time_limit}s)"
   echo "======================================================================"
 
-  rm -f "${LOG_DIR}/sensor_alloc_GaussianBudget${budget}M_StationMax_261x161_mean.json"
+  rm -f "${LOG_DIR}/sensor_alloc_GaussianBudget${budget}M_StationMaxGreedyUniform_261x161_mean.json"
 
-  "${PYTHON_JL}" "${PROJECT_ROOT}/test_budget_placement_station_max_2021.py" \
+  "${PYTHON_JL}" "${PROJECT_ROOT}/test_budget_placement_station_max_greedy_uniform_2021.py" \
     --budget "${budget}" \
     --time-limit "${time_limit}"
 
   "${PYTHON_BIN}" "${PROJECT_ROOT}/visualize_sensor_placement_2021.py" \
-    "${LOG_DIR}/sensor_alloc_GaussianBudget${budget}M_StationMax_261x161_mean.json" \
+    "${LOG_DIR}/sensor_alloc_GaussianBudget${budget}M_StationMaxGreedyUniform_261x161_mean.json" \
     --scale both \
     --tag "${tag}"
 }
@@ -47,12 +47,12 @@ echo
 echo "Copying figures into subreport folder..."
 cp \
   "${REPORT_DIR}/benchmark_fire_locations_budget_2021.png" \
-  "${REPORT_DIR}/california_2021_sensor_clusters_greedy_20M.png" \
-  "${REPORT_DIR}/california_2021_sensor_clusters_opt_greedy_20M.png" \
-  "${REPORT_DIR}/california_2021_sensor_clusters_greedy_100M.png" \
-  "${REPORT_DIR}/california_2021_sensor_clusters_opt_greedy_100M.png" \
-  "${REPORT_DIR}/california_2021_sensor_clusters_greedy_500M.png" \
-  "${REPORT_DIR}/california_2021_sensor_clusters_opt_greedy_500M.png" \
+  "${REPORT_DIR}/california_2021_sensor_clusters_greedy_uniform_20M.png" \
+  "${REPORT_DIR}/california_2021_sensor_clusters_opt_greedy_uniform_20M.png" \
+  "${REPORT_DIR}/california_2021_sensor_clusters_greedy_uniform_100M.png" \
+  "${REPORT_DIR}/california_2021_sensor_clusters_opt_greedy_uniform_100M.png" \
+  "${REPORT_DIR}/california_2021_sensor_clusters_greedy_uniform_500M.png" \
+  "${REPORT_DIR}/california_2021_sensor_clusters_opt_greedy_uniform_500M.png" \
   "${SUBREPORT_DIR}/"
 
 echo
