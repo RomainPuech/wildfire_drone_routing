@@ -460,7 +460,7 @@ function build_station_uniform_kernels(station::Tuple{Int,Int}, mask, N::Int, M:
 end
 
 
-function build_station_greedy_uniform_kernels(station::Tuple{Int,Int}, mask, N::Int, M::Int, reach::Int, kmax::Int, static_map)
+function build_station_greedy_uniform_kernels(station::Tuple{Int,Int}, mask, N::Int, M::Int, reach::Int, kmax::Int, static_map, full_battery::Int)
     reachable_cells = reachable_masked_cells_within_reach(station, mask, N, M, reach)
     n_reachable = length(reachable_cells)
     if n_reachable == 0
@@ -562,6 +562,9 @@ function build_station_greedy_uniform_kernels(station::Tuple{Int,Int}, mask, N::
     for level in 1:kmax
         cum_risk += risk_per_level[level]
         frac = min(1.0, cum_risk / total_risk)
+        if level == full_battery
+            frac = 1.0
+        end
         increments[level] = frac - prev_frac
         prev_frac = frac
     end
@@ -2145,7 +2148,7 @@ function Max_Coverage_Kernel_Masked_Budget_StationMax_GreedyUniform(static_map_f
     for station in I_second
         local_pairs = Tuple{Tuple{Int,Int}, Tuple{Int,Int}}[]
         first_cover_level, delta_levels = build_station_greedy_uniform_kernels(
-            station, mask, N, M, one_way_reach, max_drones_per_station, static_map
+            station, mask, N, M, one_way_reach, max_drones_per_station, static_map, kernel_size_x
         )
 
         for (cell, first_level) in first_cover_level
