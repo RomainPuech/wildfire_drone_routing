@@ -741,3 +741,275 @@ def create_video_scenario_burnmap(
             writer.append_data(img)
     writer.close()
     print(f"Video saved at: {output_path}")
+
+
+def _pyrologix_imshow_01_bottom_left(ax, z_hw, valid_mask_hw, invalid_rgba=(1.0, 1.0, 1.0, 1.0)):
+    """
+    Pyrologix heatmap: values scaled to [0, 1], y-axis upward (origin bottom-left
+    visually; array row 0 = north remains at top of map via flipud).
+    Returns (im, H, W).
+    """
+    import matplotlib.pyplot as plt
+
+    z = np.asarray(z_hw, dtype=np.float32)
+    H, W = z.shape
+    m = np.asarray(valid_mask_hw) == 1
+    z01 = np.clip(z / 255.0, 0.0, 1.0)
+    display = np.where(m, z01, np.nan)
+    display = np.flipud(display)
+
+    try:
+        cmap = plt.colormaps["YlOrRd"].copy()
+    except (AttributeError, KeyError):
+        cmap = plt.cm.get_cmap("YlOrRd").copy()
+    cmap.set_bad(color=invalid_rgba)
+
+    im = ax.imshow(
+        display,
+        cmap=cmap,
+        origin="lower",
+        interpolation="nearest",
+        vmin=0.0,
+        vmax=1.0,
+        extent=[0, W, 0, H],
+        aspect="equal",
+    )
+    ax.set_xlim(0, W)
+    ax.set_ylim(0, H)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for _sp in ax.spines.values():
+        _sp.set_visible(False)
+    return im, H, W
+
+
+def _scatter_fire_layers_bottom_left(ax, fire_layers, H):
+    """Scatter using original grid (row from top); maps to y-up coordinates."""
+    for layer in fire_layers or []:
+        r = np.asarray(layer["rows"], dtype=int)
+        c = np.asarray(layer["cols"], dtype=int)
+        if r.size == 0:
+            continue
+        y = (H - 1) - r
+        if layer.get("include_in_legend", True):
+            label = layer.get("label", "")
+        else:
+            label = "_nolegend_"
+        kw = {
+            "c": layer.get("color", "black"),
+            "marker": layer.get("marker", "o"),
+            "s": layer.get("s", 25),
+            "alpha": layer.get("alpha", 0.9),
+            "zorder": layer.get("zorder", 5),
+            "label": label,
+        }
+        if "edgecolors" in layer:
+            kw["edgecolors"] = layer["edgecolors"]
+            kw["linewidths"] = layer.get("linewidths", 0.4)
+        ax.scatter(c, y, **kw)
+
+
+def make_usfs_fire_legend_handles(
+    n_urb,
+    n_off,
+    n_ds,
+    *,
+    include_off_mask=True,
+    benchmark_label=None,
+    urban_color="#0d9488",
+):
+    """
+    Proxy legend entries matching USFS explainer fire symbology (fig05 style).
+
+    Parameters
+    ----------
+    include_off_mask : bool
+        If False, omit the "Unburnable" row (e.g. before WFPI invalid cells are applied).
+    benchmark_label : str or None
+        If set, append a final row (black disk) for the benchmark subsample.
+    urban_color : str
+        Face/edge color for urban triangle markers (matches scatter layers).
+    """
+    from matplotlib.lines import Line2D
+
+    handles = [
+        Line2D(
+            [0],
+            [0],
+            linestyle="none",
+            marker="^",
+            color=urban_color,
+            markersize=9,
+            label=f"Urban (n={n_urb})",
+        ),
+    ]
+    if include_off_mask:
+        handles.append(
+            Line2D(
+                [0],
+                [0],
+                linestyle="none",
+                marker="o",
+                color="#888888",
+                markersize=6,
+                alpha=0.75,
+                label=f"Unburnable (n={n_off})",
+            )
+        )
+    handles.append(
+        Line2D(
+            [0],
+            [0],
+            linestyle="none",
+            marker="o",
+            color="#0d0d0d",
+            markersize=7,
+            label=f"In dataset (n={n_ds})",
+        )
+    )
+    if benchmark_label:
+        handles.append(
+            Line2D(
+                [0],
+                [0],
+                linestyle="none",
+                marker="o",
+                color="#0d0d0d",
+                markersize=9,
+                label=benchmark_label,
+            )
+        )
+    return handles
+
+
+def _colorbar_inset_top_right(fig, ax, im, label="Ignition probability (0–1)"):
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+    # borderpad in points: keep colorbar + label inside axes (away from figure edge)
+    cax = inset_axes(
+        ax,
+        width="3.0%",
+        height="22%",
+        loc="upper right",
+        bbox_to_anchor=(0, 0, 1, 1),
+        bbox_transform=ax.transAxes,
+        borderpad=3.8,
+    )
+    cb = fig.colorbar(im, cax=cax)
+    cax.set_facecolor("white")
+    cb.ax.tick_params(labelsize=7, pad=2)
+    cb.set_label(label, fontsize=8, labelpad=6)
+    return cb
+
+
+def plot_pyrologix_valid_region(
+    pyrologix_hw,
+    valid_mask_hw,
+    out_path,
+    title=None,
+    fire_layers=None,
+    legend_handles=None,
+    legend_loc="lower left",
+    invalid_rgb=(1.0, 1.0, 1.0),
+    colorbar_label="Ignition probability (0–1)",
+    dpi=150,
+):
+    """
+    Static risk map (Pyrologix on the WFPI grid): colormap only where valid_mask == 1;
+    other cells are white. y increases upward; risk in [0, 1]. Colorbar inset top-right.
+
+    fire_layers: optional list of scatter dicts (same as plot_pyrologix_fire_categories).
+    legend_handles: optional list of Artist handles (e.g. from make_usfs_fire_legend_handles).
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    invalid_rgba = invalid_rgb + (1.0,) if len(invalid_rgb) == 3 else invalid_rgb
+
+    H, W = np.asarray(pyrologix_hw).shape
+    aspect = W / H
+    fig, ax = plt.subplots(figsize=(aspect * 11 + 2, 11))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    im, H, W = _pyrologix_imshow_01_bottom_left(ax, pyrologix_hw, valid_mask_hw, invalid_rgba)
+    _scatter_fire_layers_bottom_left(ax, fire_layers, H)
+    _colorbar_inset_top_right(fig, ax, im, label=colorbar_label)
+
+    if title:
+        ax.set_title(title, fontsize=11, fontweight="bold")
+    if legend_handles:
+        ax.legend(
+            handles=legend_handles,
+            loc=legend_loc,
+            fontsize=8,
+            facecolor="white",
+            edgecolor="0.75",
+            framealpha=1.0,
+        )
+
+    fig.savefig(
+        str(out_path), dpi=dpi, bbox_inches="tight", pad_inches=0.2, facecolor="white"
+    )
+    plt.close(fig)
+
+
+def plot_pyrologix_fire_categories(
+    pyrologix_hw,
+    valid_mask_hw,
+    fire_layers,
+    out_path,
+    title=None,
+    colorbar_label="Ignition probability (0–1)",
+    dpi=150,
+    legend_loc="lower left",
+    legend_handles=None,
+):
+    """
+    Pyrologix background (masked to valid_mask) with multiple fire scatter groups.
+    y increases upward; risk [0–1]; colorbar inset top-right; no axis labels by default.
+
+    fire_layers: list of dicts with keys:
+      rows, cols (arrays), color, marker, s, optional include_in_legend, label, edgecolors, linewidths, alpha, zorder
+    legend_handles: if provided, use these for ax.legend instead of scatter labels.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    H, W = np.asarray(pyrologix_hw).shape
+    aspect = W / H
+    fig, ax = plt.subplots(figsize=(aspect * 11 + 2, 11))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    im, H, W = _pyrologix_imshow_01_bottom_left(
+        ax, pyrologix_hw, valid_mask_hw, invalid_rgba=(1.0, 1.0, 1.0, 1.0)
+    )
+    _scatter_fire_layers_bottom_left(ax, fire_layers, H)
+    _colorbar_inset_top_right(fig, ax, im, label=colorbar_label)
+
+    _leg_kw = dict(
+        loc=legend_loc,
+        fontsize=8,
+        facecolor="white",
+        edgecolor="0.75",
+        framealpha=1.0,
+    )
+    if legend_handles is not None:
+        ax.legend(handles=legend_handles, **_leg_kw)
+    else:
+        handles, labels = ax.get_legend_handles_labels()
+        if labels and any(lab for lab in labels):
+            ax.legend(handles=handles, **_leg_kw)
+
+    if title:
+        ax.set_title(title, fontsize=11, fontweight="bold")
+
+    fig.savefig(
+        str(out_path), dpi=dpi, bbox_inches="tight", pad_inches=0.2, facecolor="white"
+    )
+    plt.close(fig)

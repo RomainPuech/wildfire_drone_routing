@@ -392,13 +392,22 @@ def main():
     california_gdf = gpd.GeoDataFrame([1], geometry=[ca_tracts.dissolve().geometry.iloc[0]], crs="EPSG:4326")
     complete_2021_wfpi(california_gdf)
 
-    # 6) Yearly map
-    print("\n[5] Building static_risk_wfpi_yearly.npy …")
-    build_yearly_map()
+    # 6) Yearly map (mask-independent; skip if file already exists)
+    yearly_path = os.path.join(OUTPUT_DIR, "static_risk_wfpi_yearly.npy")
+    if os.path.exists(yearly_path):
+        print(f"\n[5] static_risk_wfpi_yearly.npy already exists — skipping rebuild.")
+    else:
+        print("\n[5] Building static_risk_wfpi_yearly.npy …")
+        build_yearly_map()
 
-    # 7) Averaged maps
-    print("\n[6] Building static_risk_wfpi_avg and burn_at_least_once …")
-    build_avg_maps()
+    # 7) Averaged maps (mask-independent; skip if files already exist)
+    avg_path = os.path.join(OUTPUT_DIR, "static_risk_wfpi_avg.npy")
+    burn_path = os.path.join(OUTPUT_DIR, "static_risk_wfpi_burn_at_least_once.npy")
+    if os.path.exists(avg_path) and os.path.exists(burn_path):
+        print(f"\n[6] static_risk_wfpi_avg and burn_at_least_once already exist — skipping rebuild.")
+    else:
+        print("\n[6] Building static_risk_wfpi_avg and burn_at_least_once …")
+        build_avg_maps()
 
     print("\nDone. California2021Dataset ready.")
 

@@ -90,12 +90,20 @@ def main():
         dtype=np.float32,
         all_touched=True,
     )
-    mask[urban_raster == 1] = 0
+    urban_bool = urban_raster >= 0.5
+    urban_eroded = ndimage.binary_erosion(urban_bool, iterations=1)
+    mask[urban_eroded] = 0
 
-    labeled, n = ndimage.label(mask == 1)
+    MIN_COMPONENT_CELLS = 81  # 9×9 km² at ~1 km resolution
+    bool_mask = mask == 1
+    labeled, n = ndimage.label(bool_mask)
     if n > 0:
-        sizes = ndimage.sum(mask == 1, labeled, range(1, n + 1))
-        mask = (labeled == (np.argmax(sizes) + 1)).astype(np.float32)
+        sizes = ndimage.sum(bool_mask, labeled, range(1, n + 1))
+        kept = np.zeros_like(bool_mask)
+        for i, sz in enumerate(sizes, start=1):
+            if sz >= MIN_COMPONENT_CELLS:
+                kept |= labeled == i
+        mask = ndimage.binary_dilation(kept, iterations=1).astype(np.float32)
 
     out_path = os.path.join(OUT_DIR, "mask_union_burnable_no_snow_excluded_day1.npy")
     np.save(out_path, mask)
