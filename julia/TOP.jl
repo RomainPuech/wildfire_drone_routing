@@ -1756,9 +1756,39 @@ function get_greedy_fallback_solution(risk_pertime, tours_coordinates, Gridpoint
     # Calculate profit from return path before adding it
     route_length_before_return = length(final_route)
     
-    # Patch from the last point to the return point using DP (handles blocked cells)
+    # Patch from the last point to the return point using DP (handles blocked cells).
+    # Three-tier fallback: (1) revisit-forbidden patch, (2) revisit-allowed patch,
+    # (3) hard-truncate-and-retrace. (1) is the original behaviour. (2) and (3) ensure
+    # the drone always ends at a charging station, even when the greedy phase has
+    # walled itself off by adding all visited cells to `already_visited`.
     patch_return_start = time()
     patch_without_revisit!(final_route, best_return_point) # add the last return charging point again to close the loop
+
+    # Tier 2: revisit-allowed retry. Only the original `blocked` mask is used; cells
+    # the drone has already flown over are considered passable on the return leg.
+    if final_route[end] != best_return_point
+        println("WARNING: revisit-forbidding return patch failed; retrying with revisits allowed")
+        patch_path_with_highest_risk!(final_route, best_return_point, risk_pertime_copy, blocked)
+    end
+
+    # Tier 3: hard-truncate-and-retrace. Guaranteed to land on a charging station.
+    # We truncate the forward portion of `final_route` so a full reverse retrace
+    # fits within `max_battery_time`, then append the reverse of the surviving cells.
+    # `final_route[1]` is always the start depot, which is a valid charging station.
+    if final_route[end] != best_return_point
+        println("WARNING: revisit-allowed return patch also failed; hard-truncating and retracing")
+        # Number of forward hops currently in the route
+        forward_hops = length(final_route) - 1
+        # We need forward_hops + return_hops <= max_battery_time, with return_hops == forward_hops
+        if 2 * forward_hops > max_battery_time
+            new_forward_hops = div(max_battery_time, 2)
+            final_route = final_route[1:(new_forward_hops + 1)]
+        end
+        # Retrace by appending the reverse of the surviving forward cells (excluding the
+        # current end position, which would otherwise be duplicated).
+        return_cells = reverse(final_route[1:end-1])
+        append!(final_route, return_cells)
+    end
     patch_return_time = time() - patch_return_start
     
     # Calculate profit from return path segment

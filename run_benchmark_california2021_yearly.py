@@ -395,7 +395,7 @@ def process_scenario(task):
             num_timesteps=N_SCENARIO_DATA_STEPS,
         )
         results = check_ground_sensor_detection(
-            scenario, ground_locs_data, offset
+            scenario, ground_locs_data, offset, coverage_w
         )
         results["routed"] = False
         status = "sensor_only"
@@ -557,12 +557,50 @@ def compute_routing(routing_strategy_cls,
 
 # ── Ground-sensor-only detection (no drones) ──────────────────────────────────
 
+def _ground_detection_cells(ground_locs_data: list, coverage_w: int,
+                            N: int, M: int):
+    """Expand each ground sensor to the data cells of its *operational cell*.
+
+    A ground sensor is stored as the data-scale center cell of its 5x5
+    operational cell. A fire counts as detected by a ground sensor whenever its
+    ignition lies in the *same operational cell* as the sensor -- the same
+    convention used for placement discoverability -- not only when it burns the
+    exact center cell. We therefore expand each sensor center to the full
+    ``coverage_w x coverage_w`` block of data cells covering its operational
+    cell, clamped to the [0, N) x [0, M) grid.
+
+    Returns ``(rows, cols)`` lists usable as fancy-index arrays.
+    """
+    if not ground_locs_data:
+        return [], []
+    half = coverage_w // 2
+    cells = set()
+    for cx, cy in ground_locs_data:
+        r0, c0 = cx - half, cy - half
+        for dr in range(coverage_w):
+            r = r0 + dr
+            if r < 0 or r >= N:
+                continue
+            for dc in range(coverage_w):
+                c = c0 + dc
+                if 0 <= c < M:
+                    cells.add((r, c))
+    if not cells:
+        return [], []
+    rows, cols = zip(*cells)
+    return list(rows), list(cols)
+
+
 def check_ground_sensor_detection(scenario: np.ndarray,
                                   ground_locs_data: list,
-                                  starting_time: int) -> dict:
+                                  starting_time: int,
+                                  coverage_w: int) -> dict:
     """Check if the fire ever hits a ground sensor during the simulation window.
 
-    Used for fires that are outside all drone clusters.
+    Used for fires that are outside all drone clusters. A fire is credited to a
+    ground sensor when it ignites in the *same operational cell* as the sensor
+    (see :func:`_ground_detection_cells`), not only when it burns the exact
+    sensor center cell.
     """
     if not ground_locs_data:
         return {"delta_t": -1, "device": "undetected",
@@ -572,8 +610,8 @@ def check_ground_sensor_detection(scenario: np.ndarray,
                 "total_distance_traveled": 0,
                 "percentage_map_explored": 0.0}
 
-    rows_g = [x for x, _ in ground_locs_data]
-    cols_g = [y for _, y in ground_locs_data]
+    N, M = scenario.shape[1], scenario.shape[2]
+    rows_g, cols_g = _ground_detection_cells(ground_locs_data, coverage_w, N, M)
 
     for time_step in range(len(scenario)):
         grid = scenario[time_step]
@@ -637,8 +675,8 @@ def run_simulation(scenario: np.ndarray,
     drone_locs_opt      = [(x, y) for _, (x, y) in initial_norm]
     drone_batteries_opt = [rescaled_max_battery_time] * len(drones)
 
-    rows_g = [x for x, _ in ground_locs_data]   if ground_locs_data   else []
-    cols_g = [y for _, y in ground_locs_data]    if ground_locs_data   else []
+    rows_g, cols_g = _ground_detection_cells(
+        ground_locs_data, coverage_width_cells, N, M)
     rows_c = [x for x, _ in charging_locs_data] if charging_locs_data else []
     cols_c = [y for _, y in charging_locs_data] if charging_locs_data else []
 
