@@ -1,346 +1,173 @@
-# WILDFIRE-DRONE-BENCH
+# Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing
 
-<div align="center">
-  <img src="https://github.com/user-attachments/assets/b5653f58-ff62-40d8-a422-4af13cd0ccd0" width="40%">
-</div>
+Code for the paper:
 
-A comprehensive benchmarking library for evaluating sensor placement and drone routing strategies in wildfire detection scenarios. This library provides tools for testing, visualizing, and comparing different strategies using the "sim2real" dataset.
+> Puech, R., de Moor, D., Trišović, A., & Bertsimas, D. (2026). *Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing.* [Journal TBD]. DOI: [TBD]
 
-## 🚀 Features
+This repository contains the infrastructure placement and drone routing optimization models implemented in Julia, and the Python scripts used for data preprocessing, simulation, and figure generation.
 
-- **Strategy Development**: Implement and test custom sensor placement and drone routing strategies
-- **Dataset Integration**: Seamless integration with the Sim2Real-Fire dataset
-- **Benchmarking**: Comprehensive evaluation of strategies with multiple metrics
-- **Visualization**: Generate videos and plots of drone movements, fire spread, and sensor placements
-- **Performance Optimization**: Support for both JPEG and NPY formats for memory/speed trade-offs
+## Repository structure
 
-## 🛠️ Installation
+```
+run_benchmark_california_yearly.py  — main benchmark runner (all budget levels, all years)
+preprocess_benchmark_2021.py        — preprocessing for 2021 dataset
+visualize_sensor_placement_2021.py  — single-panel placement maps
 
-1. Clone the repository:
-```bash
-git clone https://github.com/RomainPuech/wildfire_drone_routing.git
-cd wildfire_drone_routing
+code/
+  benchmark.py                      — simulation engine and metrics
+  Strategy.py                       — all placement and routing strategies
+  dataset.py                        — dataset loading and preprocessing
+  displays.py                       — publication-quality figure generation
+  benchmark_alertcalifornia.py      — ALERTCalifornia camera baseline
+  wrappers.py                       — logging and caching wrappers
+  new_clustering.py                 — spatial clustering for large grids
+  Drone.py, my_julia_caller.py, … — supporting modules
+  dataset_creation/
+    nature_dataset_creation/        — scripts to build California 2021–2024 datasets
+
+julia/
+  TOP.jl                            — Team Orienteering Problem routing (multi-depot)
+  TOP_PSO_multi_depot.jl            — PSO heuristic for multi-drone routing
+  ground_charging_opt.jl            — ILP placement optimizer (stations + sensors)
+  drone_routing_opt.jl              — nonlinear routing optimizer
+  drone_routing_opt_linear.jl       — linear-time routing variant
+  helper_functions.jl               — shared utilities
+  test_*.jl                         — unit and benchmark tests
+
+julia_env/                          — Julia environment (Project.toml + Manifest.toml)
+
+paper/
+  Nature_Wildfires/                 — LaTeX source, figures, table-building scripts
+  figure4/                          — Fig 4: placement composite map
+  figure5bis/                       — Fig 5: cost-sensitivity line plot
+  figure6/                          — Fig 6: ALERTCalifornia coverage maps
+  final_report/
+    generate_final_report.py        — Fig 3: detection frontier data processing
+    csv/                            — pre-computed benchmark results (137 CSV files)
+  breakeven_report/
+    breakeven_sensor_cost_export/
+      placement_logs/               — pre-computed placement logs for Fig 5 (48 JSON files)
+  FIGURES_ONBOARDING.md             — figure-by-figure reproduction guide
+
+documentation/                      — architecture and dataset documentation
+cameras.json                        — ALERTCalifornia camera metadata
+environment.yml                     — Python environment (Linux / HPC)
+environment_macos.yml               — Python environment (macOS)
 ```
 
-2. We use Python 3.10. Install Python dependencies with:
+## Installation
+
+### Python
+
+We use Python 3.10. Create and activate the conda environment:
+
 ```bash
-conda env create -f environment.yml
+conda env create -f environment.yml   # Linux / HPC
+# or
+conda env create -f environment_macos.yml  # macOS
 conda activate juliaenv
 ```
 
-3. Install Julia (version 1.11.2 or later) and required packages:
+### Julia
+
+Install Julia 1.11 or later, then instantiate the environment:
+
 ```julia
 using Pkg
 Pkg.activate("julia_env")
 Pkg.instantiate()
 ```
 
-This tells Julia to use the environment located at ./julia_env, which contains `Project.toml` and `Manifest.toml`, and install all exact versions of the packages.
+This installs all exact package versions listed in `julia_env/Manifest.toml`, including JuMP, Gurobi, NPZ, and Plots.
 
-1. Download the modified Sim2Real dataset:
+**Note:** The optimization strategies (`ground_charging_opt.jl`, `drone_routing_opt.jl`) require a valid [Gurobi](https://www.gurobi.com/) license. Academic licenses are available for free.
+
+## Data
+
+The California 2021–2024 wildfire datasets (scenarios as `.npy` arrays, per-year WFPI burn maps, burnable masks, and config files) are hosted on HuggingFace:
+
+```
+https://huggingface.co/datasets/MasterYoda293/DroneBench
+```
+
+Download and place each year's dataset at the repo root so the directory layout is:
+
+```
+California2021Dataset/
+  config_california_2021.json
+  mask.npy
+  wfpi_YYYYMMDD.npy  (365 files)
+  scenarii/          (fire scenario .npy files)
+California2022Dataset/
+California2023Dataset/
+California2024Dataset/
+```
+
+### Rebuilding datasets from raw sources
+
+To reproduce the datasets from USFS ignition records and WFPI/Pyrologix rasters, see the scripts in `code/dataset_creation/nature_dataset_creation/` and the documentation in `documentation/`. Raw input data must be downloaded separately (sources listed in each script's header).
+
+## Reproducing paper results
+
+### Step 1 — Run the benchmark
+
 ```bash
-# Download from Hugging Face
-https://huggingface.co/datasets/MasterYoda293/DroneBench/tree/main
+python run_benchmark_california_yearly.py \
+  --budgets 20000000 50000000 75000000 100000000 500000000 \
+  --years 2021 2022 2023 2024 \
+  --strategies TOPGrowing MaxCov LinearMinTime \
+  --output-dir paper/final_report/csv/
 ```
 
-## 📚 Dataset Structure
+This runs the placement optimizer and all routing strategies across all budget levels and years, writing one CSV per (year, budget, strategy) combination. The pre-computed CSVs are already included in `paper/final_report/csv/` so this step can be skipped to reproduce figures directly.
 
-The library works with the following dataset structure:
-```
-layout_folder/
-├── Satellite_Image_Mask/
-│   └── scenario_001/
-│       ├── 0001.jpg
-│       ├── 0002.jpg
-│       └── ...
-├── Weather_Data/
-│   └── scenario_001.txt
-├── static_risk.npy (burn map)
-└── other layout info (topography, elevation, etc.)
-```
+### Step 2 — Reproduce figures
 
-- **Scenarios**: Represent wildfire spread over time
-  - JPEG format: Folder of images, one per timestep
-  - NPY format: Single file containing all timesteps
-- **Burn Maps**: 3D arrays (time × height × width) representing fire probability
-- **Weather Data**: Text files containing weather conditions for each scenario
+See `paper/FIGURES_ONBOARDING.md` for a complete figure-by-figure guide. Quick reference:
 
-## 🔧 Configuration
+| Figure | Script |
+|--------|--------|
+| Fig 2 — California dataset overview | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` |
+| Fig 3 — Detection frontier | `paper/Nature_Wildfires/make_figure3_frontier.py` |
+| Fig 4 — Infrastructure placement maps | `conda run -n wf python paper/figure4/generate_placement_composite_figure.py` |
+| Fig 5 — Cost sensitivity | `python paper/figure5bis/make_figure5bis_breakeven_lines.py` |
+| Fig 6 — ALERTCalifornia coverage | `conda run -n wf python paper/figure6/generate_alertcalifornia_composite_figure.py` |
 
-### Drone Parameters
-- Coverage radius (m)
-- Transmission range (m)
-- Maximum battery time (hours)
-- Speed (m/min)
+Figures 4 and 6 require the `wf` conda environment (geospatial stack: geopandas, rasterio).
 
-### Sensor Types
-- Ground sensors: Static fire detection
-- Drones: Mobile fire detection
-- Charging stations: Fire detection + drone charging
+### Step 3 — Build tables and PDF
 
-### Coverage and Movement
-- Square coverage areas (Manhattan distance)
-- Drones must start at charging stations
-- Multiple drones can charge simultaneously
-- Charging takes 1 timestep
-
-## 💻 Usage
-
-### 1. Preprocessing Dataset
-```python
-from dataset import preprocess_sim2real_dataset
-
-# Convert JPEG scenarios to NPY format
-preprocess_sim2real_dataset(
-    "./path_to_dataset",
-    n_max_scenarii_per_layout=100,  # Optional: limit scenarios per layout
-    n_max_layouts=10  # Optional: limit number of layouts
-)
+```bash
+python paper/Nature_Wildfires/scripts/build_table1_detection.py
+python paper/Nature_Wildfires/scripts/build_table2_alertcalifornia.py
+python paper/compile_pdf.py
 ```
 
-### 2. Implementing Strategies
+## Running on an HPC cluster
 
-Create a new sensor placement strategy:
-```python
-from Strategy import SensorPlacementStrategy
+The benchmark was run on MIT SuperCloud. See `documentation/` for an overview of the pipeline, and adapt the array-job pattern in `run_benchmark_california_yearly.py` to your scheduler.
 
-class MySensorStrategy(SensorPlacementStrategy):
-    def get_locations(self):
-        """
-        Returns two lists of (x,y) coordinates:
-        - ground_sensor_locations: List of ground sensor positions
-        - charging_station_locations: List of charging station positions
-        """
-        # Implement your sensor placement logic
-        return ground_locations, charging_locations
+## Julia optimization tests
+
+```julia
+cd julia/
+include("run_extreme_tests_simple.jl")
 ```
 
-Create a new drone routing strategy:
-```python
-from Strategy import DroneRoutingStrategy
+Individual test files (e.g., `test_top_masked.jl`, `test_pso_august_complex_fire.jl`) can be run independently.
 
-class MyDroneStrategy(DroneRoutingStrategy):
-    def get_initial_drone_locations(self):
-        """
-        Returns a list of tuples (state, (x,y)) where:
-        - state is either 'charge' or 'fly'
-        - (x,y) are the initial coordinates
-        Drones must start at charging stations (state='charge')
-        """
-        # Implement initial drone placement
-        return initial_locations
+## Citation
 
-    def next_actions(self, automatic_step_parameters, custom_step_parameters):
-        """
-        Returns a list of tuples (action_type, coordinates) where:
-        - action_type is one of: 'fly', 'move', 'charge'
-        - coordinates are the target position (x,y)
-        
-        Parameters:
-        - automatic_step_parameters: Dict containing:
-            - drone_locations: List of current drone positions
-            - drone_batteries: List of current drone battery levels
-            - drone_states: List of current drone states
-            - t: Current time step
-        - custom_step_parameters: Dict for custom strategy parameters
-            - Can include any data except actual fire location
-            - Useful for ML burn map model inputs or precomputed burn maps
-        """
-        # Implement drone movement logic
-        return actions
-```
-
-### Available Strategy Implementations
-
-The library includes several pre-implemented strategies:
-
-1. **Sensor Placement Strategies**:
-   - `SensorPlacementOptimization`: Uses Julia optimization to find optimal sensor locations
-   - `LoggedSensorPlacementStrategy`: Caches optimization results for faster repeated runs
-   - `RandomSensorPlacementStrategy`: Places sensors randomly (for testing)
-
-2. **Drone Routing Strategies**:
-   - `DroneRoutingLinearMinTime`: Uses linear programming to minimize detection time
-   - `GREEDY_DRONE_STRATEGY`: A heuristic approach for quick routing
-   - `RandomDroneRoutingStrategy`: Random drone movements (for testing)
-
-### Custom Parameters
-
-Strategies can be configured using custom parameters:
-
-1. **Required Parameters**:
-   - `burnmap_filename`: Path to the burn map file (required for optimization strategies)
-
-2. **Optional Parameters**:
-   - `call_every_n_steps` or `reevaluation_step`: Steps between optimization calls
-   - `optimization_horizon`: Number of steps to optimize for
-   - `log_file`: Path to cache optimization results
-   - Any additional parameters needed by your strategy
-
-### Strategy Wrappers
-
-The library provides wrapper functions to enhance your strategies with additional functionality:
-
-#### Logging Wrappers
-
-Use these wrappers to automatically log and cache strategy results:
-
-```python
-from wrappers import wrap_log_sensor_strategy, wrap_log_drone_strategy
-
-# Wrap your strategies to add logging
-LoggedSensorStrategy = wrap_log_sensor_strategy(MySensorStrategy)
-LoggedDroneStrategy = wrap_log_drone_strategy(MyDroneStrategy)
-
-# Use the wrapped strategies
-sensor_strategy = LoggedSensorStrategy(...)
-drone_strategy = LoggedDroneStrategy(...)
-```
-
-Benefits:
-- **Reproducibility**: Ensures identical results across runs
-- **Performance**: Skips expensive recomputation by caching results
-- **Debugging**: Provides detailed logs of all actions and placements
-
-The log files (JSON format) contain:
-- Initial sensor and charging station placements
-- Complete history of drone movements and actions
-- All parameters used for the strategy
-
-#### Clustering/Decomposition Wrappers
-
-For large scenarios, use clustering wrappers to decompose the problem:
-
-```python
-from new_clustering import get_wrapped_clustering_strategy
-
-# Wrap your drone routing strategy with clustering
-ClusteredDroneStrategy = get_wrapped_clustering_strategy(MyDroneStrategy)
-drone_strategy = ClusteredDroneStrategy(...)
-```
-
-The clustering wrapper:
-1. Divides the environment into manageable clusters
-2. Assigns drones to specific clusters
-3. Coordinates the sub-strategies for each cluster
-
-### 3. Running Benchmarks
-
-Benchmark a single scenario:
-```python
-from benchmark import run_benchmark_scenario
-
-results = run_benchmark_scenario(
-    scenario=scenario,
-    sensor_placement_strategy=MySensorStrategy,
-    drone_routing_strategy=MyDroneStrategy,
-    custom_initialization_parameters={},  # Optional: Add custom parameters for your strategy
-    custom_step_parameters_function=lambda: {},  # Optional: Add custom parameters for each step
-    return_history=True  # Optional: Get drone movement history for visualization
-)
-
-# results is a dictionary containing metrics:
-# - delta_t: Time to fire detection
-# - device: Which device detected the fire
-# - execution_time: Strategy computation time
-# - fire_size_cells: Fire size at detection
-# - fire_percentage: Percentage of area burned
-# - map_explored: Percentage of area explored
-# - total_distance: Total distance traveled by drones
-```
-
-Benchmark multiple scenarios:
-```python
-from benchmark import run_benchmark_scenarii_sequential
-
-results = run_benchmark_scenarii_sequential(
-    input_dir="./path_to_scenarios",
-    sensor_placement_strategy=MySensorStrategy,
-    drone_routing_strategy=MyDroneStrategy,
-    custom_initialization_parameters_function=lambda x: {...},
-    custom_step_parameters_function=lambda: {...},
-    max_n_scenarii=100,  # Optional: limit number of scenarios per layout
-    max_n_layouts=10  # Optional: limit number of layouts
-)
-```
-
-### 4. Visualization
-
-Create a video of drone movements:
-```python
-from displays import create_scenario_video
-
-# drone_locations_history is a list of lists of (x,y) coordinates
-# Each inner list represents drone positions at a specific time step
-create_scenario_video(
-    scenario_or_filename=scenario,
-    drone_locations_history=drone_history,
-    ground_sensor_locations=sensor_locations,
-    charging_stations_locations=charging_locations,
-    out_filename="simulation"  # Outputs MP4 video
-)
-```
-
-## 📊 Benchmarking Metrics
-
-The library collects the following metrics:
-- `delta_t`: Time to fire detection
-- `device`: Which device detected the fire
-- `execution_time`: Strategy computation time
-- `avg_execution_time`: Average time per step
-- `fire_size_cells`: Fire size at detection
-- `fire_percentage`: Percentage of area burned
-- `map_explored`: Percentage of area explored
-- `total_distance`: Total distance traveled by drones
-- `drone_entropies`: Entropy of drone positions
-- `sensor_entropies`: Entropy of sensor positions
-
-## ⚠️ Limitations and Error Handling
-
-- No parallel processing support
-- Rectangular coverage areas (Manhattan distance)
-- No built-in battery warning system
-- No recovery from illegal positions
-- Invalid actions from strategies will be flagged during benchmarking
-- No validation checks for sensor placement
-- Errors during benchmarking are raised as exceptions:
-  - Invalid drone positions (outside grid or not starting at charging station)
-  - Invalid action types
-  - Other strategy-specific errors
-
-## 🔍 Additional Resources
-
-For more details about the library and its implementation, refer to:
-- Paper: "WFDroneBench: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection"
-- Dataset: [Sim2Real-Fire](https://github.com/TJU-IDVLab/Sim2Real-Fire)
-- Modified Dataset: [DroneBench](https://huggingface.co/datasets/MasterYoda293/DroneBench/tree/main)
-
-## 📝 Notes
-
-- Weather data is provided in the Sim2Real dataset format but is not used in the current strategies
-- Users can add their own scenarios by following the Sim2Real dataset format
-- Custom parameters can be added to strategies through `custom_initialization_parameters` and `custom_step_parameters`
-- Drone movement history can be obtained by setting `return_history=True` in `run_benchmark_scenario`
-- Runtime performance varies by strategy - see our paper for detailed benchmarks
-- No specific memory usage considerations for large datasets
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 📧 Contact
-
-For questions, issues, or collaboration, contact Romain Puech at puech@mit.edu.
-
-## 📑 Citation
-
-If you use this library in your research, please cite:
 ```bibtex
-@misc{wildfire_drone_routing,
-  author = {Romain Puech, Joseph Ye, Danique De Moor, Ana Trisovic},
-  title = {Wildfire Drone Routing},
-  year = {2025},
-  howpublished = {\url{https://github.com/RomainPuech/wildfire_drone_routing}},
-  note = {Accessed: YYYY-MM-DD}
+@article{puech2026minutesmatter,
+  author  = {Puech, Romain and de Moor, Danique and Tri\v{s}ovi\'{c}, Ana and Bertsimas, Dimitris},
+  title   = {Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing},
+  year    = {2026},
+  journal = {[Journal TBD]},
+  doi     = {[DOI TBD]}
 }
 ```
+
+## License
+
+MIT License. See `LICENSE`.

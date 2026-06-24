@@ -1,0 +1,24 @@
+% Results-section addendum, placed immediately after Table 2:
+\paragraph{Out-of-sample evaluation and ALERTCalifornia leakage.}
+The ALERTCalifornia camera network has been deployed and progressively expanded
+between 2017 and 2024, with camera siting partially informed by historical
+ignition records that include fires from 2021--2023~\cite{alertcalifornia_history,alertcalifornia2026}.
+This means that the 2021--2023 columns of Table~\ref{tab:alertcalifornia} probe
+the network \emph{partly in-sample} from a siting-decision standpoint. The 2024
+column provides the cleanest out-of-sample evaluation, given that the 2024
+ignition data were not available when most camera placement decisions were made,
+and we therefore use the 2024 dataset for Figure~\ref{fig:alertcalifornia}.
+
+% Discussion paragraph, in the limitations or future-work discussion:
+\paragraph{Comparability across baselines.}
+A subtlety in comparing our optimised drone network against ALERTCalifornia is
+that the two systems were optimised on different information sets. The
+drone-network solution is generated entirely from pre-2021 inputs (the static
+Pyrologix risk surface and the burnable-area mask), so 2021--2024 outcomes are
+fully out-of-sample. The ALERTCalifornia camera placement, by contrast, has been
+adjusted over the years partly in response to historical ignitions, and should be
+expected to perform best on historical fires. The 2024 column of
+Table~\ref{tab:alertcalifornia} is therefore the most directly comparable to the
+drone results; a fully controlled comparison would re-optimise the cameras using
+only pre-2021 data, which is beyond the scope of this work but constitutes a
+natural follow-up.

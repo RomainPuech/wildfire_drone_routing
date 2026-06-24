@@ -1,0 +1,55 @@
+\section{Adaptations to the PSO routing heuristic}
+\label{app:pso}
+
+Our drone routing builds on the PSO-inspired heuristic for the Team Orienteering
+Problem (TOP) of Dang, Guibadj and Moukrim~\cite{PSO}. We summarise that algorithm
+briefly and then describe the changes we made so that it runs fast enough for
+large, grid-based wildfire instances. The original method does not represent each
+drone route separately. Instead, a candidate solution is encoded as a single
+permutation of all the locations to be considered, called a giant tour. A
+\emph{split} procedure reads this permutation in order and, using dynamic
+programming, cuts it into the set of feasible routes (one per drone) that collects
+the most reward while respecting the battery budget. The algorithm then improves
+solutions in the style of particle swarm optimization, recombining promising
+permutations and refining them with local search moves that relocate a single
+location (\emph{shift}) or exchange two of them (\emph{swap}). Each candidate move
+is scored by re-running the split, so the split and the local search together
+account for almost all of the running time.
+
+We instantiate this framework on the wildfire grid: the locations are grid cells
+carrying a wildfire-risk reward, the depots are charging stations, and travel cost
+is the number of grid steps (Chebyshev distance) between cells. We also extend the
+formulation so that within each battery cycle a drone may depart from and return to
+any charging station rather than a single fixed depot. The giant tour therefore
+contains several depot markers, and the split is free to assign each route to a
+different station.
+
+The remaining changes are accelerations that exploit the grid structure without
+altering which solutions the search explores. First, we observe that a route can
+only begin at a charging-station marker, and these markers are few compared with
+the number of grid cells. The original split nonetheless scans every position of
+the permutation; we instead run the dynamic program over depot positions only,
+which lowers the cost of evaluating one candidate from roughly $\mathcal{O}(n\,m)$
+to about $\mathcal{O}(k\,m \log k)$, where $n$ is the number of cells, $m$ the
+number of drones, and $k$ the (small) number of depot markers. For typical
+instances this alone speeds up evaluation by around sevenfold. Second, during local
+search we derive simple conditions under which a candidate swap or shift cannot
+possibly change the split outcome (for example, moves confined to cells that no
+route currently visits), and we skip the expensive re-evaluation of such moves.
+Depending on how densely the routes fill the grid, this discards between $40\%$ and
+$85\%$ of candidate moves with no effect on the result. Third, rather than rebuild
+every route after each accepted move, we cache the routes and recompute only the
+ones a move actually touches, skipping the dynamic program entirely when nothing
+relevant changes (about three quarters of the time); this makes the local search
+roughly four times faster. Finally, we replace per-lookup dictionary access to
+travel costs with a dense distance matrix and reuse pre-allocated buffers in the
+inner loops, removing memory-allocation overhead from the hot path.
+
+Battery feasibility is enforced inside the split itself: a route stops collecting
+cells as soon as the drone could no longer return to a charging station within its
+budget, so the procedure never produces an infeasible route. A greedy step then
+extends any route that the search left short, allowing each drone to use its full
+battery budget before returning. Each of the accelerations above was verified to
+leave solution quality unchanged relative to a direct re-evaluation, so the reported
+routing results reflect the same search as the baseline method, obtained at
+substantially lower computational cost. The exact implementation of the PSO-based routing heuristic is available in the code (see the Code Availability statement).
