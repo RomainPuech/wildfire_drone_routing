@@ -198,11 +198,18 @@ def main():
     m_pre_cc = in_ca & non_urban & ever_burnable
     components_filtered = mask_keep_components_min_area_km2(m_pre_cc, side_km=9.0)
     mask_final = ndimage.binary_dilation(components_filtered, iterations=1)
-    mask_saved = np.load(MASK_FINAL_PATH).astype(bool)
-    if not np.array_equal(mask_final, mask_saved):
+    if MASK_FINAL_PATH.is_file():
+        mask_saved = np.load(MASK_FINAL_PATH).astype(bool)
+        if not np.array_equal(mask_final, mask_saved):
+            print(
+                "  WARNING: recomputed mask != saved mask file; using saved file for fires.",
+            )
+    else:
         print(
-            "  WARNING: recomputed mask != saved mask file; using saved file for fires.",
+            f"  WARNING: saved final mask missing at {MASK_FINAL_PATH}; "
+            "using recomputed mask for figures.",
         )
+        mask_saved = mask_final
 
     mask_step1 = in_ca
     mask_step2 = in_ca & non_urban
@@ -315,9 +322,19 @@ def main():
     legend_before_wfpi = make_usfs_fire_legend_handles(
         n_urb, n_off, n_ds, include_off_mask=False, urban_color=URBAN_TEAL
     )
-    legend_full = make_usfs_fire_legend_handles(
+    _leg_full = make_usfs_fire_legend_handles(
         n_urb, n_off, n_ds, include_off_mask=True, urban_color=URBAN_TEAL
     )
+    _leg_full[1].set_label("_nolegend_")
+    _leg_full[2].set_label("_nolegend_")
+    legend_full = [
+        _leg_full[0],
+        (
+            _leg_full[1],
+            _leg_full[2],
+            f"Fire in unburnable area (n={n_off});\nfire in dataset (n={n_ds})",
+        ),
+    ]
 
     from matplotlib.lines import Line2D as _L2D
 
@@ -326,7 +343,7 @@ def main():
     c_all_in_ca = np.concatenate([c_urb, wfpi_combined_c, c_ok])
     legend_fig01 = [
         _L2D([0], [0], linestyle="none", marker="o", color="#0d0d0d",
-             markersize=7, label=f"Inside California (n={len(r_all_in_ca)})"),
+             markersize=7, label=f"Fire inside California (n={len(r_all_in_ca)})"),
     ]
     fig01_fire_layers = [
         {"rows": r_all_in_ca, "cols": c_all_in_ca, "color": "#0d0d0d", "marker": "o", "s": 22, "zorder": 7, "include_in_legend": False},
@@ -335,11 +352,30 @@ def main():
     # fig02: urban removed, WFPI mask NOT yet applied → off-mask fires are black dots
     r_non_urban = np.concatenate([wfpi_combined_r, r_ok])
     c_non_urban = np.concatenate([wfpi_combined_c, c_ok])
+    h_urb_f2 = _L2D(
+        [0],
+        [0],
+        linestyle="none",
+        marker="^",
+        color=URBAN_TEAL,
+        markersize=9,
+        label="_nolegend_",
+    )
+    h_nu_f2 = _L2D(
+        [0],
+        [0],
+        linestyle="none",
+        marker="o",
+        color="#0d0d0d",
+        markersize=7,
+        label="_nolegend_",
+    )
     legend_fig02 = [
-        _L2D([0], [0], linestyle="none", marker="^", color=URBAN_TEAL,
-             markersize=9, label=f"Urban (n={n_urb})"),
-        _L2D([0], [0], linestyle="none", marker="o", color="#0d0d0d",
-             markersize=7, label=f"Non-urban, inside CA (n={len(r_non_urban)})"),
+        (
+            h_urb_f2,
+            h_nu_f2,
+            f"Urban fire (n={n_urb});\nnon-urban fire (n={len(r_non_urban)})",
+        ),
     ]
     fig02_fire_layers = [
         {
@@ -395,12 +431,18 @@ def main():
     ]
 
     print("[4/4] Mask progression + figures …")
+    _border_kw = dict(ca_boundary_gdf_wfpi=ca_wfpi, cropped_affine=cropped_t)
+    # Manuscript figure (Fig.~2) legend: previous 11 pt was doubled to 22; +1.3x total scale.
+    _fig2_legend_fontsize = 11 * 2 * 1.3
     plot_pyrologix_valid_region(
         pyrologix,
         mask_step1,
         OUT_DIR / "fig01_pyrologix_california_boundary.png",
         fire_layers=fig01_fire_layers,
         legend_handles=legend_fig01,
+        legend_fontsize=_fig2_legend_fontsize,
+        show_colorbar=False,
+        **_border_kw,
     )
     plot_pyrologix_valid_region(
         pyrologix,
@@ -408,6 +450,9 @@ def main():
         OUT_DIR / "fig02_pyrologix_exclude_urban.png",
         fire_layers=fig02_fire_layers,
         legend_handles=legend_fig02,
+        legend_fontsize=_fig2_legend_fontsize,
+        show_colorbar=True,
+        **_border_kw,
     )
     plot_pyrologix_valid_region(
         pyrologix,
@@ -415,6 +460,9 @@ def main():
         OUT_DIR / "fig03_pyrologix_exclude_always_unburnable.png",
         fire_layers=all_fire_layers,
         legend_handles=legend_full,
+        legend_fontsize=_fig2_legend_fontsize,
+        show_colorbar=False,
+        **_border_kw,
     )
     plot_pyrologix_valid_region(
         pyrologix,
@@ -422,6 +470,9 @@ def main():
         OUT_DIR / "fig04_pyrologix_components_ge_9km2.png",
         fire_layers=all_fire_layers,
         legend_handles=legend_full,
+        legend_fontsize=_fig2_legend_fontsize,
+        show_colorbar=False,
+        **_border_kw,
     )
 
     plot_pyrologix_fire_categories(
@@ -429,7 +480,6 @@ def main():
         mask_step4.astype(bool),
         all_fire_layers,
         OUT_DIR / "fig05_fires_all_categories.png",
-        legend_loc="lower left",
         legend_handles=legend_full,
     )
 
@@ -476,14 +526,25 @@ def main():
     br = np.asarray(br, dtype=int)
     bc = np.asarray(bc, dtype=int)
 
-    legend_benchmark = make_usfs_fire_legend_handles(
+    _lb = make_usfs_fire_legend_handles(
         n_urb,
         n_off,
         n_ds,
         include_off_mask=True,
         urban_color=URBAN_TEAL,
-        benchmark_label=f"Benchmark subset (n={len(br)}, seed={RANDOM_SEED})",
+        benchmark_label=f"Fire in benchmark subset (n={len(br)}, seed={RANDOM_SEED})",
     )
+    _lb[1].set_label("_nolegend_")
+    _lb[2].set_label("_nolegend_")
+    legend_benchmark = [
+        _lb[0],
+        (
+            _lb[1],
+            _lb[2],
+            f"Fire in unburnable area (n={n_off}); fire in dataset (n={n_ds})",
+        ),
+        _lb[3],
+    ]
     plot_pyrologix_fire_categories(
         pyrologix,
         mask_step4.astype(bool),
@@ -499,7 +560,6 @@ def main():
             },
         ],
         OUT_DIR / "fig07_fires_benchmark_100_seed42.png",
-        legend_loc="lower left",
         legend_handles=legend_benchmark,
     )
 

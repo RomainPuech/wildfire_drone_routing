@@ -18,6 +18,38 @@ import tqdm
 import math
 import pandas as pd
 
+def _ground_detection_cells(ground_locs_data, coverage_w, N, M):
+    """Expand each ground sensor to the data cells of its *operational cell*.
+
+    Ground sensors are stored as the data-scale center cell of their 5x5
+    operational cell. A fire is credited to a ground sensor whenever it ignites
+    in the *same operational cell* as the sensor (the placement-discoverability
+    convention), not only when it burns the exact center cell. Each sensor
+    center is therefore expanded to the full ``coverage_w x coverage_w`` block
+    of data cells covering its operational cell, clamped to the grid.
+
+    Returns ``(rows, cols)`` lists usable as numpy fancy-index arrays.
+    """
+    if not ground_locs_data:
+        return [], []
+    half = coverage_w // 2
+    cells = set()
+    for cx, cy in ground_locs_data:
+        r0, c0 = cx - half, cy - half
+        for dr in range(coverage_w):
+            r = r0 + dr
+            if r < 0 or r >= N:
+                continue
+            for dc in range(coverage_w):
+                c = c0 + dc
+                if 0 <= c < M:
+                    cells.add((r, c))
+    if not cells:
+        return [], []
+    rows, cols = zip(*cells)
+    return list(rows), list(cols)
+
+
 def generate_coverage_area(coverage_radius_m, cell_size_m, x_center, y_center, N, M):
     coverage_width_cells = round(coverage_radius_m*2 / cell_size_m)//2
     covered_cells = set()
@@ -740,6 +772,16 @@ def run_benchmark_scenario(scenario: np.ndarray, sensor_placement_strategy:Senso
     # features_per_timestep = concat_len // num_timesteps
 
     fire_detected = False
+    # Ground sensors detect a fire whenever it ignites in the *same operational
+    # cell* as the sensor (the placement-discoverability convention), not only
+    # when it burns the exact sensor center cell. Expand each sensor center to
+    # the full coverage_width_cells x coverage_width_cells block of data cells.
+    rows_ground_data_scale, cols_ground_data_scale = _ground_detection_cells(
+        ground_sensor_locations_data_scale,
+        coverage_width_cells,
+        automatic_initialization_parameters["N"],
+        automatic_initialization_parameters["M"],
+    )
     max_time_steps = 12 + starting_time
     if progress_bar:
         tqdm_iter = tqdm.tqdm(range(-starting_time,min(max_time_steps,len(scenario)))) # if fire is not detected in 12 + starting_time time steps, we stop the simulation

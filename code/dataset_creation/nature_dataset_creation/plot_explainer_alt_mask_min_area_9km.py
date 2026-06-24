@@ -177,7 +177,7 @@ def layers_for_mask(mask_bool, bounded, r_urb, c_urb, r_oob, c_oob, urban_purple
         marker="o",
         color="#0d0d0d",
         markersize=7,
-        label=f"Inside mask (n={n_in})",
+        label=f"Fire inside mask (n={n_in})",
     )
     return fire_layers, leg
 
@@ -207,6 +207,8 @@ def main():
         fire_layers=fire_layers,
         legend_handles=legend_handles,
         out_path=out_path,
+        ca_boundary_gdf_wfpi=ca_wfpi,
+        cropped_affine=cropped_t,
     )
     print(f"Wrote {out_path}")
 
