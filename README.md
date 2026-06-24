@@ -47,7 +47,6 @@ paper/
   breakeven_report/
     breakeven_sensor_cost_export/
       placement_logs/               — pre-computed placement logs for Fig 5 (48 JSON files)
-  FIGURES_ONBOARDING.md             — figure-by-figure reproduction guide
 
 CODEBASE.md                         — full codebase reference for developers and agents
 cameras.json                        — ALERTCalifornia camera metadata
@@ -123,7 +122,7 @@ This runs the placement optimizer and all routing strategies across all budget l
 
 ### Step 2 — Reproduce figures
 
-See `paper/FIGURES_ONBOARDING.md` for a complete figure-by-figure guide. Quick reference:
+Quick reference for figure reproduction:
 
 | Figure | Script |
 |--------|--------|

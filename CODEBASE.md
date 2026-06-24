@@ -82,7 +82,6 @@ paper/
     csv/                        137 pre-computed benchmark CSVs
   breakeven_report/
     breakeven_sensor_cost_export/placement_logs/  48 JSON files for Fig 5
-  FIGURES_ONBOARDING.md         figure-by-figure reproduction guide
 
 cameras.json                    699 ALERTCalifornia camera positions (lat/lon)
 environment.yml                 conda env `juliaenv` (Linux/HPC, Python 3.10)
@@ -551,7 +550,7 @@ Key fields:
 
 ## 10. Figure and Table Reproduction
 
-See `paper/FIGURES_ONBOARDING.md` for the canonical guide. Summary:
+Summary of figure generators:
 
 | Figure | Script | Key inputs |
 |---|---|---|
