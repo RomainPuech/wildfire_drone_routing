@@ -49,7 +49,7 @@ paper/
       placement_logs/               — pre-computed placement logs for Fig 5 (48 JSON files)
   FIGURES_ONBOARDING.md             — figure-by-figure reproduction guide
 
-documentation/                      — architecture and dataset documentation
+CODEBASE.md                         — full codebase reference for developers and agents
 cameras.json                        — ALERTCalifornia camera metadata
 environment.yml                     — Python environment (Linux / HPC)
 environment_macos.yml               — Python environment (macOS)
