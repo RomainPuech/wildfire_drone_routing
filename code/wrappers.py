@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import os
 import tqdm
 import json
@@ -163,9 +164,10 @@ class LoggableDroneStrategyWrapper:
         n_ground      = automatic_initialization_parameters["n_ground_stations"]
         burnmap_nickname = custom_initialization_parameters.get("burnmap_filename", "").split("/")[-1].split(".")[0]
 
-        # fingerprint of charging-station layout (sorted, Julia → Python index already)
-        layout_fp     = "_".join([f"{x}-{y}" for x, y
+        # fingerprint of charging-station layout — hashed to avoid OS path-length limits
+        layout_raw    = "_".join([f"{x}-{y}" for x, y
                                   in sorted(automatic_initialization_parameters["charging_stations_locations"])])
+        layout_fp     = hashlib.sha1(layout_raw.encode()).hexdigest()[:16]
 
 
         log_name =  f"{os.path.basename(os.path.dirname(custom_initialization_parameters['burnmap_filename']))}_" + \
@@ -220,7 +222,8 @@ class LoggableDroneStrategyWrapper:
         normalised = self._normalise_initial(raw)
         self._log["initial_drone_locations"] = normalised
         self._flush()
-        return raw  # keep original return-type
+        # Return normalised plain Python ints — raw may hold PyCall.jlwrap (unpickleable in multiprocessing).
+        return normalised
 
     def next_actions(self, automatic_step_parameters, custom_step_parameters):
         # serve from cache if available
@@ -232,10 +235,12 @@ class LoggableDroneStrategyWrapper:
 
         # else compute + store
         acts = self._inner.next_actions(automatic_step_parameters, custom_step_parameters)
-        self._log["actions_history"].append(self._normalise_actions(acts))
+        stored_norm = self._normalise_actions(acts)
+        self._log["actions_history"].append(stored_norm)
         self._step_counter += 1
         self._flush()
-        return acts
+        # Round-trip through normalised storage so callers never see jlwrap coordinates.
+        return self._denormalise_actions(stored_norm)
 
     # ---------------------------------------------------------------------
     # attribute delegation – behave exactly like the real strategy
@@ -260,13 +265,13 @@ class LoggableDroneStrategyWrapper:
             if raw and isinstance(raw[0], tuple) and isinstance(raw[0][0], str):
                 # already [(state,(x,y))]
                 print(f"raw: {raw}")
-                return [(st, (int(x), int(y))) for (st, (x, y)) in raw]
+                return [(str(st), (int(x), int(y))) for (st, (x, y)) in raw]
             # just [(x,y),...]  – assume start on charger
             return [("charge", (int(x), int(y))) for (x, y) in raw]
 
         if isinstance(raw, tuple) and len(raw) == 2:
             positions, states = raw
-            return [(st, (int(x), int(y))) for (x, y), st in zip(positions, states)]
+            return [(str(st), (int(x), int(y))) for (x, y), st in zip(positions, states)]
 
         raise ValueError("Unexpected initial-location format from strategy")
 
@@ -274,7 +279,10 @@ class LoggableDroneStrategyWrapper:
     def _normalise_actions(acts):
         out = []
         for typ, param in acts:
-            out.append([typ, None if param is None else list(param)])
+            if param is None:
+                out.append([str(typ), None])
+            else:
+                out.append([str(typ), [int(x) for x in param]])
         return out
 
     @staticmethod
@@ -326,7 +334,7 @@ ClusteredDroneRoutingMaxCoverageResetStaticMasked = get_wrapped_clustering_strat
 ClusteredDroneRoutingTOPMasked = get_wrapped_clustering_strategy(DroneRoutingTOPMasked)
 ClusteredDroneRoutingTOPMaskedGrowingProba = get_wrapped_clustering_strategy(DroneRoutingTOPMaskedGrowingProba)
 ClusteredDroneRoutingMaxCoverageGrowingMasked = get_wrapped_clustering_strategy(DroneRoutingMaxCoverageGrowingMasked)
-ClusteredLinearMinTime = get_wrapped_clustering_strategy(DroneRoutingLinearMinTime)
+ClusteredDroneRoutingLinearMinTime = get_wrapped_clustering_strategy(DroneRoutingLinearMinTime)
 
 DroneRoutingUniformCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredUniformCoverage)
 DroneRoutingMaxCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredMaxCoverage)
@@ -339,7 +347,7 @@ DroneRoutingMaxCoverageResetStaticMaskedLogged = make_loggable_drone_strategy(Cl
 DroneRoutingTOPMaskedLogged = make_loggable_drone_strategy(ClusteredDroneRoutingTOPMasked)
 DroneRoutingTOPMaskedGrowingProbaLogged = make_loggable_drone_strategy(ClusteredDroneRoutingTOPMaskedGrowingProba)
 DroneRoutingMaxCoverageGrowingMaskedLogged = make_loggable_drone_strategy(ClusteredDroneRoutingMaxCoverageGrowingMasked)
-DroneRoutingLinearMinTimeLogged = make_loggable_drone_strategy(ClusteredLinearMinTime)
+DroneRoutingLinearMinTimeLogged = make_loggable_drone_strategy(DroneRoutingLinearMinTime)
 
 
 globals()["DroneRoutingUniformCoverageResetStatic"] = DroneRoutingUniformCoverageResetStaticLogged
@@ -354,4 +362,4 @@ globals()["DroneRoutingMaxCoverageResetStaticMasked"] = DroneRoutingMaxCoverageR
 globals()["DroneRoutingTOPMasked"] = DroneRoutingTOPMaskedLogged
 globals()["DroneRoutingTOPMaskedGrowingProba"] = DroneRoutingTOPMaskedGrowingProbaLogged
 globals()["DroneRoutingMaxCoverageGrowingMasked"] = DroneRoutingMaxCoverageGrowingMaskedLogged
-globals()["DroneRoutingLinearMinTimeLogged"] = DroneRoutingLinearMinTimeLogged
+globals()["DroneRoutingLinearMinTime"] = DroneRoutingLinearMinTimeLogged

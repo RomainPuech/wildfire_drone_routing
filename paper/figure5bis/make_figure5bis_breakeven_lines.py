@@ -295,6 +295,14 @@ def draw_panel(
 
 def main() -> None:
     print(f"Loading fire data ({N_FIRES} fires)...", flush=True)
+    if N_FIRES == 0:
+        sys.exit(
+            "ERROR: no benchmark fires were loaded, so the % reachable curve cannot be "
+            "computed.\nThis figure needs the per-year ignition datasets. Download them "
+            "from\n  https://huggingface.co/datasets/MasterYoda293/DroneBench\nand place "
+            "California2021Dataset/ … California2024Dataset/ (each with scenarii/ and "
+            "config_california_<year>.json) at the repo root, then re-run."
+        )
     data = load_breakeven_data()
 
     budgets_present = sorted(data.keys())

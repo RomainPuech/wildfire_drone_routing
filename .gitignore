@@ -31,6 +31,9 @@ code/dataset_creation/risk_layouts_npy/
 # Run outputs and scratch
 display_*/
 logs/
+# Exception: pre-computed panel placement logs shipped for Fig 3 reproduction
+!paper/final_report/placement_data/logs/
+!paper/final_report/placement_data/logs/*.json
 trash/
 tmp*/
 results/

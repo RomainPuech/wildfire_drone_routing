@@ -38,7 +38,10 @@ The paper evaluates five budget levels (\$20M, \$50M, \$75M, \$100M, \$500M), th
 ## 2. Repository Layout
 
 ```
-run_benchmark_california_yearly.py  ← PRIMARY ENTRY POINT for all paper experiments
+run_benchmark_california2021_yearly.py ← PRIMARY ENTRY POINT (routing + simulation; produced the paper data)
+run_benchmark_california_yearly.py     ← cleaned multi-year convenience wrapper
+test_budget_placement_station_max_greedy_uniform_2021.py      ← placement ILP entry point (20/50/100M)
+test_budget_placement_station_max_uniform_fixed_drones_2021.py ← placement ILP entry point (500M)
 preprocess_benchmark_2021.py        ← one-off rescaling of the 2021 dataset
 visualize_sensor_placement_2021.py  ← generate single-panel placement maps
 
@@ -73,15 +76,20 @@ julia_env/
   Manifest.toml                 exact locked versions
 
 paper/
-  Nature_Wildfires/             LaTeX source, figures, table-building scripts
-  figure4/                      Fig 4 generator (placement composite)
-  figure5bis/                   Fig 5 generator (cost-sensitivity lines)
-  figure6/                      Fig 6 generator (ALERTCalifornia coverage)
+  Nature_Wildfires/             figure/table scripts + committed figure PNGs (manuscript .tex NOT included)
+  figure4/                      Fig 3 generator (deployment composite)
+  figure5bis/                   Fig 4 generator (cost-sensitivity lines)
+  figure6/                      Fig 5 generator (ALERTCalifornia coverage)
+  breakeven_figure/             shared drawing module imported by figure4 & figure5bis
   final_report/
-    generate_final_report.py    Fig 3 data computation (detection frontier)
+    generate_final_report.py    Fig 2 data computation (detection frontier)
     csv/                        137 pre-computed benchmark CSVs
+    placement_data/logs/        4 pre-computed panel placement JSONs for Fig 3 (20/50/100/500M)
   breakeven_report/
-    breakeven_sensor_cost_export/placement_logs/  48 JSON files for Fig 5
+    breakeven_sensor_cost_export/placement_logs/  48 JSON files for Fig 4
+
+report/
+  benchmark_2021_greedy_kernel/ SLURM submission scripts + pipeline docs (HPC reproduction)
 
 cameras.json                    699 ALERTCalifornia camera positions (lat/lon)
 environment.yml                 conda env `juliaenv` (Linux/HPC, Python 3.10)
@@ -462,9 +470,13 @@ load_burn_map(filename::String) → (Array{Float32,3}, Vector{String})
 The strategies used in the paper (in `code/Strategy.py`):
 
 ```
-Sensor Placement
-├── SensorPlacementMaxCoverageGaussianTimeMaskedBudget     ← \$20M, \$50M, \$75M, \$100M
-└── SensorPlacementMaxCoverageGaussianTimeMaskedWithAllocation  ← \$500M
+Sensor Placement (paper results; 7 drones/station StationMax family)
+├── SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMaxGreedyUniform   ← \$20M, \$50M, \$100M
+│     (Julia: Max_Coverage_Kernel_Masked_Budget_StationMax_GreedyUniform; entry point test_budget_placement_station_max_greedy_uniform_2021.py)
+└── SensorPlacementMaxCoverageGaussianTimeMaskedBudgetStationMax(Uniform)       ← \$500M uses the UniformFixedDrones variant
+      (Julia: Max_Coverage_Kernel_Masked_Budget_StationMax_UniformFixedDrones; entry point test_budget_placement_station_max_uniform_fixed_drones_2021.py)
+# SensorPlacementMaxCoverageGaussianTimeMaskedBudget (no StationMax) is the older
+# budget ILP retained for reference; it is NOT what produced the paper placements.
 
 Drone Routing
 ├── DroneRoutingTOPGrowing          (TOP)           ← best detection rate
@@ -552,15 +564,20 @@ Key fields:
 
 Summary of figure generators:
 
-| Figure | Script | Key inputs |
-|---|---|---|
-| Fig 2 — Dataset overview | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` | `California2021Dataset/`, Pyrologix GeoTIFF |
-| Fig 3 — Detection frontier | `paper/Nature_Wildfires/make_figure3_frontier.py` | `paper/final_report/csv/*.csv` |
-| Fig 4 — Placement maps | `paper/figure4/generate_placement_composite_figure.py` | placement JSONs, `cameras.json`, CA boundary shapefile |
-| Fig 5 — Cost sensitivity | `paper/figure5bis/make_figure5bis_breakeven_lines.py` | `paper/breakeven_report/.../placement_logs/*.json` |
-| Fig 6 — ALERTCalifornia | `paper/figure6/generate_alertcalifornia_composite_figure.py` | `cameras.json`, fire configs, CA boundary |
+Manuscript figure numbering (the script-internal names predate the final numbering):
 
-**Environment note**: Figures 4 and 6 require the `wf` conda environment (geopandas, rasterio for the California state boundary). All other figures work with `juliaenv`.
+| Manuscript figure | Script | Key inputs |
+|---|---|---|
+| Fig 2 — Detection frontier | `paper/Nature_Wildfires/make_figure3_frontier.py` | `paper/final_report/csv/*.csv` (no datasets) |
+| Fig 3 — Deployment maps | `paper/figure4/generate_placement_composite_figure.py` | `paper/final_report/placement_data/logs/*.json`, datasets, CA boundary |
+| Fig 4 — Cost sensitivity | `paper/figure5bis/make_figure5bis_breakeven_lines.py` | `paper/breakeven_report/.../placement_logs/*.json`, datasets |
+| Fig 5 — ALERTCalifornia | `paper/figure6/generate_alertcalifornia_composite_figure.py` | `cameras.json`, fire configs, CA boundary |
+| Fig 6 — Case-study region | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` | `California2021Dataset/`, Pyrologix GeoTIFF |
+
+`paper/figure4/` and `paper/figure5bis/` import the shared drawing module
+`paper/breakeven_figure/generate_breakeven_cost_sensitivity_figures.py`.
+
+**Environment note**: Figs 3, 5, 6 require the geospatial stack (geopandas, rasterio, pyproj — the macOS `wf` env, or add those packages to `juliaenv`) for the California state boundary; without it the outline is omitted but the figure still renders. Fig 2 and Fig 4 work with `juliaenv` (Fig 4 still needs the datasets for the % reachable curve).
 
 **Table scripts** are in `paper/Nature_Wildfires/scripts/`:
 - `build_table1_detection.py` → `table1_detection.tex` (main results table)
@@ -571,16 +588,17 @@ Summary of figure generators:
 
 ## 11. HPC Execution Pattern
 
-The paper benchmark was run on MIT SuperCloud (SLURM). The typical pattern:
+The paper benchmark was run on MIT SuperCloud (SLURM). The submission scripts are
+committed under `report/benchmark_2021_greedy_kernel/` (placement array, routing
+arrays, \$500M jobs, breakeven sweep, and `reproduce_benchmark_2021_greedy_kernel.sh`).
+Each loads `module load anaconda/Python-ML-2025a julia gurobi` and calls `python-jl`.
+The typical per-combination pattern:
 
 ```bash
-# Run one (year, budget, strategy) combination
-python -u run_benchmark_california_yearly.py \
-  --year 2021 \
-  --budget 100 \
-  --routing TOPGrowing \
-  --max-workers 32 \
-  --output-csv paper/final_report/csv/benchmark_results_yearly_100M_2021_TOPGrowing.csv
+# Placement (once per budget; cached to California2021Dataset/logs/)
+python-jl test_budget_placement_station_max_greedy_uniform_2021.py --budget 100 --time-limit 43200
+# Routing + simulation for one (budget, strategy)
+python-jl run_benchmark_california2021_yearly.py --budget 100 --strategy TOPGrowing
 ```
 
 The runner uses `ProcessPoolExecutor` with `spawn` context (critical for Julia compatibility — `fork` breaks the Julia runtime). Each worker initializes its own Julia session on first use.

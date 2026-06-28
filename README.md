@@ -9,7 +9,11 @@ This repository contains the infrastructure placement and drone routing optimiza
 ## Repository structure
 
 ```
-run_benchmark_california_yearly.py  — main benchmark runner (all budget levels, all years)
+run_benchmark_california2021_yearly.py — canonical benchmark runner (placement cache + routing + simulation; produced the paper data)
+run_benchmark_california_yearly.py     — cleaned multi-year convenience wrapper
+test_budget_placement_station_max_greedy_uniform_2021.py  — placement entry point (greedy-uniform StationMax; 20/50/100M)
+test_budget_placement_station_max_uniform_fixed_drones_2021.py — placement entry point (uniform fixed drones; 500M)
+test_budget_placement_station_max_2021.py, test_budget_placement_station_max_uniform_2021.py — placement variants
 preprocess_benchmark_2021.py        — preprocessing for 2021 dataset
 visualize_sensor_placement_2021.py  — single-panel placement maps
 
@@ -37,16 +41,23 @@ julia/
 julia_env/                          — Julia environment (Project.toml + Manifest.toml)
 
 paper/
-  Nature_Wildfires/                 — LaTeX source, figures, table-building scripts
-  figure4/                          — Fig 4: placement composite map
-  figure5bis/                       — Fig 5: cost-sensitivity line plot
-  figure6/                          — Fig 6: ALERTCalifornia coverage maps
+  Nature_Wildfires/                 — figure/table-building scripts + committed figure PNGs
+    make_figure3_frontier.py        — Fig 2: detection frontier plot
+    scripts/                        — table builders (build_table1/2, collect_runtimes, …)
+  figure4/                          — Fig 3: deployment composite map
+  figure5bis/                       — Fig 4: cost-sensitivity line plot
+  figure6/                          — Fig 5: ALERTCalifornia coverage maps
+  breakeven_figure/                 — shared cost-sensitivity drawing module (used by Fig 3 & 4)
   final_report/
-    generate_final_report.py        — Fig 3: detection frontier data processing
+    generate_final_report.py        — Fig 2: detection frontier data processing
     csv/                            — pre-computed benchmark results (137 CSV files)
+    placement_data/logs/            — pre-computed panel placement JSONs for Fig 3 (20/50/100/500M)
   breakeven_report/
     breakeven_sensor_cost_export/
-      placement_logs/               — pre-computed placement logs for Fig 5 (48 JSON files)
+      placement_logs/               — pre-computed placement logs for Fig 4 (48 JSON files)
+
+report/
+  benchmark_2021_greedy_kernel/     — SLURM submission scripts + pipeline docs (HPC reproduction)
 
 CODEBASE.md                         — full codebase reference for developers and agents
 cameras.json                        — ALERTCalifornia camera metadata
@@ -61,11 +72,17 @@ environment_macos.yml               — Python environment (macOS)
 We use Python 3.10. Create and activate the conda environment:
 
 ```bash
-conda env create -f environment.yml   # Linux / HPC
-# or
-conda env create -f environment_macos.yml  # macOS
+conda env create -f environment.yml         # Linux / HPC  -> env name: juliaenv
 conda activate juliaenv
+# or, on macOS (includes the geopandas/rasterio geospatial stack):
+conda env create -f environment_macos.yml   # macOS        -> env name: wf
+conda activate wf
 ```
+
+The Linux/HPC env is named `juliaenv` and the macOS env is named `wf`. The
+geo-dependent figures (Fig 3, Fig 5, Fig 6) need `geopandas`, `rasterio`, and
+`pyproj`; these are included in the macOS `wf` env. Add them to `juliaenv` if you
+generate those figures on Linux.
 
 ### Julia
 
@@ -108,43 +125,101 @@ To reproduce the datasets from USFS ignition records and WFPI/Pyrologix rasters,
 
 ## Reproducing paper results
 
-### Step 1 — Run the benchmark
+> **Fastest path:** all heavy outputs are pre-computed and committed — benchmark
+> CSVs in `paper/final_report/csv/` and placement JSONs in
+> `paper/final_report/placement_data/logs/` and
+> `paper/breakeven_report/breakeven_sensor_cost_export/placement_logs/`. You can
+> jump straight to **Step 2** to regenerate the figures. The full pipeline (Step 1)
+> only needs to be re-run to reproduce those artifacts from scratch, and requires
+> the datasets (HuggingFace), a Gurobi license, and ideally an HPC cluster.
+
+### Step 1 — Run the benchmark (optional; needs datasets + Gurobi)
+
+The benchmark runs in two phases. The canonical entry point that produced the
+paper data is `run_benchmark_california2021_yearly.py` (run via `python-jl` so a
+single Julia session is reused; the placement scripts also use `python-jl`).
+
+**1a. Infrastructure placement** (once per budget; ILP solved by Gurobi, result
+cached to `California2021Dataset/logs/sensor_alloc_GaussianBudget<B>M_*_261x161_mean.json`).
+The \$20M/\$50M/\$100M placements use the *greedy-uniform StationMax* optimizer
+(7 drones per station); the \$500M placement uses the *uniform-fixed-drones* variant:
 
 ```bash
-python run_benchmark_california_yearly.py \
-  --budgets 20000000 50000000 75000000 100000000 500000000 \
-  --years 2021 2022 2023 2024 \
-  --strategies TOPGrowing MaxCov LinearMinTime \
-  --output-dir paper/final_report/csv/
+# 20M / 50M / 100M (greedy-uniform StationMax)
+python-jl test_budget_placement_station_max_greedy_uniform_2021.py --budget 20  --time-limit 600
+python-jl test_budget_placement_station_max_greedy_uniform_2021.py --budget 100 --time-limit 43200
+
+# 500M (uniform fixed drones per station)
+python-jl test_budget_placement_station_max_uniform_fixed_drones_2021.py --budget 500 --time-limit 43200
+
+# (equivalently: run_benchmark_california2021_yearly.py --budget <B> --sensor-only --time-limit <S>)
 ```
 
-This runs the placement optimizer and all routing strategies across all budget levels and years, writing one CSV per (year, budget, strategy) combination. The pre-computed CSVs are already included in `paper/final_report/csv/` so this step can be skipped to reproduce figures directly.
+**1b. Drone routing + simulation** (per budget × routing strategy; writes one CSV).
+The placement cache from 1a is loaded automatically:
+
+```bash
+python-jl run_benchmark_california2021_yearly.py --budget 100 --strategy TOPGrowing
+python-jl run_benchmark_california2021_yearly.py --budget 100 --strategy MaxCov
+python-jl run_benchmark_california2021_yearly.py --budget 100 --strategy LinearMinTime
+```
+
+`--budget` ∈ {20, 50, 100, 500}; `--strategy` is a case-insensitive substring
+(`TOPGrowing`, `MaxCov`, `LinearMinTime`). See `--help` for the full option list.
+On a cluster, use the SLURM scripts in Step 4 rather than running these by hand.
 
 ### Step 2 — Reproduce figures
 
-Quick reference for figure reproduction:
+The script-internal names predate the manuscript's final figure numbering, so the
+table below maps each manuscript figure to its generator and output. Figures that
+need the geospatial stack (California outline via geopandas/rasterio/pyproj) are
+marked **geo**; install them in your environment (named `wf` on macOS) or the
+outline is simply omitted. Figures 3–6 also require the per-year datasets.
 
-| Figure | Script |
-|--------|--------|
-| Fig 2 — California dataset overview | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` |
-| Fig 3 — Detection frontier | `paper/Nature_Wildfires/make_figure3_frontier.py` |
-| Fig 4 — Infrastructure placement maps | `conda run -n wf python paper/figure4/generate_placement_composite_figure.py` |
-| Fig 5 — Cost sensitivity | `python paper/figure5bis/make_figure5bis_breakeven_lines.py` |
-| Fig 6 — ALERTCalifornia coverage | `conda run -n wf python paper/figure6/generate_alertcalifornia_composite_figure.py` |
-
-Figures 4 and 6 require the `wf` conda environment (geospatial stack: geopandas, rasterio).
-
-### Step 3 — Build tables and PDF
+| Manuscript figure | Script | Output / data |
+|---|---|---|
+| **Fig 2** — Detection rate & speed vs. budget | `paper/Nature_Wildfires/make_figure3_frontier.py` | `Figures/frontier.png` — from committed CSVs (no datasets needed) |
+| **Fig 3** — Optimized deployment maps | `paper/figure4/generate_placement_composite_figure.py` *(geo)* | `Figures/placement_composite.png` — committed panel JSONs + datasets |
+| **Fig 4** — Cost sensitivity to sensor cost | `paper/figure5bis/make_figure5bis_breakeven_lines.py` | `Figures/breakeven_costsensitivity_lines.png` — committed JSONs + datasets |
+| **Fig 5** — ALERTCalifornia coverage | `paper/figure6/generate_alertcalifornia_composite_figure.py` *(geo)* | `Figures/alertcalifornia_coverage_composite.png` — `cameras.json` + datasets |
+| **Fig 6** — California case-study region | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` *(geo)* | `Figures/fig0{1..4}_*.png` — datasets + raw WFPI/Pyrologix rasters |
 
 ```bash
-python paper/Nature_Wildfires/scripts/build_table1_detection.py
-python paper/Nature_Wildfires/scripts/build_table2_alertcalifornia.py
-python paper/compile_pdf.py
+# Example (Fig 2 works with no datasets):
+python paper/Nature_Wildfires/make_figure3_frontier.py
+# Geo figures (run inside the env that has geopandas/rasterio/pyproj):
+python paper/figure4/generate_placement_composite_figure.py
 ```
 
-## Running on an HPC cluster
+### Step 3 — Build result tables
 
-The benchmark was run on MIT SuperCloud. See `documentation/` for an overview of the pipeline, and adapt the array-job pattern in `run_benchmark_california_yearly.py` to your scheduler.
+```bash
+python paper/Nature_Wildfires/scripts/build_table1_detection.py     # -> table1_detection.tex
+python paper/Nature_Wildfires/scripts/build_table2_alertcalifornia.py  # -> table2_alertcalifornia.tex
+python paper/Nature_Wildfires/scripts/collect_runtimes.py           # -> methods_runtime_table.tex
+```
+
+These emit standalone LaTeX table fragments. The manuscript LaTeX source is **not**
+part of this code release, so there is no full-PDF build step (`build_pdf.py`
+remains for users who supply their own `sn-article.tex`).
+
+### Step 4 — Running on an HPC cluster (MIT SuperCloud / SLURM)
+
+The SLURM submission scripts used for the paper are in
+`report/benchmark_2021_greedy_kernel/`:
+
+- `supercloud_2_greedy_uniform_placement_array.sh` — placement array job (budgets 20/100/500).
+- `supercloud_3_greedy_uniform_routing_array.sh`, `supercloud_3_greedy_uniform_routing_linear_array.sh` — routing array jobs.
+- `supercloud_500M_placement_uniform_fixed_*.sh`, `supercloud_500M_fnature_routing_*.sh` — \$500M placement/routing.
+- `supercloud_*_greedy_uniform_placement_breakeven_cs*.sh` — sensor-cost breakeven sweep (Fig 4 inputs).
+- `reproduce_benchmark_2021_greedy_kernel.sh` — single-node driver that re-runs placement + placement figures end to end.
+
+Each script loads the cluster toolchain (`module load anaconda/Python-ML-2025a julia gurobi`)
+and calls the same `python-jl` entry points as Step 1. Submit with
+`sbatch report/benchmark_2021_greedy_kernel/<script>.sh` from the repo root, or
+adapt the array-job pattern to your scheduler. See
+`report/benchmark_2021_greedy_kernel/benchmark_2021_greedy_kernel.md` for the
+pipeline overview.
 
 ## Julia optimization tests
 

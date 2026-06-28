@@ -1,8 +1,10 @@
 # Romain Puech, 2024
 # Displays
+import math
+from collections import defaultdict
+
 import numpy as np
 import os
-import cv2
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
@@ -10,8 +12,6 @@ from matplotlib.colors import LogNorm
 import shutil
 import time
 import imageio
-
-from dataset import load_scenario
 
 def display_grid(grid, smoke_grid, drones, display):
     """
@@ -201,6 +201,8 @@ def create_video_from_images(image_dir="images", output_filename="simulation.mp4
         output_filename: Name of the output video file.
         frames_per_image: Number of frames to display each image (controls speed).
     """
+    import cv2
+
     image_files = sorted([f for f in os.listdir(image_dir) if f.endswith(".png")])
     
     if not image_files:
@@ -278,6 +280,8 @@ def create_scenario_video(scenario_or_filename, drone_locations_history = None, 
     
     # Load the scenario
     if scenario is None:
+        from dataset import load_scenario
+
         scenario = load_scenario(filename)
     T, height, width = scenario.shape
     # print("scenario.shape = ", scenario.shape)
@@ -570,6 +574,34 @@ def plot_benchmark_overview(
     plt.close(fig)
 
 
+def _scatter_drones_unstacked(ax, positions, timestep, s=30, c="black", marker="D"):
+    """Plot drone markers; drones sharing the same cell get a small ring offset (display only).
+
+    Routing logs often list 7 drones with identical operational (row, col) each substep;
+    matplotlib would otherwise draw them on top of each other so only one diamond is visible.
+    """
+    groups = defaultdict(list)
+    for p in positions:
+        x, y = float(p[0]), float(p[1])
+        key = (round(x, 9), round(y, 9))
+        groups[key].append((x, y))
+    jitter = 0.24
+    legend_done = False
+    for pts in groups.values():
+        k = len(pts)
+        for j, (x, y) in enumerate(pts):
+            if k == 1:
+                px, py = x, y
+            else:
+                ang = 2 * math.pi * j / k + 0.15
+                px = x + jitter * math.cos(ang)
+                py = y + jitter * math.sin(ang)
+            lbl = "Drone" if timestep == 0 and not legend_done else None
+            if lbl is not None:
+                legend_done = True
+            ax.scatter(px, py, c=c, s=s, marker=marker, label=lbl)
+
+
 def create_video_scenario_burnmap(
     burn_map,
     drone_locations_history=None,
@@ -616,7 +648,6 @@ def create_video_scenario_burnmap(
     from matplotlib.patches import Rectangle
     import os
     from matplotlib.colors import LinearSegmentedColormap
-    import cv2
 
     T, N, M = burn_map.shape
     output_dir = f"display_{out_filename}"
@@ -658,10 +689,9 @@ def create_video_scenario_burnmap(
             gray_overlay[masked_cells] = [0.5, 0.5, 0.5, 0.8]  # gray with high opacity
             ax.imshow(gray_overlay.transpose(1, 0, 2), origin='lower')
 
-        # Drones
+        # Drones (unstack co-located fleet so all units remain visible)
         if drone_locations_history is not None and t < len(drone_locations_history):
-            for drone in drone_locations_history[t]:
-                ax.scatter(drone[0], drone[1], c="black", s=30, marker="D", label="Drone" if t == 0 else None)
+            _scatter_drones_unstacked(ax, drone_locations_history[t], t)
 
         # Ground sensors
         if ground_sensor_locations:
@@ -732,284 +762,44 @@ def create_video_scenario_burnmap(
     if not image_files:
         print("No images found to compile into a video.")
         return
-    output_path = os.path.join(output_dir, f"{out_filename}.mp4")
-    writer = imageio.get_writer(output_path, fps=10)
+    frames = []
     for image_file in image_files:
         image_path = os.path.join(output_dir, image_file)
         img = imageio.imread(image_path)
         for _ in range(frames_per_image):
-            writer.append_data(img)
-    writer.close()
-    print(f"Video saved at: {output_path}")
+            frames.append(np.asarray(img))
 
-
-def _pyrologix_imshow_01_bottom_left(ax, z_hw, valid_mask_hw, invalid_rgba=(1.0, 1.0, 1.0, 1.0)):
-    """
-    Pyrologix heatmap: values scaled to [0, 1], y-axis upward (origin bottom-left
-    visually; array row 0 = north remains at top of map via flipud).
-    Returns (im, H, W).
-    """
-    import matplotlib.pyplot as plt
-
-    z = np.asarray(z_hw, dtype=np.float32)
-    H, W = z.shape
-    m = np.asarray(valid_mask_hw) == 1
-    z01 = np.clip(z / 255.0, 0.0, 1.0)
-    display = np.where(m, z01, np.nan)
-    display = np.flipud(display)
-
+    output_path = os.path.join(output_dir, f"{out_filename}.mp4")
+    mp4_ok = False
     try:
-        cmap = plt.colormaps["YlOrRd"].copy()
-    except (AttributeError, KeyError):
-        cmap = plt.cm.get_cmap("YlOrRd").copy()
-    cmap.set_bad(color=invalid_rgba)
-
-    im = ax.imshow(
-        display,
-        cmap=cmap,
-        origin="lower",
-        interpolation="nearest",
-        vmin=0.0,
-        vmax=1.0,
-        extent=[0, W, 0, H],
-        aspect="equal",
-    )
-    ax.set_xlim(0, W)
-    ax.set_ylim(0, H)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for _sp in ax.spines.values():
-        _sp.set_visible(False)
-    return im, H, W
-
-
-def _scatter_fire_layers_bottom_left(ax, fire_layers, H):
-    """Scatter using original grid (row from top); maps to y-up coordinates."""
-    for layer in fire_layers or []:
-        r = np.asarray(layer["rows"], dtype=int)
-        c = np.asarray(layer["cols"], dtype=int)
-        if r.size == 0:
-            continue
-        y = (H - 1) - r
-        if layer.get("include_in_legend", True):
-            label = layer.get("label", "")
-        else:
-            label = "_nolegend_"
-        kw = {
-            "c": layer.get("color", "black"),
-            "marker": layer.get("marker", "o"),
-            "s": layer.get("s", 25),
-            "alpha": layer.get("alpha", 0.9),
-            "zorder": layer.get("zorder", 5),
-            "label": label,
-        }
-        if "edgecolors" in layer:
-            kw["edgecolors"] = layer["edgecolors"]
-            kw["linewidths"] = layer.get("linewidths", 0.4)
-        ax.scatter(c, y, **kw)
-
-
-def make_usfs_fire_legend_handles(
-    n_urb,
-    n_off,
-    n_ds,
-    *,
-    include_off_mask=True,
-    benchmark_label=None,
-    urban_color="#0d9488",
-):
-    """
-    Proxy legend entries matching USFS explainer fire symbology (fig05 style).
-
-    Parameters
-    ----------
-    include_off_mask : bool
-        If False, omit the "Unburnable" row (e.g. before WFPI invalid cells are applied).
-    benchmark_label : str or None
-        If set, append a final row (black disk) for the benchmark subsample.
-    urban_color : str
-        Face/edge color for urban triangle markers (matches scatter layers).
-    """
-    from matplotlib.lines import Line2D
-
-    handles = [
-        Line2D(
-            [0],
-            [0],
-            linestyle="none",
-            marker="^",
-            color=urban_color,
-            markersize=9,
-            label=f"Urban (n={n_urb})",
-        ),
-    ]
-    if include_off_mask:
-        handles.append(
-            Line2D(
-                [0],
-                [0],
-                linestyle="none",
-                marker="o",
-                color="#888888",
-                markersize=6,
-                alpha=0.75,
-                label=f"Unburnable (n={n_off})",
-            )
+        writer = imageio.get_writer(
+            output_path, format="FFMPEG", mode="I", fps=10, codec="libx264"
         )
-    handles.append(
-        Line2D(
-            [0],
-            [0],
-            linestyle="none",
-            marker="o",
-            color="#0d0d0d",
-            markersize=7,
-            label=f"In dataset (n={n_ds})",
-        )
-    )
-    if benchmark_label:
-        handles.append(
-            Line2D(
-                [0],
-                [0],
-                linestyle="none",
-                marker="o",
-                color="#0d0d0d",
-                markersize=9,
-                label=benchmark_label,
-            )
-        )
-    return handles
+        for fr in frames:
+            writer.append_data(fr)
+        writer.close()
+        mp4_ok = True
+        print(f"Video saved at: {output_path}")
+    except Exception as e:
+        print(f"FFmpeg MP4 export failed ({e!r}); trying OpenCV...")
 
+    if not mp4_ok:
+        try:
+            import cv2
 
-def _colorbar_inset_top_right(fig, ax, im, label="Ignition probability (0–1)"):
-    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+            h, w = frames[0].shape[:2]
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            vw = cv2.VideoWriter(output_path, fourcc, 10.0, (w, h))
+            for fr in frames:
+                bgr = cv2.cvtColor(fr, cv2.COLOR_RGB2BGR)
+                vw.write(bgr)
+            vw.release()
+            print(f"Video saved at: {output_path}")
+            mp4_ok = True
+        except Exception as e2:
+            print(f"OpenCV MP4 failed ({e2!r}); writing animated GIF...")
 
-    # borderpad in points: keep colorbar + label inside axes (away from figure edge)
-    cax = inset_axes(
-        ax,
-        width="3.0%",
-        height="22%",
-        loc="upper right",
-        bbox_to_anchor=(0, 0, 1, 1),
-        bbox_transform=ax.transAxes,
-        borderpad=3.8,
-    )
-    cb = fig.colorbar(im, cax=cax)
-    cax.set_facecolor("white")
-    cb.ax.tick_params(labelsize=7, pad=2)
-    cb.set_label(label, fontsize=8, labelpad=6)
-    return cb
-
-
-def plot_pyrologix_valid_region(
-    pyrologix_hw,
-    valid_mask_hw,
-    out_path,
-    title=None,
-    fire_layers=None,
-    legend_handles=None,
-    legend_loc="lower left",
-    invalid_rgb=(1.0, 1.0, 1.0),
-    colorbar_label="Ignition probability (0–1)",
-    dpi=150,
-):
-    """
-    Static risk map (Pyrologix on the WFPI grid): colormap only where valid_mask == 1;
-    other cells are white. y increases upward; risk in [0, 1]. Colorbar inset top-right.
-
-    fire_layers: optional list of scatter dicts (same as plot_pyrologix_fire_categories).
-    legend_handles: optional list of Artist handles (e.g. from make_usfs_fire_legend_handles).
-    """
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    invalid_rgba = invalid_rgb + (1.0,) if len(invalid_rgb) == 3 else invalid_rgb
-
-    H, W = np.asarray(pyrologix_hw).shape
-    aspect = W / H
-    fig, ax = plt.subplots(figsize=(aspect * 11 + 2, 11))
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor("white")
-
-    im, H, W = _pyrologix_imshow_01_bottom_left(ax, pyrologix_hw, valid_mask_hw, invalid_rgba)
-    _scatter_fire_layers_bottom_left(ax, fire_layers, H)
-    _colorbar_inset_top_right(fig, ax, im, label=colorbar_label)
-
-    if title:
-        ax.set_title(title, fontsize=11, fontweight="bold")
-    if legend_handles:
-        ax.legend(
-            handles=legend_handles,
-            loc=legend_loc,
-            fontsize=8,
-            facecolor="white",
-            edgecolor="0.75",
-            framealpha=1.0,
-        )
-
-    fig.savefig(
-        str(out_path), dpi=dpi, bbox_inches="tight", pad_inches=0.2, facecolor="white"
-    )
-    plt.close(fig)
-
-
-def plot_pyrologix_fire_categories(
-    pyrologix_hw,
-    valid_mask_hw,
-    fire_layers,
-    out_path,
-    title=None,
-    colorbar_label="Ignition probability (0–1)",
-    dpi=150,
-    legend_loc="lower left",
-    legend_handles=None,
-):
-    """
-    Pyrologix background (masked to valid_mask) with multiple fire scatter groups.
-    y increases upward; risk [0–1]; colorbar inset top-right; no axis labels by default.
-
-    fire_layers: list of dicts with keys:
-      rows, cols (arrays), color, marker, s, optional include_in_legend, label, edgecolors, linewidths, alpha, zorder
-    legend_handles: if provided, use these for ax.legend instead of scatter labels.
-    """
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    H, W = np.asarray(pyrologix_hw).shape
-    aspect = W / H
-    fig, ax = plt.subplots(figsize=(aspect * 11 + 2, 11))
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor("white")
-
-    im, H, W = _pyrologix_imshow_01_bottom_left(
-        ax, pyrologix_hw, valid_mask_hw, invalid_rgba=(1.0, 1.0, 1.0, 1.0)
-    )
-    _scatter_fire_layers_bottom_left(ax, fire_layers, H)
-    _colorbar_inset_top_right(fig, ax, im, label=colorbar_label)
-
-    _leg_kw = dict(
-        loc=legend_loc,
-        fontsize=8,
-        facecolor="white",
-        edgecolor="0.75",
-        framealpha=1.0,
-    )
-    if legend_handles is not None:
-        ax.legend(handles=legend_handles, **_leg_kw)
-    else:
-        handles, labels = ax.get_legend_handles_labels()
-        if labels and any(lab for lab in labels):
-            ax.legend(handles=handles, **_leg_kw)
-
-    if title:
-        ax.set_title(title, fontsize=11, fontweight="bold")
-
-    fig.savefig(
-        str(out_path), dpi=dpi, bbox_inches="tight", pad_inches=0.2, facecolor="white"
-    )
-    plt.close(fig)
+    if not mp4_ok:
+        gif_path = os.path.join(output_dir, f"{out_filename}.gif")
+        imageio.mimsave(gif_path, frames, fps=10)
+        print(f"GIF saved at: {gif_path}")

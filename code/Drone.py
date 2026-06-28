@@ -164,6 +164,8 @@ class Drone():
             return self.fly(*action[1])
         elif action[0] == 'charge':
             return self.recharge(*action[1])
+        elif action[0] == 'stay':
+            return (self.x, self.y, self.distance_battery, self.time_battery, self.state)
         else:
             raise ValueError(f"Invalid action: {action}")
 
