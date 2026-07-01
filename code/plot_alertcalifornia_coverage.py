@@ -157,12 +157,26 @@ def _load_pyrologix_wgs84(dataset_root: Path, cropped_t, wfpi_crs):
 
 
 def _load_ca_boundary(wfpi_crs):
-    """Return the dissolved California boundary GeoDataFrame in EPSG:4326."""
+    """Return the dissolved California boundary GeoDataFrame in EPSG:4326.
+
+    Prefers the tiny shipped ``ca_boundary_wgs84.geojson`` so no TIGER tract
+    shapefile is required; falls back to dissolving the shapefile if present.
+    """
     import geopandas as gpd
 
-    ca_tracts = gpd.read_file(str(_bm.CA_TRACTS_SHP)).to_crs("EPSG:4326")
-    ca_tracts["geometry"] = ca_tracts.buffer(0)
-    return ca_tracts.dissolve()
+    if _bm.CA_TRACTS_SHP.is_file():
+        ca_tracts = gpd.read_file(str(_bm.CA_TRACTS_SHP)).to_crs("EPSG:4326")
+        ca_tracts["geometry"] = ca_tracts.buffer(0)
+        return ca_tracts.dissolve()
+
+    cache = _bm.CA_TRACTS_SHP.parents[2] / "ca_boundary_wgs84.geojson"
+    if cache.is_file():
+        return gpd.read_file(str(cache)).to_crs("EPSG:4326")
+
+    raise FileNotFoundError(
+        "Need either the TIGER tract shapefile or the cached CA boundary "
+        f"({cache}). The cached boundary ships with the repo."
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -47,10 +47,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 _HERE = Path(__file__).resolve()
 PROJECT_ROOT = _HERE.parent.parent          # wildfire_drone_routing/
-CAMERAS_JSON = (
-    PROJECT_ROOT
-    / "code/dataset_creation/nature_dataset_creation/data/cameras.json"
-)
+CAMERAS_JSON = PROJECT_ROOT / "cameras.json"
 # WFPI raster archives are only used to recover the grid geo-referencing (CRS +
 # affine transform). The grid is identical across WFPI forecast horizons, so the
 # forecast-1 archive we ship works exactly like forecast-2. To avoid shipping any
