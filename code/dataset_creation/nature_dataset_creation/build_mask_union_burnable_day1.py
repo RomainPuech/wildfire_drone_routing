@@ -43,8 +43,9 @@ def main():
     mask = ever_burnable.astype(np.float32)
 
     # Get WFPI CRS and cropped transform for rasterize
-    WFPI_ZIP_DIR = os.path.join(DATA_DIR, "2020_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA")
-    sample_zip = next(Path(WFPI_ZIP_DIR).glob("wfpi-forecast-2_data_*.zip"))
+    # Georef only (grid identical across WFPI forecast horizons); forecast-1 is what we ship.
+    WFPI_ZIP_DIR = os.path.join(DATA_DIR, "2021_Wind-enhanced_Fire_Potential_Index_Forecast_1_DATA")
+    sample_zip = next(Path(WFPI_ZIP_DIR).glob("wfpi-forecast-1_data_*.zip"))
     with tempfile.TemporaryDirectory() as tmp:
         with zipfile.ZipFile(str(sample_zip)) as z:
             z.extractall(tmp)

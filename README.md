@@ -100,28 +100,36 @@ This installs all exact package versions listed in `julia_env/Manifest.toml`, in
 
 ## Data
 
-The California 2021–2024 wildfire datasets (scenarios as `.npy` arrays, per-year WFPI burn maps, burnable masks, and config files) are hosted on HuggingFace:
-
-```
-https://huggingface.co/datasets/MasterYoda293/DroneBench
-```
-
-Download and place each year's dataset at the repo root so the directory layout is:
+**Everything needed to reproduce the benchmark and Figures 2–5 is committed in this
+repository** (~47 MB). No external download is required for the main results. Each
+`California<year>Dataset/` (2021–2024) ships the benchmark-critical files:
 
 ```
 California2021Dataset/
-  config_california_2021.json
-  mask.npy
-  wfpi_YYYYMMDD.npy  (365 files)
-  scenarii/          (fire scenario .npy files)
-California2022Dataset/
-California2023Dataset/
-California2024Dataset/
+  config_california_2021.json    # per-scenario ignition times / metadata
+  mask.npy                       # California burnable-cell mask (1, 1309, 805)
+  static_risk_pyrologix.npy      # Pyrologix static risk map — sensor placement + drone routing
+  scenarii/                      # per-fire ignition points (*.npy)
+California2022Dataset/  …  California2023Dataset/  …  California2024Dataset/
 ```
 
-### Rebuilding datasets from raw sources
+The Fig-6 mask `California2020Dataset/mask_union_burnable_no_snow_excluded_day1.npy`
+is also committed, along with the cached WFPI geo-referencing
+(`code/dataset_creation/nature_dataset_creation/wfpi_georef.json`), so the geospatial
+figures need no raster archives.
 
-To reproduce the datasets from USFS ignition records and WFPI/Pyrologix rasters, see the scripts in `code/dataset_creation/nature_dataset_creation/` and the documentation in `documentation/`. Raw input data must be downloaded separately (sources listed in each script's header).
+### Large inputs (only for dataset creation / Fig 6)
+
+The following are **not** needed to reproduce the benchmark or Figures 2–5 — they are
+only used to rebuild the datasets from scratch or to regenerate the Fig-6 case-study
+explainer:
+
+- daily WFPI rasters and the per-year burn maps (`wfpi_*.npy`, `static_risk_wfpi_yearly.npy`),
+- raw WFPI forecast archives, USFS ignition records, Pyrologix GPKG, and TIGER shapefiles.
+
+Because of their size (multi-GB), these are hosted separately rather than in Git; see
+`code/dataset_creation/nature_dataset_creation/` (each script header lists its raw
+source) and the documentation in `documentation/`.
 
 ## Reproducing paper results
 
@@ -131,9 +139,9 @@ To reproduce the datasets from USFS ignition records and WFPI/Pyrologix rasters,
 > `paper/breakeven_report/breakeven_sensor_cost_export/placement_logs/`. You can
 > jump straight to **Step 2** to regenerate the figures. The full pipeline (Step 1)
 > only needs to be re-run to reproduce those artifacts from scratch, and requires
-> the datasets (HuggingFace), a Gurobi license, and ideally an HPC cluster.
+> a Gurobi license and ideally an HPC cluster (the datasets are committed).
 
-### Step 1 — Run the benchmark (optional; needs datasets + Gurobi)
+### Step 1 — Run the benchmark (optional; needs Gurobi)
 
 The benchmark runs in two phases. The canonical entry point that produced the
 paper data is `run_benchmark_california2021_yearly.py` (run via `python-jl` so a
@@ -174,15 +182,16 @@ The script-internal names predate the manuscript's final figure numbering, so th
 table below maps each manuscript figure to its generator and output. Figures that
 need the geospatial stack (California outline via geopandas/rasterio/pyproj) are
 marked **geo**; install them in your environment (named `wf` on macOS) or the
-outline is simply omitted. Figures 3–6 also require the per-year datasets.
+outline is simply omitted. Figures 3–5 use the committed Tier-1 datasets; only Fig 6
+additionally needs the large raw creation inputs.
 
 | Manuscript figure | Script | Output / data |
 |---|---|---|
 | **Fig 2** — Detection rate & speed vs. budget | `paper/Nature_Wildfires/make_figure3_frontier.py` | `Figures/frontier.png` — from committed CSVs (no datasets needed) |
-| **Fig 3** — Optimized deployment maps | `paper/figure4/generate_placement_composite_figure.py` *(geo)* | `Figures/placement_composite.png` — committed panel JSONs + datasets |
-| **Fig 4** — Cost sensitivity to sensor cost | `paper/figure5bis/make_figure5bis_breakeven_lines.py` | `Figures/breakeven_costsensitivity_lines.png` — committed JSONs + datasets |
-| **Fig 5** — ALERTCalifornia coverage | `paper/figure6/generate_alertcalifornia_composite_figure.py` *(geo)* | `Figures/alertcalifornia_coverage_composite.png` — `cameras.json` + datasets |
-| **Fig 6** — California case-study region | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` *(geo)* | `Figures/fig0{1..4}_*.png` — datasets + raw WFPI/Pyrologix rasters |
+| **Fig 3** — Optimized deployment maps | `paper/figure4/generate_placement_composite_figure.py` *(geo)* | `Figures/placement_composite.png` — committed panel JSONs + committed datasets |
+| **Fig 4** — Cost sensitivity to sensor cost | `paper/figure5bis/make_figure5bis_breakeven_lines.py` | `Figures/breakeven_costsensitivity_lines.png` — committed JSONs + committed datasets |
+| **Fig 5** — ALERTCalifornia coverage | `paper/figure6/generate_alertcalifornia_composite_figure.py` *(geo)* | `Figures/alertcalifornia_coverage_composite.png` — `cameras.json` + committed datasets (georef cached; no raster needed) |
+| **Fig 6** — California case-study region | `code/dataset_creation/nature_dataset_creation/generate_paper_2021_dataset_explainer.py` *(geo)* | `Figures/fig0{1..4}_*.png` — committed datasets + large raw WFPI/Pyrologix/USFS inputs |
 
 ```bash
 # Example (Fig 2 works with no datasets):

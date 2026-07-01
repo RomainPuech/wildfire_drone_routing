@@ -1,0 +1,14 @@
+{
+  "crs_wkt": "PROJCS[\"Sphere_ARC_INFO_Lambert_Azimuthal_Equal_Area\",GEOGCS[\"GCS_Sphere_ARC_INFO\",DATUM[\"D_Sphere_ARC_INFO\",SPHEROID[\"Sphere_ARC_INFO\",6370997,0]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Lambert_Azimuthal_Equal_Area\"],PARAMETER[\"latitude_of_center\",45],PARAMETER[\"longitude_of_center\",-100],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+  "cropped_transform": [
+    1000.0,
+    0.0,
+    -2051000.0,
+    0.0,
+    -1000.0,
+    14000.0
+  ],
+  "crop_height": 1309,
+  "crop_width": 805,
+  "source": "derived from WFPI forecast-1 (grid identical to forecast-2)"
+}

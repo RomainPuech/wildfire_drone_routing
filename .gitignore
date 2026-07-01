@@ -6,14 +6,54 @@ __pycache__/
 .venv/
 .DS_Store
 
-# Dataset directories (hosted on HuggingFace)
+# Dataset directories.
+#   Benchmark-critical "Tier-1" files (config, mask, Pyrologix risk map, scenarii)
+#   for 2021-2024 ARE committed below (~47 MB total). The bulk daily/yearly WFPI
+#   rasters and other large inputs are hosted separately (see README > Datasets).
 California2019Dataset*/
-California2020Dataset*/
-California2021Dataset*/
-California2022Dataset*/
-California2023Dataset*/
-California2024Dataset*/
+California2020Dataset_Day1*/
+California2021Dataset_Day1*/
 MiniCalifornia2020Datasets*/
+
+# California2020: keep only the Fig-6 union-of-burnable mask, ignore the rest.
+California2020Dataset/*
+!California2020Dataset/mask_union_burnable_no_snow_excluded_day1.npy
+
+# California 2021: ignore bulk rasters, keep Tier-1.
+California2021Dataset/*
+!California2021Dataset/config_california_2021.json
+!California2021Dataset/mask.npy
+!California2021Dataset/static_risk_pyrologix.npy
+!California2021Dataset/scenarii
+California2021Dataset/scenarii/*
+!California2021Dataset/scenarii/*.npy
+
+# California 2022: ignore bulk rasters, keep Tier-1.
+California2022Dataset/*
+!California2022Dataset/config_california_2022.json
+!California2022Dataset/mask.npy
+!California2022Dataset/static_risk_pyrologix.npy
+!California2022Dataset/scenarii
+California2022Dataset/scenarii/*
+!California2022Dataset/scenarii/*.npy
+
+# California 2023: ignore bulk rasters, keep Tier-1.
+California2023Dataset/*
+!California2023Dataset/config_california_2023.json
+!California2023Dataset/mask.npy
+!California2023Dataset/static_risk_pyrologix.npy
+!California2023Dataset/scenarii
+California2023Dataset/scenarii/*
+!California2023Dataset/scenarii/*.npy
+
+# California 2024: ignore bulk rasters, keep Tier-1.
+California2024Dataset/*
+!California2024Dataset/config_california_2024.json
+!California2024Dataset/mask.npy
+!California2024Dataset/static_risk_pyrologix.npy
+!California2024Dataset/scenarii
+California2024Dataset/scenarii/*
+!California2024Dataset/scenarii/*.npy
 MiniTractDataset*/
 MinimalDataset/
 WideDataset/

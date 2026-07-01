@@ -48,7 +48,8 @@ from displays import (
 DATA_DIR = SCRIPT_DIR / "data"
 CA_TRACTS = DATA_DIR / "tl_2024_06_tract" / "tl_2024_06_tract.shp"
 URBAN_SHP = DATA_DIR / "tl_2025_us_uac20" / "tl_2025_us_uac20.shp"
-WFPI_ZIP_DIR = DATA_DIR / "2020_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA"
+# Georef only (grid identical across WFPI forecast horizons); forecast-1 is what we ship.
+WFPI_ZIP_DIR = DATA_DIR / "2021_Wind-enhanced_Fire_Potential_Index_Forecast_1_DATA"
 D1_DIR = PROJECT_ROOT / "California2020Dataset_Day1"
 CSV_PATH = DATA_DIR / "USFS_ignition_points.csv"
 WFPI_2021_D2_DIR = DATA_DIR / "2021_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA"
@@ -65,7 +66,7 @@ RANDOM_SEED = 42
 
 
 def get_cropped_transform_and_dims():
-    sample_zip = next(Path(WFPI_ZIP_DIR).glob("wfpi-forecast-2_data_*.zip"))
+    sample_zip = next(Path(WFPI_ZIP_DIR).glob("wfpi-forecast-1_data_*.zip"))
     with tempfile.TemporaryDirectory() as tmp:
         with zipfile.ZipFile(str(sample_zip)) as z:
             z.extractall(tmp)

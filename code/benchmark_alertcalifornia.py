@@ -51,10 +51,20 @@ CAMERAS_JSON = (
     PROJECT_ROOT
     / "code/dataset_creation/nature_dataset_creation/data/cameras.json"
 )
+# WFPI raster archives are only used to recover the grid geo-referencing (CRS +
+# affine transform). The grid is identical across WFPI forecast horizons, so the
+# forecast-1 archive we ship works exactly like forecast-2. To avoid shipping any
+# multi-GB raster, the derived georef is also cached in wfpi_georef.json and used
+# preferentially (see get_wfpi_georef).
 WFPI_ZIP_DIR = (
     PROJECT_ROOT
     / "code/dataset_creation/nature_dataset_creation/data"
-    / "2020_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA"
+    / "2021_Wind-enhanced_Fire_Potential_Index_Forecast_1_DATA"
+)
+WFPI_GEOREF_JSON = (
+    PROJECT_ROOT
+    / "code/dataset_creation/nature_dataset_creation"
+    / "wfpi_georef.json"
 )
 CA_TRACTS_SHP = (
     PROJECT_ROOT
@@ -145,7 +155,12 @@ def load_benchmark_fires(dataset_root: Path, all_fires: bool = False) -> list[tu
 # ---------------------------------------------------------------------------
 
 def get_wfpi_georef():
-    """Return (cropped_affine, wfpi_crs) for the 1309×805 California crop."""
+    """Return (cropped_affine, wfpi_crs) for the 1309×805 California crop.
+
+    Prefers the cached ``wfpi_georef.json`` (tiny, shipped in the repo) so no WFPI
+    raster is required. Falls back to deriving it from a WFPI forecast-1 archive if
+    the cache is absent (the grid is identical across forecast horizons).
+    """
     try:
         import rasterio
         import rasterio.transform
@@ -153,11 +168,19 @@ def get_wfpi_georef():
     except ImportError as e:
         sys.exit(f"Missing dependency: {e}\nInstall with: pip install rasterio geopandas")
 
-    zips = sorted(WFPI_ZIP_DIR.glob("wfpi-forecast-2_data_*.zip"))
+    # Fast path: use the cached georef (no raster needed).
+    if WFPI_GEOREF_JSON.is_file():
+        from rasterio.crs import CRS as _CRS
+        meta = json.loads(WFPI_GEOREF_JSON.read_text())
+        a, b, c, d, e, f = meta["cropped_transform"]
+        return rasterio.transform.Affine(a, b, c, d, e, f), _CRS.from_wkt(meta["crs_wkt"])
+
+    zips = sorted(WFPI_ZIP_DIR.glob("wfpi-forecast-1_data_*.zip"))
     if not zips:
         sys.exit(
-            f"No WFPI zips found in:\n  {WFPI_ZIP_DIR}\n"
-            "The zip files are needed to recover the grid geo-referencing."
+            f"No cached georef at {WFPI_GEOREF_JSON} and no WFPI zips found in:\n"
+            f"  {WFPI_ZIP_DIR}\n"
+            "Either is needed to recover the grid geo-referencing."
         )
 
     with tempfile.TemporaryDirectory() as tmp:
