@@ -122,14 +122,27 @@ figures need no raster archives.
 
 The following are **not** needed to reproduce the benchmark or Figures 2–5 — they are
 only used to rebuild the datasets from scratch or to regenerate the Fig-6 case-study
-explainer:
+explainer. Because of their size they are hosted on HuggingFace rather than in Git:
 
-- daily WFPI rasters and the per-year burn maps (`wfpi_*.npy`, `static_risk_wfpi_yearly.npy`),
-- raw WFPI forecast archives, USFS ignition records, Pyrologix GPKG, and TIGER shapefiles.
+```
+https://huggingface.co/datasets/romainpuech/wildfire-drone-routing-data
+```
 
-Because of their size (multi-GB), these are hosted separately rather than in Git; see
-`code/dataset_creation/nature_dataset_creation/` (each script header lists its raw
-source) and the documentation in `documentation/`.
+Contents and where to place each item (paths relative to the repo root):
+
+| HuggingFace path | Place at | Used by |
+|---|---|---|
+| `raw_creation_inputs/*` | `code/dataset_creation/nature_dataset_creation/data/` | dataset creation, Fig 6 (USFS CSVs, Pyrologix GPKG, TIGER shapefiles, WFPI forecast-1 zips, `cameras.json`) |
+| `day1_wfpi_2020/` | `California2020Dataset_Day1/` | rebuilding the Fig-6 union-burnable mask |
+| `day2_wfpi_2021/` | `California2021Dataset/` | rebuilding the 2021 dataset (daily `wfpi_*.npy`, `static_risk_wfpi_yearly.npy`) |
+
+> **Known gap — from-scratch dataset rebuild.** The raw WFPI **forecast-2** archives
+> that drive the actual day-2 risk *values* for 2021–2024 were not retained (only the
+> forecast-1 archive, used for grid geo-referencing, is available). Rebuilding the
+> per-year datasets from scratch therefore requires re-fetching the WFPI forecast-2
+> data from its original USGS source; each script header in
+> `code/dataset_creation/nature_dataset_creation/` documents the expected format. This
+> does **not** affect the benchmark or Figures 2–5, which use the committed Tier-1 data.
 
 ## Reproducing paper results
 
