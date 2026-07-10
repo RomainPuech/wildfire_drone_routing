@@ -30,7 +30,10 @@ from generate_final_report import compute_frontier_detection_curves  # noqa: E40
 # ---------------------------------------------------------------------------
 # Output path
 # ---------------------------------------------------------------------------
+import os
 OUT_PNG = Path(__file__).resolve().parent / "Figures" / "frontier.png"
+# Optional override (e.g. to export a vector PDF): FIG_OUT=/path/frontier.pdf
+OUT = Path(os.environ.get("FIG_OUT", str(OUT_PNG)))
 
 # ---------------------------------------------------------------------------
 # Style
@@ -221,5 +224,6 @@ ax.legend(
 )
 
 plt.tight_layout()
-fig.savefig(OUT_PNG)
-print(f"Saved: {OUT_PNG}")
+OUT.parent.mkdir(parents=True, exist_ok=True)
+fig.savefig(OUT)
+print(f"Saved: {OUT}")

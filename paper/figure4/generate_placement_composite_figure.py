@@ -16,6 +16,7 @@ project conda env, from repo root::
 from __future__ import annotations
 
 import argparse
+import os
 import importlib.util
 import sys
 from pathlib import Path
@@ -424,7 +425,7 @@ def render(
         fig.patch.set_facecolor("white")
         fig.savefig(
             str(out_path),
-            dpi=320,
+            dpi=int(os.environ.get("FIG_DPI", "320")),
             bbox_inches="tight",
             pad_inches=0.08,
             facecolor="white",

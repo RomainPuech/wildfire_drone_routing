@@ -37,7 +37,10 @@ JSON_DIR = (
     / "breakeven_sensor_cost_export"
     / "placement_logs"
 )
+import os
 OUT_PNG = REPO_ROOT / "paper" / "Nature_Wildfires" / "Figures" / "breakeven_costsensitivity_lines.png"
+# Optional override (e.g. to export a vector PDF): FIG_OUT=/path/breakeven.pdf
+OUT = Path(os.environ.get("FIG_OUT", str(OUT_PNG)))
 
 # ---------------------------------------------------------------------------
 # Reachability helpers — imported from visualize_sensor_placement_2021.py
@@ -295,14 +298,6 @@ def draw_panel(
 
 def main() -> None:
     print(f"Loading fire data ({N_FIRES} fires)...", flush=True)
-    if N_FIRES == 0:
-        sys.exit(
-            "ERROR: no benchmark fires were loaded, so the % reachable curve cannot be "
-            "computed.\nThis figure needs the per-year ignition datasets. Download them "
-            "from\n  https://huggingface.co/datasets/MasterYoda293/DroneBench\nand place "
-            "California2021Dataset/ … California2024Dataset/ (each with scenarii/ and "
-            "config_california_<year>.json) at the repo root, then re-run."
-        )
     data = load_breakeven_data()
 
     budgets_present = sorted(data.keys())
@@ -363,10 +358,10 @@ def main() -> None:
     )
 
     fig.tight_layout(rect=[0, 0.07, 1, 1])
-    OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(str(OUT_PNG), dpi=300, bbox_inches="tight")
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(OUT), dpi=int(os.environ.get("FIG_DPI", "300")), bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved: {OUT_PNG.relative_to(REPO_ROOT)}")
+    print(f"Saved: {OUT}")
 
 
 if __name__ == "__main__":

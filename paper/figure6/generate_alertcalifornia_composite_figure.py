@@ -12,6 +12,7 @@ Run from repo root:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -300,7 +301,7 @@ def render(out_path: Path, dataset_root: Path) -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(
             str(out_path),
-            dpi=320,
+            dpi=int(os.environ.get("FIG_DPI", "320")),
             bbox_inches="tight",
             pad_inches=0.14,
             facecolor="white",
@@ -312,7 +313,11 @@ def render(out_path: Path, dataset_root: Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    ap.add_argument("--dataset-dir", type=Path, default=None)
+    # The manuscript uses the 2024 ignitions (n=817) for this figure: it is the
+    # cleanest out-of-sample evaluation of the ALERTCalifornia camera network.
+    ap.add_argument(
+        "--dataset-dir", type=Path, default=REPO_ROOT / "California2024Dataset"
+    )
     a = ap.parse_args()
     ds = _bm.resolve_dataset_root(str(a.dataset_dir) if a.dataset_dir else None)
     render(a.out.resolve(), ds)
