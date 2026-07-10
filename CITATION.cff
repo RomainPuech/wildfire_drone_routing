@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing"
+abstract: >-
+  Infrastructure placement and drone routing optimization models (Julia) and the
+  Python pipeline for data preprocessing, simulation, and figure generation used
+  in the paper "Minutes Matter: Rapid Wildfire Detection Through Sensor Placement
+  and Drone Routing".
+type: software
+authors:
+  - family-names: Puech
+    given-names: Romain
+  - family-names: de Moor
+    given-names: Danique
+  - family-names: Trišović
+    given-names: Ana
+  - family-names: Bertsimas
+    given-names: Dimitris
+version: 1.0.0
+date-released: 2026-07-10
+license: MIT
+doi: 10.5281/zenodo.21301824
+url: "https://github.com/RomainPuech/wildfire_drone_routing"
+repository-code: "https://github.com/RomainPuech/wildfire_drone_routing"
+keywords:
+  - wildfire detection
+  - sensor placement
+  - drone routing
+  - team orienteering problem
+  - integer linear programming
+  - particle swarm optimization

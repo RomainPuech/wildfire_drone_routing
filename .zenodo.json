@@ -1,0 +1,21 @@
+{
+  "title": "Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing",
+  "description": "Infrastructure placement and drone routing optimization models (Julia) and the Python pipeline for data preprocessing, simulation, and figure generation used in the paper \"Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing\".",
+  "upload_type": "software",
+  "license": "MIT",
+  "access_right": "open",
+  "creators": [
+    { "name": "Puech, Romain" },
+    { "name": "de Moor, Danique" },
+    { "name": "Trišović, Ana" },
+    { "name": "Bertsimas, Dimitris" }
+  ],
+  "keywords": [
+    "wildfire detection",
+    "sensor placement",
+    "drone routing",
+    "team orienteering problem",
+    "integer linear programming",
+    "particle swarm optimization"
+  ]
+}
