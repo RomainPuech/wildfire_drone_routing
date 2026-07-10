@@ -13,6 +13,9 @@ dependencies:
   - gdal
   - rasterio
   - shapely
+  - geopandas
+  - pyproj
+  - fiona
   - pip:
       - affine==2.4.0
       - attrs==25.3.0

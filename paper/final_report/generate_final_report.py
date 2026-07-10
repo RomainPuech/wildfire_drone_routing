@@ -89,70 +89,6 @@ def resolve_dataset_root_for_benchmark() -> Path:
         f"  {canonical}\n  or {BUNDLE}"
     )
 
-# If visualize_sensor_placement_2021 / numpy are unavailable, use these (same geometry as visualize script, seed 42).
-PLACEMENT_FALLBACK: list[dict[str, Any]] = [
-    {
-        "budget": 20,
-        "placement_label": "StationMaxGreedyUniform",
-        "json": "sensor_alloc_GaussianBudget20M_StationMaxGreedyUniform_261x161_mean.json",
-        "n_ground": 0,
-        "n_station": 40,
-        "n_drones": 280,
-        "n_clusters": 6,
-        "discoverable": 26,
-        "spent_m": 20.0,
-        "cap_m": 20.0,
-    },
-    {
-        "budget": 50,
-        "placement_label": "StationMaxGreedyUniform",
-        "json": "sensor_alloc_GaussianBudget50M_StationMaxGreedyUniform_261x161_mean.json",
-        "n_ground": 0,
-        "n_station": 100,
-        "n_drones": 700,
-        "n_clusters": 3,
-        "discoverable": 63,
-        "spent_m": 50.0,
-        "cap_m": 50.0,
-    },
-    {
-        "budget": 75,
-        "placement_label": "StationMaxGreedyUniform",
-        "json": "sensor_alloc_GaussianBudget75M_StationMaxGreedyUniform_261x161_mean.json",
-        "n_ground": 0,
-        "n_station": 150,
-        "n_drones": 1050,
-        "n_clusters": 3,
-        "discoverable": 68,
-        "spent_m": 0 * 0.1 + 150 * 0.15 + 1050 * 0.05,  # = 75.00
-        "cap_m": 75.0,
-    },
-    {
-        "budget": 100,
-        "placement_label": "StationMaxGreedyUniform",
-        "json": "sensor_alloc_GaussianBudget100M_StationMaxGreedyUniform_261x161_mean.json",
-        "n_ground": 0,
-        "n_station": 200,
-        "n_drones": 1400,
-        "n_clusters": 2,
-        "discoverable": 96,
-        "spent_m": 100.0,
-        "cap_m": 100.0,
-    },
-    {
-        "budget": 500,
-        "placement_label": "StationMaxUniformFixedDrones (full pool, ε=1, warm-start; post-hoc prune)",
-        "json": "sensor_alloc_GaussianBudget500M_StationMaxUniformFixedDrones_261x161_mean_fullpool_eps1_6h_pruned.json",
-        "n_ground": 31,
-        "n_station": 339,
-        "n_drones": 2373,
-        "n_clusters": 6,
-        "discoverable": 100,
-        "spent_m": 31 * 0.1 + 339 * 0.15 + 2373 * 0.05,
-        "cap_m": 500.0,
-    },
-]
-
 # --- Wilson score 95% CI for binomial proportion ---
 def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
     if n <= 0:
@@ -332,16 +268,13 @@ def placement_table() -> list[dict[str, Any]]:
             )
         return rows_out
     except Exception as exc:  # noqa: BLE001
-        print(f"[placement_table] fallback to cached counts ({exc!r})", file=sys.stderr)
-        rows_out = []
-        for p in PLACEMENT_FALLBACK:
-            rows_out.append(
-                {
-                    **p,
-                    "pct_benchmark": 100.0 * float(p["discoverable"]) / 100.0,
-                }
-            )
-        return rows_out
+        raise RuntimeError(
+            "placement_table() could not compute placement counts from the committed "
+            "inputs (placement JSONs under paper/final_report/placement_data/logs/ and "
+            "the California2021Dataset scenarii). Fix the underlying error above rather "
+            "than relying on pre-baked numbers.\n"
+            f"  underlying error: {exc!r}"
+        ) from exc
 
 
 def compute_frontier_detection_curves() -> dict[str, list[float]]:
@@ -668,7 +601,7 @@ def main() -> None:
     lines.append(
         "\n- **`generate_final_report.py`** never reads `California2021Dataset/logs/`; refresh the bundle by copying solver outputs into **`placement_data/logs/`** if filenames match.\n"
     )
-    lines.append("\n- **500M** solve: `report/benchmark_2021_greedy_kernel/supercloud_500M_placement_uniform_fixed_eps1_6h.sh` (ε=1, warm-start from `fullpool_eps05_6h`) → solver output `sensor_alloc_GaussianBudget500M_StationMaxUniformFixedDrones_261x161_mean_fullpool_eps1_6h.json`. Post-hoc pruned layout: `..._fullpool_eps1_6h_pruned.json` (see `docs/LLM_HANDOFF_PRUNED_500M.md`). Older script `supercloud_500M_placement_uniform_fixed_ws500filt20_fullpool_6h.sh` corresponds to the superseded `ws500f20` placement.\n")
+    lines.append("\n- **500M** solve: `report/benchmark_2021_greedy_kernel/supercloud_500M_placement_uniform_fixed_eps1_6h.sh` (ε=1, warm-start from `fullpool_eps05_6h`) → solver output `sensor_alloc_GaussianBudget500M_StationMaxUniformFixedDrones_261x161_mean_fullpool_eps1_6h.json`. Post-hoc pruned layout: `..._fullpool_eps1_6h_pruned.json`. Older script `supercloud_500M_placement_uniform_fixed_ws500filt20_fullpool_6h.sh` corresponds to the superseded `ws500f20` placement.\n")
     lines.append("\n- **500M routing** (`final_nature` for MaxCov, LinearMinTime, TOPGrowing): `report/benchmark_2021_greedy_kernel/supercloud_500M_fnature_routing_maxcov_linear.sh` and `supercloud_500M_fnature_routing_topgrowing.sh` used `--sensor-placement-file` → **solver** `..._fullpool_eps1_6h.json` (**359** stations). For geometry aligned with §1.1 / Figure 4d, point `--sensor-placement-file` at **`..._fullpool_eps1_6h_pruned.json`** (**339** stations) and re-run.\n")
 
     lines.append("\n### Routing — `final_nature` (MaxCov / LinearMinTime on 20–100M and 500M MaxCov / LinearMinTime / TOPGrowing)\n")

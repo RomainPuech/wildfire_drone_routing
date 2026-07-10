@@ -190,6 +190,13 @@ On a cluster, use the SLURM scripts in Step 4 rather than running these by hand.
 
 ### Step 2 — Reproduce figures
 
+**One command:** `./reproduce_figures.sh` regenerates every code-generated figure
+(Figs 2–6) as both high-resolution PDF (`paper/Nature_Wildfires/Figures/pdf/`) and
+PNG (`paper/Nature_Wildfires/Figures/`). Run it inside the env that has the
+geospatial stack (`wf` on macOS), or override the interpreter with
+`PYTHON=/path/to/python ./reproduce_figures.sh`. To regenerate a single figure, use
+its individual generator from the table below.
+
 The script-internal names predate the manuscript's final figure numbering, so the
 table below maps each manuscript figure to its generator and output. Figures that
 need the geospatial stack (California outline via geopandas/rasterio/pyproj) are

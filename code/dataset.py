@@ -588,14 +588,14 @@ def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSe
         csv_path = os.path.join(layout_path, f"{layout_shortened_name}_benchmark_results{experiment_name}_{strategy_name}.csv")
         print("csv_path", csv_path)
         if os.path.exists(csv_path):
-            print(f"✔ Found: {csv_path}")
+            print(f"Found: {csv_path}")
             df = pd.read_csv(csv_path, dtype={"layout": str, "scenario": str})
             all_dfs.append(df)
         else:
-            print(f"⚠ No benchmark CSV found at: {csv_path}")
+            print(f"No benchmark CSV found at: {csv_path}")
 
     if not all_dfs:
-        print("❌ No CSV files found. Nothing to combine.")
+        print("No CSV files found. Nothing to combine.")
         return None
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
@@ -606,7 +606,7 @@ def combine_all_benchmark_results(dataset_folder: str, strategy_name = "RandomSe
     if not os.path.exists("results"):
         os.makedirs("results")
     combined_df.to_csv(combined_path, index=False)
-    print(f"\n✅ Combined results saved to: {combined_path}")
+    print(f"\nCombined results saved to: {combined_path}")
 
     return combined_df
 
