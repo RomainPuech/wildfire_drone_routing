@@ -132,17 +132,16 @@ Contents and where to place each item (paths relative to the repo root):
 
 | HuggingFace path | Place at | Used by |
 |---|---|---|
-| `raw_creation_inputs/*` | `code/dataset_creation/nature_dataset_creation/data/` | dataset creation, Fig 6 (USFS CSVs, Pyrologix GPKG, TIGER shapefiles, WFPI forecast-1 zips, `cameras.json`) |
+| `raw_creation_inputs/*` | `code/dataset_creation/nature_dataset_creation/data/` | dataset creation, Fig 6 (USFS CSVs, Pyrologix GPKG, TIGER shapefiles, WFPI forecast-1 **and** forecast-2 daily zips, `cameras.json`) |
 | `day1_wfpi_2020/` | `California2020Dataset_Day1/` | rebuilding the Fig-6 union-burnable mask |
 | `day2_wfpi_2021/` | `California2021Dataset/` | rebuilding the 2021 dataset (daily `wfpi_*.npy`, `static_risk_wfpi_yearly.npy`) |
 
-> **Known gap — from-scratch dataset rebuild.** The raw WFPI **forecast-2** archives
-> that drive the actual day-2 risk *values* for 2021–2024 were not retained (only the
-> forecast-1 archive, used for grid geo-referencing, is available). Rebuilding the
-> per-year datasets from scratch therefore requires re-fetching the WFPI forecast-2
-> data from its original USGS source; each script header in
-> `code/dataset_creation/nature_dataset_creation/` documents the expected format. This
-> does **not** affect the benchmark or Figures 2–5, which use the committed Tier-1 data.
+The WFPI **forecast-2** daily archives (which drive the day-2 risk *values* and the
+Fig-6 missing-date fire exclusion) are included under
+`raw_creation_inputs/2021_Wind-enhanced_Fire_Potential_Index_Forecast_2_DATA/`, so the
+per-year datasets can be rebuilt from scratch end-to-end. Each script header in
+`code/dataset_creation/nature_dataset_creation/` documents the expected format. None of
+this is needed for the benchmark or Figures 2–5, which use the committed Tier-1 data.
 
 ## Reproducing paper results
 
