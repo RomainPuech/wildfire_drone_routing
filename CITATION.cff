@@ -1,11 +1,11 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata below."
-title: "Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing"
+title: "Rapid drone-based wildfire detection achievable at a fraction of damages"
 abstract: >-
   Infrastructure placement and drone routing optimization models (Julia) and the
   Python pipeline for data preprocessing, simulation, and figure generation used
-  in the paper "Minutes Matter: Rapid Wildfire Detection Through Sensor Placement
-  and Drone Routing".
+  in the paper "Rapid drone-based wildfire detection achievable at a fraction of
+  damages".
 type: software
 authors:
   - family-names: Puech
@@ -29,3 +29,20 @@ keywords:
   - team orienteering problem
   - integer linear programming
   - particle swarm optimization
+references:
+  - type: article
+    title: "WFDroneBench: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection"
+    year: 2026
+    url: "https://openreview.net/forum?id=A8UKo53z3R"
+    notes: "This software builds on the WFDroneBench benchmarking environment."
+    authors:
+      - family-names: Puech
+        given-names: Romain
+      - family-names: Ye
+        given-names: Joseph
+      - family-names: de Moor
+        given-names: Danique
+      - family-names: Trišović
+        given-names: Ana
+      - family-names: Bertsimas
+        given-names: Dimitris

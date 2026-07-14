@@ -1,10 +1,10 @@
-# Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing
+# Rapid drone-based wildfire detection achievable at a fraction of damages
 
 [![DOI](https://zenodo.org/badge/904881844.svg)](https://doi.org/10.5281/zenodo.21301824)
 
 Code for the paper:
 
-> Puech, R., de Moor, D., Trišović, A., & Bertsimas, D. (2026). *Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing.* [Journal TBD]. DOI: [10.5281/zenodo.21301824](https://doi.org/10.5281/zenodo.21301824)
+> Puech, R., de Moor, D., Trišović, A., & Bertsimas, D. (2026). *Rapid drone-based wildfire detection achievable at a fraction of damages.* [Journal TBD]. DOI: [10.5281/zenodo.21301824](https://doi.org/10.5281/zenodo.21301824)
 
 This repository contains the infrastructure placement and drone routing optimization models implemented in Julia, and the Python scripts used for data preprocessing, simulation, and figure generation.
 
@@ -263,12 +263,24 @@ Individual test files (e.g., `test_top_masked.jl`, `test_pso_august_complex_fire
 ## Citation
 
 ```bibtex
-@article{puech2026minutesmatter,
+@article{puech2026rapidwildfire,
   author  = {Puech, Romain and de Moor, Danique and Tri\v{s}ovi\'{c}, Ana and Bertsimas, Dimitris},
-  title   = {Minutes Matter: Rapid Wildfire Detection Through Sensor Placement and Drone Routing},
+  title   = {Rapid drone-based wildfire detection achievable at a fraction of damages},
   year    = {2026},
   journal = {[Journal TBD]},
   doi     = {10.5281/zenodo.21301824}
+}
+```
+
+This work builds on the **WFDroneBench** benchmarking environment for sensor
+placement and drone routing for wildfire detection; please also cite:
+
+```bibtex
+@misc{puech2026wfdronebench,
+  title  = {{WFDroneBench}: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection},
+  author = {Romain Puech and Joseph Ye and Danique de Moor and Ana Trisovic and Dimitris Bertsimas},
+  year   = {2026},
+  url    = {https://openreview.net/forum?id=A8UKo53z3R}
 }
 ```
 
