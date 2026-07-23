@@ -73,6 +73,32 @@ layout_folder/
 - **Burn Maps**: 3D arrays (time × height × width) representing fire probability
 - **Weather Data**: Text files containing weather conditions for each scenario
 
+### Dataset Splits & HuggingFace Release
+
+The full dataset contains **7 746 scenarios across 49 layouts**.  Tables 2 & 3
+in the paper use a **474-scenario subset from 12 layouts** (those with ≥ 80%
+historical-match rate).
+
+- **`splits/`** — Reproducibility files for the Tables 2/3 subset:
+  - `tables23_layouts.txt` — the 12 layout IDs
+  - `tables23_scenarios.csv` — all 474 (layout, scenario) pairs with metadata
+  - `SELECTION_RULE.md` — how the subset was selected
+  - `MANIFEST_NOTES.md` — known folder/count inconsistencies vs. the paper
+- **`hf_release/`** — HuggingFace-compatible dataset release:
+  - Parquet index files for `load_dataset()` with two configs: `default` (all
+    scenarios) and `tables23` (the 474-scenario split)
+  - `NOTICE` — upstream license attribution
+  - `UPLOAD_INSTRUCTIONS.md` — instructions for pushing to HuggingFace
+- **`reproduce_tables23.py`** — Script to reproduce Tables 2 & 3 from
+  pre-computed benchmark results or WideDataset layout folders.
+
+```python
+# Load the Tables 2/3 split locally
+from datasets import load_dataset
+ds = load_dataset("parquet", data_files={"test": "hf_release/data/tables23_scenarios.parquet"})
+print(ds["test"][0])  # → {'layout_id': '0016', 'scenario_id': '00001', ...}
+```
+
 ## 🔧 Configuration
 
 ### Drone Parameters
