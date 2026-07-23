@@ -1,31 +1,21 @@
-NOTICE — WFDroneBench Attribution
-===================================
+WFDroneBench / DroneBench dataset — third-party notices
+=======================================================
 
-This dataset incorporates data from the following sources.  Users must comply
-with each upstream license when redistributing or adapting this work.
+This release redistributes and/or derives from the following assets.
+The project code is released under the MIT License (see repository LICENSE
+if present). The dataset is under a composite license; do NOT tag the
+Hugging Face dataset as pure MIT.
 
 1. Sim2Real-Fire
-   Authors:  Sebastian Grans et al.
-   License:  Apache License 2.0
-   URL:      https://github.com/SebastianGrans/Sim2Real-Fire
-   Usage:    Fire-spread simulation engine used to generate synthetic
-             wildfire scenarios.
+   License: Apache License 2.0
+   Citation: see paper / NEURIPS2024_02e978a2
 
-2. USFS Burn Probability (BP)
-   Authors:  Greg K. Dillon, Julie W. Gilbertson-Day
-   License:  Creative Commons Attribution 4.0 International (CC-BY-4.0)
-   URL:      https://www.fs.usda.gov/rds/archive/catalog/RDS-2016-0034-2
-   Usage:    Static risk maps (static_risk_bp2024.npy) providing baseline
-             burn probability at 30 m resolution.
+2. USDA Forest Service Burn Probability (BP) and Wildfire Hazard Potential (WHP)
+   License: Creative Commons Attribution (CC-BY)
+   Attribution: USDA Forest Service / Pyrologix as applicable
 
-3. Fire Program Analysis – Fire-Occurrence Database (FPA-FOD)
-   Authors:  Karen C. Short
-   License:  Public Domain (U.S. Government Work)
-   URL:      https://www.fs.usda.gov/rds/archive/catalog/RDS-2013-0009.6
-   Usage:    Historical fire occurrence records used for scenario generation
-             and validation of historical-match criteria.
+3. Fire Program Analysis Fire-Occurrence Database (FPA FOD)
+   License: CC0 / public domain (U.S. government public data access)
 
-Overall dataset license:  CC-BY-4.0
-Code license:             MIT
-
-When citing WFDroneBench, please also cite the upstream data sources above.
+See also docs/HF_LICENSE.md and the root NOTICE file for upload guidance
+for Hugging Face (MasterYoda293).
