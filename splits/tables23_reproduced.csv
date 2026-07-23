@@ -1,0 +1,25 @@
+strategy,cell,mean_delta_t,n
+MaxCov + MaxCov,Fast × Big,5.7273,11
+MaxCov + MaxCov,Fast × Small,3.5714,7
+MaxCov + MaxCov,Slow × Big,3.1877,405
+MaxCov + MaxCov,Slow × Small,3.1569,51
+MaxCov + TOP,Fast × Big,7.5455,11
+MaxCov + TOP,Fast × Small,3.0000,7
+MaxCov + TOP,Slow × Big,9.7432,405
+MaxCov + TOP,Slow × Small,15.7451,51
+MaxCov + Uniform,Fast × Big,6.7273,11
+MaxCov + Uniform,Fast × Small,2.1429,7
+MaxCov + Uniform,Slow × Big,3.4815,405
+MaxCov + Uniform,Slow × Small,2.6471,51
+Random + MaxCov,Fast × Big,4.5455,11
+Random + MaxCov,Fast × Small,2.1429,7
+Random + MaxCov,Slow × Big,2.5605,405
+Random + MaxCov,Slow × Small,2.6078,51
+Random + TOP,Fast × Big,6.6364,11
+Random + TOP,Fast × Small,4.2857,7
+Random + TOP,Slow × Big,12.3704,405
+Random + TOP,Slow × Small,8.0588,51
+Random + Uniform,Fast × Big,3.8182,11
+Random + Uniform,Fast × Small,1.8571,7
+Random + Uniform,Slow × Big,3.8617,405
+Random + Uniform,Slow × Small,3.7059,51

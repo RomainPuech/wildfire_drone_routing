@@ -1,0 +1,31 @@
+NOTICE — WFDroneBench Attribution
+===================================
+
+This dataset incorporates data from the following sources.  Users must comply
+with each upstream license when redistributing or adapting this work.
+
+1. Sim2Real-Fire
+   Authors:  Sebastian Grans et al.
+   License:  Apache License 2.0
+   URL:      https://github.com/SebastianGrans/Sim2Real-Fire
+   Usage:    Fire-spread simulation engine used to generate synthetic
+             wildfire scenarios.
+
+2. USFS Burn Probability (BP)
+   Authors:  Greg K. Dillon, Julie W. Gilbertson-Day
+   License:  Creative Commons Attribution 4.0 International (CC-BY-4.0)
+   URL:      https://www.fs.usda.gov/rds/archive/catalog/RDS-2016-0034-2
+   Usage:    Static risk maps (static_risk_bp2024.npy) providing baseline
+             burn probability at 30 m resolution.
+
+3. Fire Program Analysis – Fire-Occurrence Database (FPA-FOD)
+   Authors:  Karen C. Short
+   License:  Public Domain (U.S. Government Work)
+   URL:      https://www.fs.usda.gov/rds/archive/catalog/RDS-2013-0009.6
+   Usage:    Historical fire occurrence records used for scenario generation
+             and validation of historical-match criteria.
+
+Overall dataset license:  CC-BY-4.0
+Code license:             MIT
+
+When citing WFDroneBench, please also cite the upstream data sources above.
