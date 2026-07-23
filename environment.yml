@@ -55,6 +55,8 @@ dependencies:
       - pillow==11.3.0
       - pyparsing==3.2.5
       - python-dateutil==2.9.0.post0
+      - pyomo>=6.7
+      - highspy>=1.5
       - pytz==2025.2
       - rasterio==1.4.3
       - scipy==1.15.3
