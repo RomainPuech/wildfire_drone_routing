@@ -357,3 +357,27 @@ The library collects the following metrics:
 ## 📄 License
 
 This project is licensed under the MIT License.
+
+
+## Optimization backends (Python / Julia)
+
+Paper baselines (GaussianCov placement, MaxCov routing) can run with either:
+
+| Backend | Env var | Solver |
+|---------|---------|--------|
+| **Python (default)** | `WFDRONE_OPT_BACKEND=python` | **HiGHS** via Pyomo (`highspy`). Optional: `WFDRONE_OPT_SOLVER=gurobi` |
+| Julia | `WFDRONE_OPT_BACKEND=julia` | JuMP + Gurobi (requires a Gurobi license) |
+
+```bash
+# Reproducible path without Gurobi (default)
+export WFDRONE_OPT_BACKEND=python
+# optional: export WFDRONE_OPT_SOLVER=highs   # default
+python tests/test_opt_smoke.py
+
+# Legacy Julia + Gurobi path
+export WFDRONE_OPT_BACKEND=julia
+```
+
+**TOP** (team orienteering) routing remains Julia-only; set `WFDRONE_OPT_BACKEND=julia` to use it.
+
+See `code/opt/` for the Python MILP implementations.

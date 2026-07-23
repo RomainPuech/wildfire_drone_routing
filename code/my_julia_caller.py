@@ -1,88 +1,88 @@
-from julia.api import Julia
+"""Lazy Julia session manager.
+
+Julia is only initialised when ``WFDRONE_OPT_BACKEND=julia`` **and** the first
+call through ``Main`` is made.  When the backend is ``python`` (default) no
+Julia process is spawned and importing this module is essentially free.
+"""
+
 import os
 
-# Global variable to track if Julia has been initialized
 _julia_initialized = False
 _julia_session = None
 _Main = None
 
+
+def _backend_is_julia() -> bool:
+    return os.environ.get("WFDRONE_OPT_BACKEND", "python").lower() == "julia"
+
+
 def initialize_julia_session():
-    """
-    Initialize Julia session only once. Subsequent calls will reuse the existing session.
-    """
+    """Initialise Julia session on first call; reuse on subsequent calls."""
     global _julia_initialized, _julia_session, _Main
-    
+
     if _julia_initialized:
-        print("Julia session already initialized, reusing existing session.")
         return _julia_session, _Main
-    
+
     print("Initializing the Julia session. This can take up to 1 minute.")
-    
-    # Initialize Julia
-    # if image exists, use it, otherwise use the default
-    # if os.path.exists("my_precompiled_sysimage.so"):
-    #     _julia_session = Julia(compiled_modules=False, sysimage="my_precompiled_sysimage.so")
-    # else:
+
+    from julia.api import Julia
     _julia_session = Julia(compiled_modules=False)
-    
-    # Import Julia modules
-    from julia import Main, Base
+
+    from julia import Main
     _Main = Main
-    
-    # Initialize Julia and set up any configurations
+
     Main.eval("""
     using Logging
-    global_logger(SimpleLogger(stderr, Logging.Error))  # Silence info logs
+    global_logger(SimpleLogger(stderr, Logging.Error))
     """)
-    
+
     print("initializing the ground sensor julia module")
     Main.include("julia/ground_charging_opt.jl")
-    
+
     print("initializing the drone julia module")
     Main.include("julia/drone_routing_opt.jl")
-    
-    # Main.include("julia/drone_routing_opt_linear.jl")
 
     print("initializing the TOP julia module")
     Main.include("julia/TOP.jl")
-    
+
     print("Julia session initialized.")
-    
-    # Mark as initialized
     _julia_initialized = True
-    
+
     return _julia_session, _Main
 
+
 def get_julia_session():
-    """
-    Get the Julia session, initializing it if necessary.
-    """
+    """Get the Julia session, initialising it if necessary."""
     if not _julia_initialized:
         return initialize_julia_session()
     return _julia_session, _Main
 
+
 def reset_julia_session():
-    """
-    Reset the Julia session (useful for debugging or when you need a fresh start).
-    """
+    """Reset the Julia session (useful for debugging)."""
     global _julia_initialized, _julia_session, _Main
-    
+
     if _julia_initialized:
         print("Resetting Julia session...")
-        # Close the existing session if possible
         if _julia_session is not None:
             try:
                 _julia_session.eval("exit()")
-            except:
-                pass  # Ignore errors when closing
-        
+            except Exception:
+                pass
         _julia_initialized = False
         _julia_session = None
         _Main = None
         print("Julia session reset complete.")
 
-# Initialize Julia session when this module is imported
-# This ensures Julia is ready when the module is loaded
-_julia_session, Main = initialize_julia_session()
 
-# Now `Main` can be imported and reused in other parts of the program: this creates a unique shared Julia session
+class _LazyMain:
+    """Proxy that delays Julia initialisation until an attribute is accessed."""
+
+    def __getattr__(self, name: str):
+        if not _julia_initialized:
+            initialize_julia_session()
+        return getattr(_Main, name)
+
+
+# Public API – ``Main`` is now lazy; importing this module no longer starts Julia.
+Main = _LazyMain()
