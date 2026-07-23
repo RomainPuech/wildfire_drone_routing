@@ -1,0 +1,598 @@
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2025
+
+
+% ready for submission
+\usepackage{neurips_2025}
+
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2025}
+
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2025}
+
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips_2025}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}  % colors
+\usepackage{amsmath, amssymb, amsthm, ifthen, theorem, bm}
+\usepackage{algorithmic}            
+\usepackage{algorithm}
+\usepackage{dsfont}
+\usepackage{graphicx}
+\usepackage{longtable}
+
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{caption}
+
+
+\renewcommand{\thesection}{\Alph{section}}
+\newcommand{\set}[1]{\mathcal{#1}}
+\newcommand{\norm}[1]{\big\| #1\big\| }
+\newcommand{\danique}[1]{\textcolor{blue}{#1}}
+
+
+\allowdisplaybreaks
+
+
+
+\title{\texttt{WFDroneBench:} A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection \\
+-Supplementary material-}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+
+\author{%
+  David S.~Hippocampus\thanks{Use footnote for providing further information
+    about author (webpage, alternative address)---\emph{not} for acknowledging
+    funding agencies.} \\
+  Department of Computer Science\\
+  Cranberry-Lemon University\\
+  Pittsburgh, PA 15213 \\
+  \texttt{hippo@cs.cranberry-lemon.edu} \\
+  % examples of more authors
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \AND
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+
+\begin{document}
+
+\maketitle
+
+This supplementary material provides the following information:
+\begin{itemize}
+    \item Section A: Formulations $\&$ results of evaluation metrics
+    \item Section B: Decomposition algorithm
+    \item Section C: Parameter values used in the experiments
+    \item Section D: Mathematical model formulations
+    \item Section E: Licensing datasets $\&$ assets used
+    \item Section F: Instructions to download dataset and code
+    \item Section H: Assumptions for testing
+\end{itemize}
+
+% \tableofcontents
+% \newpage
+
+To ensure clarity in the mathematical formulations presented in the appendices, Table~\ref{tab:overview} summarizes all sets, parameters, and decision variables referenced in this supplementary material.
+\small
+\begin{longtable}{lll}
+\caption{Overview of sets, parameters, and decision variables used in the supplementary materials.} \label{tab:overview} \\
+\toprule
+\textbf{Sets} & \textbf{Description} & \textbf{Definition} \\
+\midrule
+\endfirsthead
+
+\multicolumn{3}{c}%
+{{\bfseries \tablename\ \thetable{} -- continued from previous page}} \\
+\toprule
+\textbf{Parameters} & \textbf{Description}  \\
+\midrule
+\endhead
+
+\midrule \multicolumn{3}{r}{{Continued on next page}} \\
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+$\set I$ & Set of all possible grid points & \\
+$\set I_g$ & Feasible grid points for ground stations & $\subseteq \set I$ \\
+$\set I_c$ & Feasible grid points for charging stations & $\subseteq \set I$ \\
+$\set I_d$ & Feasible grid points for drones & $\subseteq \set I$ \\
+$\set A_d(i)$ & Neighboring grid points of $i$ within distance $d$ \\
+& (including $i$) & \\
+$\set T$ & Set of all time periods & $\{1, \ldots, T\}$ \\
+$\set H$ & Time periods in optimization time horizon & $\{1, \ldots, H\}$ \\
+$\set S$ & Set of drones & $\{1, \ldots, S\}$ \\
+$\set C$ & Set of charging stations & Cardinality $C$ \\
+$\set G$ & Set of ground sensors & Cardinality $G$ \\
+$\set N_{c}$ & Nearby charging station pairs & $\{(i,j) \in \set I_c^2 \mid i \neq j, \ \norm{i-j} \leq \rho_c\}$ \\
+$\set N_{g}$ & Nearby ground sensor pairs & $\{(i,j) \in \set I_g^2 \mid i \neq j, \ \norm{i-j} \leq \rho_g\}$ \\
+$\set N_{cg}$ & Charging–ground sensor pairs within & $\{(i,j) \in \set I_c \times I_g \mid i \neq j, \norm{i-j} \leq \rho_{cg}\}$ \\
+& exclusion radius \\
+$\set W$ & Set of historical wildfires \\
+\midrule
+\textbf{Parameters} & \multicolumn{2}{l}{\textbf{Description}} \\
+\midrule
+$\Delta_i$ & \multicolumn{2}{l}{Minimum distance from grid point $i$ to nearest charging station} \\
+$B_{\text{max}}$ & \multicolumn{2}{l}{Maximum number of time steps a drone can fly without recharging} \\
+$r_{i}^s$ & \multicolumn{2}{l}{Static wildfire risk at grid point $i$} \\
+$r_{it}^d$ & \multicolumn{2}{l}{Dynamic wildfire risk at grid point $i$ at time $t$} \\
+$f_{it}^w$ & \multicolumn{2}{l}{Indicator of if grid point $i$ is burnt at time $t$ in wildfire scenario $w$.} \\
+$n_g$ & \multicolumn{2}{l}{Maximum number of ground sensors that can be placed} \\
+$n_c$ & \multicolumn{2}{l}{Maximum number of charging stations that can be placed} \\
+$n_d$ & \multicolumn{2}{l}{Maximum number of drones assignable to each charging station} \\
+$\tau$ & \multicolumn{2}{l}{Coverage memory window: revisits provide no reward during this time} \\
+$\rho_c$ & \multicolumn{2}{l}{Exclusion radius: minimum spacing between charging stations} \\
+$\rho_g$ & \multicolumn{2}{l}{Exclusion radius: minimum spacing between ground sensors} \\
+$\rho_{cg}$ & \multicolumn{2}{l}{Exclusion radius: minimum spacing between charging stations and ground sensors} \\
+$\lambda_{\text{disp}}$ & \multicolumn{2}{l}{Weight of drone dispersion in the objective function} \\
+$t_{\text{det}}^w$ & \multicolumn{2}{l}{Time of detection of wildfire $w \in \set W$} \\
+$t_{\text{ign}}^w$ & \multicolumn{2}{l}{Time of ignition of wildfire $w \in \set W$} \\
+$t_{\text{det}}^s$ & \multicolumn{2}{l}{Time at which drone $s$ detects a wildfire; equals $T$ if no fire is detected by drone $s$} \\
+$t_{\text{exe}}$ & Execution time of the drone routing algorithm \\ 
+$\bm p^c$ & Grid coordinates in $\mathbb{Z}^2$ of charging station $c$ \\ 
+$T_{\text{reev}}$ & Reevaluation step for rolling optimization \\ \midrule
+\textbf{Variables} & \multicolumn{2}{l}{\textbf{Description}} \\ \midrule
+    $x_i^g$ & \multicolumn{2}{l}{\text{Binary variable denoting if a ground sensor is placed at grid point i}} \\
+    $x_i^c$ & \multicolumn{2}{l}{\text{Binary variable denoting if a charging station is placed at grid point i}} \\
+    $a_{its}$ & \multicolumn{2}{l}{\text{Binary variable denoting if drone $s$ flies at grid point $i$ at time $t$}} \\
+    $c_{its}$ & \multicolumn{2}{l}{\text{Binary variable denoting if drone $s$ charges at grid point $i$ at time $t$}} \\
+    $\theta_{it}$ & \multicolumn{2}{l}{\text{Binary variable denoting if grid point $i$ is covered by a drone at time $t$}} \\
+    $b_{ts}$ & \multicolumn{2}{l}{\text{Battery of drone $s$ at time $t$ defined as the number of time steps drone $s$ can operate}} \\
+    & \multicolumn{2}{l}{\text{without recharging}} \\
+    % $\phi_{it}$ &= \text{binary variable denoting if grid point $i$ is covered by a drone for the first time at time $t$}; \\
+    $\bm p^{s,t}$ & \multicolumn{2}{l}{\text{Grid coordinates in $\mathbb{Z}^2$ of drone $s$ at time $t$}} \\
+\end{longtable}
+\normalsize
+
+
+
+
+\section{Formulations $\&$ results of evaluation metrics}
+
+\subsection{Formulations of evaluation metrics}
+In Table \ref{tab:evaluation metrics} we give the mathematical formulations of the evaluation metrics as described in Section 4.2 of the main paper. 
+\begin{table}[!htb]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lll} \toprule
+\textbf{Evaluation metric}             & \textbf{Formula}                  \\ \midrule
+Mean detection time (MDT) & $\frac{1}{\sum_{w \in \mathcal{W}} \mathds{1}\{t_{\text{det}}^w \leq T \}} \sum_{w \in \mathcal{W}} \mathds{1}\{t_{\text{det}}^w \leq T \} (t_{\text{det}}^w - t_{\text{ign}}^w)$ \\ \addlinespace
+Mean fire size at detection (MSD) & $\frac{1}{|\mathcal{I}|}\sum_{i \in \mathcal{I}}f_{it}^w, \ \text{with } t = t_{\text{exe}}^w$ \\ \addlinespace
+\% \text{ fires detected} (FDR) &  $\frac{1}{|\set W|} \sum_{w \in \set W} \mathds{1}\{t_{\text{det}}^w \leq T \} \cdot 100 \%$ \\ \addlinespace
+\text{Proportion of detection by device D} (DS-D) & $\displaystyle \frac{\sum_{w \in \set W} \mathds{1}\{t_{\text{det}}^w \leq T \} \mathds{1}\{\text{fire detected by device D}\}}{\sum_{w \in \set W} \mathds{1}\{t_{\text{det}}^w \leq T \}}$ \\ \addlinespace
+Mean percentage of map explored (MCE) & 
+    $\frac{1}{|\set I|} \sum_{i \in \set I} \mathds{1}\left(\sum_{t \in \set T} \theta_{it} \geq 1 \vee x_i^g = 1 \vee x_i^c = 1 \right) $ \\ \addlinespace
+Mean distance traveled by drones (MDist) & $\frac{1}{S} \sum_{s \in \set S} \sum_{t=1}^{t_{\text{det}}^s} d\left(\bm{p^{s,t}},\bm{p^{s,t+1}}\right)$ \\ \addlinespace
+Mean distance to nearest charging station (DCSD) & $\frac{1}{ST} \sum_{s \in \set S} \sum_{t \in \set T} \min_{c \in \set C} d\left(\bm{p^{s,t}},\bm{p^c} \right)$ \\ \addlinespace
+Mean drone routing execution time (RTE) & $\frac{1}{\# \text{scenarios}} \sum_{i=1}^{\# \text{scenarios}} t_{\text{exe}}$  \\
+\bottomrule \addlinespace
+\end{tabular}}
+\caption{Mathematical formulations of the evaluation metrics.}
+\label{tab:evaluation metrics}
+\end{table}
+
+\newpage \subsection{Results of remaining evaluation metrics}
+The results across strategies and layouts for each secondary metric are displayed in Table~\ref{fig:combined_tables}.
+
+\begin{table}[htbp]
+\centering
+
+% Fire Percentage Table
+\begin{minipage}{\textwidth}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc c}
+\toprule
+\textbf{Strategy} & \textbf{L4} & \textbf{L58} & \textbf{L111} & \textbf{L244} & \textbf{L250} & \textbf{Overall Average} \\
+\midrule
+MaxCov-MaxCov     & 0.21  & 1.03 & 0.03  & 0.38 & 1.55 & 0.64 $\pm 0.57$ \\
+MaxCov-Greedy     & 7.83  & 1.64 & 0.10  & 0.71 & 2.71 & 2.60 $\pm 2.76$ \\
+MaxCov-UniCov     & 0.58  & 0.55 & 0.11  & 0.23 & 0.56 & 0.41 $\pm 0.20$ \\
+MaxCov-Brownian   & 1.34  & 0.49 & 0.05  & 0.37 & 0.85 & 0.62 $\pm 0.44$ \\
+Uniform-MaxCov    & 1.24  & 0.57 & 0.18  & 0.17 & 1.65 & 0.76 $\pm 0.59$ \\
+Uniform-Greedy    & 0.98  & 0.97 & 0.39  & 0.78 & 1.74 & 0.97 $\pm 0.44$ \\
+Uniform-UniCov    & 0.58  & 0.55 & 0.11  & 0.23 & 0.56 & 0.41 $\pm 0.20$ \\
+Uniform-Brownian  & 2.83  & 0.70 & 0.13  & 0.33 & 0.69 & 0.93 $\pm 0.97$ \\
+\bottomrule
+\end{tabular}
+\caption*{\textbf{(a)} Fire percentage across different strategies and layouts.}
+\vspace{1em}
+\end{minipage}
+
+% Map Explored Table
+\begin{minipage}{\textwidth}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc c}
+\toprule
+\textbf{Strategy} & \textbf{L4} & \textbf{L58} & \textbf{L111} & \textbf{L244} & \textbf{L250} & \textbf{Overall Average} \\
+\midrule
+MaxCov-MaxCov     & 6.00  & 3.00 & 12.00  & 2.00 & 7.00 & 6.00 $\pm 4.00$ \\
+MaxCov-Greedy     & 1.00  & 0.00 & 1.00  & 0.00 & 1.00 & 1.00 $\pm 0.00$ \\
+MaxCov-UniCov     & 10.00  & 7.00 & 6.00  & 3.00 & 12.00 & 7.00 $\pm 3.00$ \\
+MaxCov-Brownian   & 14.00  & 9.00 & 21.00  & 12.00 & 24.00 & 16.00 $\pm 6.00$ \\
+Uniform-MaxCov    & 9.00  & 1.00 & 3.00  & 3.00 & 2.00 & 4.00 $\pm 3.00$ \\
+Uniform-Greedy    & 1.00  & 0.00 & 1.00  & 0.00 & 1.00 & 1.00 $\pm 0.00$ \\
+Uniform-UniCov    & 10.00  & 7.00 & 6.00  & 3.00 & 12.00 & 7.00 $\pm 3.00$ \\
+Uniform-Brownian  & 29.00  & 12.00 & 29.00  & 13.00 & 19.00 & 20.00 $\pm 8.00$ \\
+\bottomrule
+\end{tabular}
+
+\caption*{\textbf{(b)} Map area explored across different strategies and layouts.}
+\vspace{1em}
+\end{minipage}
+
+% Total Distance Table
+\begin{minipage}{\textwidth}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc c}
+\toprule
+\textbf{Strategy} & \textbf{L4} & \textbf{L58} & \textbf{L111} & \textbf{L244} & \textbf{L250} & \textbf{Overall Average} \\
+\midrule
+MaxCov-MaxCov     & 10476  & 124461 & 39851  & 121537 & 181614 & 95588 $\pm 62061$ \\
+MaxCov-Greedy     & 119959 & 194501 & 91514  & 225766 & 216522 & 169652 $\pm 53922$ \\
+MaxCov-UniCov     & 30540  & 110989 & 66963  & 95968  & 92698  & 79432 $\pm 28253$ \\
+MaxCov-Brownian   & 30296  & 96935  & 50812  & 115314 & 94601  & 77592 $\pm 31750$ \\
+Uniform-MaxCov    & 32527  & 180627 & 77544  & 60500  & 203371 & 110914 $\pm 68129$ \\
+Uniform-Greedy    & 52682  & 167290 & 160121 & 206170 & 112840 & 139821 $\pm 52707$ \\
+Uniform-UniCov    & 30540  & 110989 & 66963  & 95968  & 92698  & 79432 $\pm 28253$ \\
+Uniform-Brownian  & 68269  & 116483 & 77391  & 122319 & 75819  & 92056 $\pm 22614$ \\
+\bottomrule
+\end{tabular}
+\caption*{\textbf{(c)} Total distance traveled (in data grid points, 1 grid point = 30x30m) across different strategies and layouts.}
+\end{minipage}
+
+\caption{Comparison of all strategies across three key performance metrics: (a) fire percentage, (b) map explored, and (c) total distance.}
+\label{fig:combined_tables}
+\end{table}
+
+
+
+\section{Decomposition algorithm}
+To enhance scalability and reduce computational complexity, we partition the full set of charging stations into spatial clusters, where each cluster includes stations that are mutually reachable within a drone’s battery range. Specifically, two stations are placed in the same cluster if the Euclidean distance between them is less than or equal to the drone's battery range, ensuring that any drone can travel between stations in the cluster. The decomposition algorithm is given in Algorithm \ref{alg:clustering_model}.
+ \begin{algorithm}[h]
+        \caption{Clustering model \label{alg:clustering_model}} 
+        \textbf{Input}: set of charging stations $\set C$. \\ 
+        \textbf{Output}: clusters $\set K_1, \ldots, \set K_m$, where $\set K_k \subseteq \set C$ for all $k \in [m]$, $\cap_{k \in [m]} \set K_k = \emptyset$.
+
+      \begin{algorithmic}[1]
+            \STATE Set $k = 1$ 
+            \WHILE{$\set C \neq \emptyset$}
+            \STATE Select a charging station $i \in \set C$
+            \STATE Remove $i$ from $\set C$
+            \STATE Set $\set K_k = \{i\}$
+            \FOR{$j \in \set C \setminus \{i\}$}
+            \IF{the Euclidean distance between $i$ and $j$ is less or equal than $\lambda$}
+            \STATE add $j$ to cluster $\set K_k$
+            \STATE remove $j$ from $\set C$
+            \ENDIF
+            \ENDFOR
+            \ENDWHILE
+            \RETURN $\set K_1, \ldots, \set K_m$.
+         \end{algorithmic}
+    \end{algorithm}
+
+\section{Parameter values used in the experiments}
+In Table \ref{tab:parameter values} we give an overview of the parameter values used in the experiments when using the max-coverage ground sensor placement baseline in combination with a drone routing strategy.
+\begin{table}[H]
+    \centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllllllllllllll} \toprule
+Drone routing & $n_g$ & $n_c$ & $n_d$ & $\rho_c$ & $\rho_{cg}$ & $\rho_g$ & Drone & Coverage  & Grid point & Transmission & $T_{\text{reev}}$ & $H$ & $B_{\text{max}}$ (h)     \\
+strategy & & & & & & & speed (m/min) & radius (m) & size (m) & range (m) \\ \midrule
+\textbf{Max coverage} & 4 & 2 & 3 & 10 & 10 & 1 & 600 & 300 & 30 & 50000 & 5 & 10 & 1  \\
+\textbf{Uniform} & 4 & 2 & 3 & 10 & 10 & 1 & 600 & 300 & 30 & 50000 & 5 & 10 & 1  \\
+\textbf{Greedy} & 4 & 2 & 3 & 10 & 10 & 1 & 600 & 300 & 30 & 50000 & 2 & 2 & 1 \\
+\bottomrule \addlinespace
+\end{tabular}}
+\caption{Parameter values used in the experiments.}
+\label{tab:parameter values}
+\end{table}
+
+\section{Mathematical model formulations}
+In this section the mathematical formulations are given for all models. All distances are measured in the $L^{\infty}$ norm, unless specified otherwise.  
+% \begin{align*}
+%     \set I &= \text{set of all possible grid points;} \\
+%     \set I_g &= \text{set of all feasible grid points for the ground stations;} \\
+%     \set I_c &= \text{set of all feasible grid points for the charging stations;} \\
+%     \set I_d &= \text{set of all feasible grid points for the drones}; \\
+%     \set A_d(i) &= \text{set of all neighboring grid points of } i \in \set I, \text{including } i \text{, i.e., within distance of } d; \\
+%     \set T &= \text{set of all time periods, i.e., } \{1, \ldots, T\}; \\
+%     \set S &= \text{set of drones;} \\
+%     \set C &= \text{set of charging stations}; \\
+%     % \set C^{\text{start}} &= \text{set of grid points with a charging station and its neighboring grid points, i.e., } \bigcup_{i \in \set C} \set N(i); \\
+%     \set G &= \text{set of ground sensors}; \\
+%     \set N_{c} &= \text{set of all nearby charging station pairs, i.e., } \{(i,j) \in \set I_c \times I_c \mid i \neq j, \ \norm{i-j} \leq \rho_c\}; \\
+%     \set N_{g} &= \text{set of all nearby ground sensor pairs, i.e., } \{(i,j) \in \set I_g \times I_g \mid i \neq j, \ \norm{i-j} \leq \rho_g\}; \\
+%     \set N_{cg} &= \text{set of all nearby ground sensor pairs, i.e., } \{(i,j) \in \set I_c \times I_g \mid i \neq j, \norm{i-j} \leq \rho_{gc}\};\\
+% % \end{align*}
+% % Moreover, we use $[N]$ to denote the set of running indices $\{1, \ldots, N\}$.
+% % The required parameters are given by:
+% % \begin{align*}
+%     D_i &= \text{minimum distance from grid point $i$ to its nearest charging station}; \\
+%     B_{\text{max}} &= \text{maximum number of time steps that a drone can operate without recharging}; \\
+%     r_{i}^s &= \text{static wildfire risk at grid point $i$}; \\
+%     r_{it}^d &= \text{dynamic wildfire risk at grid point $i$ at time $t$}; \\
+%     n_g &= \text{maximum number of ground sensors that can be placed across the grid};\\
+%     n_c &= \text{maximum number of charging stations that can be placed across the grid};\\
+%     n_d &= \text{maximum number of drones that can be assigned to each charging station };\\
+%     \tau &= \text{coverage memory window indicating the number of time steps during which revisiting} \\
+%     & \quad \ \text{a grid point provides no additional reward};\\
+%     \rho_c &= \text{exclusion radius, defining the size of the neighborhood around each charging station within} \\
+%     & \quad \ \text{which no other charging station is permitted}; \\
+%     \rho_g &= \text{exclusion radius, defining the size of the neighborhood around each ground sensor within}\\
+%     & \quad \ \text{which no other ground sensor is permitted}; \\
+%     \rho_{cg} &= \text{exclusion radius, defining the size of the neighborhood around each charging station within} \\
+%     & \quad \ \text{which no other ground sensor is permitted}; \\
+%     \lambda_{\text{disp}} &= \text{weight of dispersion of drones}.
+%     % \gamma_{ik}^g &= \text{partial contribution from a ground sensor at grid point $i$ to grid point $k$}; 
+% \end{align*}
+% Moreover, we use $[N]$ to denote the set of running indices $\{1, \ldots, N\}$. The variables optimized by the models are given by:
+% \begin{align*}
+%     x_i &= \text{binary variable denoting if a ground sensor is placed at grid point i}; \\
+%     y_i &= \text{binary variable denoting if a charging station is placed at grid point i}; \\
+%     a_{its} &= \text{binary variable denoting if drone $s$ flies at grid point $i$ at time $t$}; \\
+%     c_{its} &= \text{binary variable denoting if drone $s$ charges at grid point $i$ at time $t$}; \\
+%     \theta_{it} &= \text{continuous variable denoting if grid point $i$ is covered by a drone at time $t$}; \\
+%     b_{ts} &= \text{battery of drone $s$ at time $t$ defined as the number of time steps drone $s$ can operate} \\
+%     &\quad \ \text{without recharging}; \\
+%     \phi_{it} &= \text{binary variable denoting if grid point $i$ is covered by a drone for the first time at time $t$}; \\
+%     p^{s,t} &= \text{grid coordinates in $\mathbb{Z}^2$ of drone $s$ at time $t$}.\\
+% \end{align*}
+
+\subsection{Ground sensors and charging stations placement model}
+The ground sensors and charging stations placement optimization model is given by:
+\begin{subequations}\label{eq:maxcov_placement}
+    \begin{align} 
+        \max_{\bm x^g, \bm x^c} &\quad \displaystyle \sum_{i \in \set I_g} r_i^s x_i^g + \sum_{i \in \set I_c} r_i^s x_i^c \label{eq:maxcov_placement_a} \\
+        {\rm s.t. } &\quad \displaystyle x_i^g + x_i^c \leq 1, &\quad \forall i \in \set I_g \cap \set I_c, \label{eq:maxcov_placement_b} \\
+        &\quad \displaystyle \sum_{i \in \set I_g} x_i^g \leq n_g, \label{eq:maxcov_placement_c} \\
+        &\quad \displaystyle \sum_{i \in \set I_c} x_i^c \leq n_c, \label{eq:maxcov_placement_d} \\
+        &\quad \displaystyle x_i^g + x_i^c \leq 1, &\quad (i,j) \in \set N_g, \label{eq:maxcov_placement_e} \\
+        &\quad \displaystyle x_i^g + x_j^c \leq 1, &\quad (i,j) \in \set N_c, \label{eq:maxcov_placement_f} \\
+        &\quad \displaystyle x_j^g + x_i^c \leq 1, &\quad (i,j) \in \set N_{cg}.\label{eq:maxcov_placement_g} 
+    \end{align}
+\end{subequations}
+Here, constraints \eqref{eq:maxcov_placement_b} ensure that there can either be a charging station or a ground sensor at grid point $i$, but not both. Constraints \eqref{eq:maxcov_placement_c} and \eqref{eq:maxcov_placement_d} are capacity constraints on the ground sensors and charging stations respectively. Finally, \eqref{eq:maxcov_placement_e}-\eqref{eq:maxcov_placement_g} are spatial exclusion constraints between two ground sensors, two charging stations, and a ground sensor and a charging station respectively. 
+
+\textbf{Extensions.}
+Observe that we have assumed that a ground sensor as well as a charging station only detects a wildfire at the grid point it occupies. This can be naturally extended to allow partial detection of wildfires in neighboring grid points by replacing \eqref{eq:maxcov_placement} by 
+\begin{align*}
+    \displaystyle \max_{\bm \phi, \bm x, \bm y} &\quad \displaystyle \sum_{i \in \set I_g \cup \set I_c} \phi_i \\
+    {\rm s.t. } 
+    &\quad \displaystyle \phi_i \leq \sum_{k \in \set I_g \cap \set A_d(k)} \gamma_{ik}^g x_k^g + \sum_{k \in \set I_c \cap \set A_{d'}(k)} \gamma_{ik}^c x_k^c, &\quad i \in \set I_g \cup \set I_c,\\
+    % &\quad \displaystyle \theta_i^G \leq \sum_{k \in \set I_g \cap \set A_d(k)} \gamma_{ik}^G x_k  &\quad i \in \set I_g \setminus \set I_c,\\
+    % &\quad \displaystyle \theta_i^G \leq \sum_{k \in \set I_c \cap \set A_{d'}(k)} \gamma_{ik}^C y_k, &\quad i \in \set I_c \setminus \set I_g,\\
+    &\quad \displaystyle 0 \leq \phi_i \leq 1, &\quad i \in \set I_g \cup \set I_c,
+\end{align*}
+where $\gamma_{ik}^G$ and $\gamma_{ik}^C$ denote the partial contribution from a ground sensor and charging station at grid point $k$ to grid point $i$ respectively, and $\phi_i^g$ denotes the total fractional coverage in grid point $i$ due to ground sensors and charging stations nearby.
+
+% In the basic model, a sensor or charging station is assumed to only monitor the grid point it occupies. This can be easily extended by allowing each device to (partially) cover nearby locations, reflecting its sensing or communication range. In this setting, each grid point accumulates coverage from all nearby devices, weighted by their proximity, see \danique{A.1}.
+
+Observe that our model readily allows for the integration of existing ground sensors alongside newly optimized placements by explicitly including them in the formulation with fixed variable values (e.g., setting $x_i^g = 1$ for grid points with pre-existing sensors) or alternatively excluding them from the decision variable domains.
+
+
+\subsection{Drone routing model}
+
+The drone routing optimization model with the objective to maximize coverage is given by:
+\begin{subequations} \label{eq:maxcov}
+    \begin{align}
+        \max_{\bm a, \bm b, \bm c, \bm \theta}  &\quad \displaystyle \sum_{i \in \set I_d} \left\{r_{i1}^d \theta_{i1} + \sum_{t \in \set H \setminus \{1\}} r_{it}^d (\theta_{it} - \theta_{i,t-1}) \right\} \label{eq:maxcov_a}%+ \varepsilon \sum_{s,t} b_{ts} \label{eq:obj_maxcov}
+        \\ {\rm s.t. } 
+        &\quad \displaystyle \sum_{i \in \set I_d} a_{its} + \sum_{i \in \set C} c_{its} = 1, & t \in \set H \setminus \{1\}, s \in \set S, \label{eq:maxcov_b}\\
+        % &\quad \displaystyle \sum_{s \in \set S} (a_{i1s} + c_{i1s}) \leq n_d, & i \in \set C, \label{eq:maxcov_d}\\
+        &\quad \displaystyle \sum_{s \in \set S} c_{its} \leq n_d, & i \in \set C, t \in \set H \setminus \{1\}, \label{eq:maxcov_c}\\
+        &\quad \displaystyle c_{j,t+1,s} + a_{j,t+1,s} \leq \sum_{i \in \set I_d \cap \set A_1(j)} a_{its} + c_{jts}, &  j \in \set C, t \in \set H \setminus \{H\}, s \in \set S, \label{eq:maxcov_d}\\
+        &\quad \displaystyle a_{j,t+1,s} \leq \sum_{i \in \set I_d \cap \set A_1(j)} a_{its}, &  j \in \set I_d \setminus \set C, t \in \set H \setminus \{H\}, s \in \set S, \label{eq:maxcov_e}\\
+        &\quad \displaystyle 0 \leq b_{ts} \leq B_{\text{max}}, & t \in \set H, s \in \set S, \label{eq:maxcov_f}\\
+        &\quad \displaystyle b_{ts} \geq B_{\text{max}} \sum_{i \in \set C} c_{its}, & t \in \set H, s \in \set S, \label{eq:maxcov_g}\\
+        &\quad \displaystyle b_{t+1,s} \leq b_{ts} - 1 + (B_{\text{max}} + 1) \sum_{j \in \set C} c_{j,t+1,s} & t \in \set H \setminus \{H\}, s \in \set S, \label{eq:maxcov_h}\\
+        &\quad \displaystyle b_{Ts} \geq D_i \cdot a_{iTs}, & i \in \set I_d, s \in \set S, \label{eq:maxcov_i}\\
+        % &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} a_{its}, & i \in \set I_d, t \in \set H, \label{eq:maxcov_j}\\
+        % &\quad \displaystyle 0 \leq \theta_{it} \leq 1, & i \in \set I_d \setminus (\set G \cup \set C), t \in \set H, \label{eq:maxcov_k}\\
+        &\quad \displaystyle \theta_{it} = 0, & i \in \set I_d \cap (\set G \cup \set C), t \in \set H, \label{eq:maxcov_l} \\
+        &\quad \displaystyle \theta_{it} \geq a_{its}, &\quad i \in \set I_d, t \in \set T, s \in \set S, \label{eq:maxcov_m} \\
+        &\quad \displaystyle \theta_{1t} \leq \sum_{s \in \set S} a_{1ts}, &\quad t \in \set H, \label{eq:maxcov_n} \\
+        &\quad \displaystyle \theta_{it} \leq \sum_{s \in \set S} a_{its} + \theta_{i,t-1}, &\quad i \in \set I_d, t \in \set H \setminus \{1\}, \label{eq:maxcov_o} \\
+        &\quad \displaystyle \theta_{it} \geq \theta_{i,t-1}, &\quad i \in \set I_d, t \in \set H \setminus \{1\}. \label{eq:maxcov_p}
+        % &\quad \displaystyle \phi_{it} \leq \theta_{it}, &\quad i \in \set I_d, t \in \set H, \label{eq:maxcov_p} \\
+        % &\quad \displaystyle \sum_{t \in \set H} \phi_{it} \leq 1, &\quad i \in \set I_d, \label{eq:maxcov_q}\\
+        % &\quad \displaystyle \phi_{it} + \sum_{\tau = 1}^{t-1} \theta_{it} \leq 1, &\quad i \in \set I_d, t \in \set H.\label{eq:maxcov_r}
+        % &\quad \displaystyle \theta_{i,t+\delta} \leq 1 - \sum_{s \in \set S} a_{its}, & i \in \set I_d, t \in [T-\delta], \delta \in [\tau].\label{eq:maxcov_p}
+    \end{align}
+\end{subequations}
+Constraints \eqref{eq:maxcov_b} ensure that each drone at time $t$ is either charging or flying, but not both. 
+Constraints \eqref{eq:maxcov_c} ensure that there can be at most $n_d$ drones at a time at a charging station.
+Constraints \eqref{eq:maxcov_d} - \eqref{eq:maxcov_e} ensure that a drone can only fly or charge at location $j$ at time $t+1$ if it was charging already in the same location or the drone was in a neighboring location at time $t$.
+% Constraints \eqref{eq:maxcov_f} - \eqref{eq:maxcov_g} ensure that a drone can only be at grid point $j$ at time $t+1$ if it was flying in a point $i$ adjacent to $j$ at time $t$ or if it was charging at $j$ at time $t$. 
+\eqref{eq:maxcov_f}  - \eqref{eq:maxcov_h} are battery constraints that ensure that when a drone is charging, the battery updates to $B_{\text{max}}$, when a drone is flying, the battery decreases with 1 every time step, and the battery does not drop below $0$. Constraints \eqref{eq:maxcov_i} enforce a ``no-suicide" condition for drones at the end of the planning horizon, that is, a drone must have enough battery remaining at the final time step to reach the nearest charging station from its final position. Constraints \eqref{eq:maxcov_l}-\eqref{eq:maxcov_p} are coverage constraints. 
+% Constraints \eqref{eq:maxcov_j} ensure a grid point $i$ at time $t$ is only covered if at least one drone is present there at that time. 
+% Constraints \eqref{eq:maxcov_k} ensure that once a location is observed by at least one drone, it is considered fully covered, and additional presence yields no additional benefit in the objective function. 
+Constraints \eqref{eq:maxcov_l} make sure that there is no need to consider drone-based coverage at points where ground sensors or charging stations are already installed. Constraints \eqref{eq:maxcov_m} ensures that grid point $i$ must be covered at time $t$ when there is a drone present at grid point $i$ at time $t$. Constraints \eqref{eq:maxcov_n} and \eqref{eq:maxcov_o} ensure that a grid point is only covered at time $t$ if at least one drone visits it at time $t$ or it was already covered at time $t-1$. Constraints \eqref{eq:maxcov_p} ensure that once a grid point is detected, it remains detected in all future time steps.
+
+
+% Constraints \eqref{eq:maxcov_p} ensure a grid point $i$ can only be first covered at time $t$ if it is actually covered at time $t$. Constraints \eqref{eq:maxcov_q} ensure that at each grid point can be covered at most once over the entire time horizon, preventing double-counting of rewards from covering the same point at different times. Finally, \eqref{eq:maxcov_r} makes sure that a grid point can only be covered for the first time at time $t$ if it was not covered before time $t$.
+
+
+% This is commonly used when you want to maximize total unique coverage, where you get reward for covering a point only the first time, not for revisiting it.
+
+% Finally, constraints \eqref{eq:maxcov_p} ensure that once a drone visits a location and no wildfire is detected, that location does not need rechecking for $\tau$ subsequent time periods. This avoids redundant surveillance and encourages drones to focus on unvisited or high-risk areas rather than repeatedly revisiting recently checked grid points.
+
+% Observe that although we model the coverage variable $\bm \theta$ as a continuous vector between $\bm 0$ and $\bm 1$, it naturally takes on binary values in the optimal solution. This is because our objective is to maximize the coverage, and the constraints only allow detection at a location if a drone is present. As a result, the model has no incentive to assign partial values, that is, either a location is covered (value 1) or it is not (value 0). This approach keeps the model efficient while preserving the intended binary behavior.
+
+In addition, we initialize the drone routing model by adding the following constraints to the optimization problem formulation
+\begin{align}
+    &\quad \displaystyle \sum_{i \in \set C} a_{i1s} + \sum_{i \in \set C} c_{i1s} = 1, &  s \in \set S, \label{eq:maxcov_b_init}\\
+    &\quad \displaystyle \sum_{s \in \set S} (a_{i1s} + c_{i1s}) \leq n_d, & i \in \set C, \label{eq:maxcov_d_init}\\
+    &\quad \displaystyle b_{1s} = B_{\text{max}}, & s \in S, \label{eq:maxcov_h_init}
+\end{align}
+ensuring that all drones start flying from a charging station (constraints \eqref{eq:maxcov_b_init}), there are at most $n_d$ drones either flying or charging at a charging station at $t = 1$ (constraints \eqref{eq:maxcov_d_init}), and each drone starts with full capacity (constraints \eqref{eq:maxcov_h_init}). 
+
+\textbf{Extensions.}
+Observe that we have assumed that a drone only detects a wildfire at the grid point it occupies. This can be naturally extended to allow partial detection of wildfires in neighboring grid points by replacing constraint \eqref{eq:maxcov_m} by 
+\begin{align*}
+            &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} \sum_{k \in \set I_d \cap \set A_d(i)}\gamma_{ik}^d a_{kts}, &\quad i \in \set I_d, t \in \set T,
+\end{align*}
+where $\gamma_{ik}^d$ denotes the partial contribution from a drone at grid point $k$ to grid point $i$. In this case, the variable $\theta_{it}$ 
+may take fractional values and is interpreted as the degree of coverage at location $i$ and time $t$.
+
+To encourage drones to spatially disperse we can include a separation reward term in the objective, defined as the sum of pairwise $L_{\infty}$ distances between drones over time, i.e., we consider \eqref{eq:maxcov} in which we replace the objective \eqref{eq:maxcov_a} by
+\begin{align} \label{eq:maxcov_a_reg}
+    \max \left\{ \sum_{i \in \set I_d} \sum_{t \in \set T} r_{it} \phi_{it} + \lambda_{\text{disp}} \sum_{t \in \set T} \sum_{s_1 \in \set S} \sum_{s_2 < s_1, s_2 \in \set S} \max \left\{\big|p^{s_1,t}_1 - p^{s_2,t}_1\big|, \big|p^{s_1,t}_2 - p^{s_2,t}_2\big| \right\} \right\}. 
+    \end{align}
+Note that we can easily linearize the objective \eqref{eq:maxcov_a_reg} using auxiliary variables and big-M constraints.
+
+% \section{Evaluation metrics formulas}
+% computed as
+% \begin{align*}
+%     \frac{1}{|\set W_{\text{det}}|} \sum_{w \in \set W_{\text{det}}} \left(t^{\text{det}}_w - t^{\text{ign}}_w\right), \quad \frac{1}{|\set W_{\text{det}}|} \sum_{w \in \set W_{\text{det}}} A_w^{\text{det}}, \quad \text{and} \quad \frac{1}{n_z} \sum_{w \in \set W} \delta_w^z \times 100 \%, \forall z \in \set Z,
+% \end{align*}
+% respectively. Here, $\set W$ is the set of all wildfire events, $\set W_{\text{det}}$ is the set of all wildfire events that are detected by one of the three detection modalities within the total time horizon, $t_w^{\text{det}}$ is the detection time (if detected), $t_f^{\text{ign}}$ is the ignition time, $A_w^{\text{det}}$ is the area burned by time of detection because of wildfire event $w$, $\set Z$ is the set of detection modalities, $n_z$ is the number of devices of detection modality $z$, and $\delta_w^z$ equals 1 if fire $w \in \set W$ is detected by a device of type $z$ and 0 otherwise. 
+
+% computed as 
+% \begin{align*}
+%     \frac{1}{|\set I|} \sum_{i \in \set I} \mathds{1}\left(\sum_{t \in \set T} \theta_{it} \geq 1 \vee x_i^g = 1 \vee x_i^c = 1 \right), \quad \frac{1}{S} \sum_{s \in \set S} \sum_{t=1}^{t^{\text{det}}_s} d\left(\bm{p^{s,t}},\bm{p^{s,t+1}}\right) \times 100 \%,
+% \end{align*}
+% and
+% \begin{align*}
+% \frac{1}{ST} \sum_{s \in \mathcal{S}} \sum_{t \in \mathcal{T}} \min_{c \in \mathcal{C}} d(p^{s,t}, c),
+% \end{align*}
+% respectively. Here $\set I$ is the set of all possible grid points, $t^{\text{det}}_s$ denotes the time when drone $s$ detects the fire, which equals the total time horizon when the wildfire is not detected, and $d(\cdot, \cdot)$ is the travel distance \danique{($L_\infty$ distance? or Euclidean?)}. 
+
+\section{Licensing datasets \& assets used}
+
+We use several publicly available datasets in this study and ensure that each is properly credited and used in accordance with its license and usage terms. For the Sim2Real-Fire dataset, we use simulation data, which is released under the Apache-2.0 license as noted in the original publication and hosted repository (available at \url{https://github.com/TJU-IDVLab/Sim2Real-Fire}). The Wildfire Hazard Potential (WHP) for the United States (270-m), version 2023 (4th Edition) dataset, released by the USDA Forest Service, is publicly accessible for research and other uses under a Creative Commons Attribution (CC BY) license. It is available at \url{https://www.fs.usda.gov/rds/archive/}. We also incorporate the Fire Program Analysis Fire-Occurrence Database (FPA FOD), maintained by the U.S. Forest Service, which is available for public research under open data access policy (CC0 1.0 License). All cited datasets are accompanied by their corresponding original publications in our bibliography. 
+
+A summary of the asset licenses and their corresponding source web locations is provided in the Table \ref{tab:assetlicenses}. \newpage
+
+\begin{longtable}{p{4cm}p{6cm}p{3cm}}
+\caption{Overview of the used asset licenses and their corresponding source web locations. \label{tab:assetlicenses}} \\
+\toprule
+\textbf{Dataset} & \textbf{URL or DOI}                               & \textbf{License}   \\
+\endfirsthead
+%
+\endhead
+%
+\midrule
+National USFS Fire Occurrence Point (Feature Layer) &
+  \url{https://data-usfs.hub.arcgis.com/datasets/6059c1a4dca749d393e33ee5f8a0cbaf_9/about} &
+  CC0 1.0 License \\ \midrule
+Sim2Real-Fire    & \url{https://github.com/TJU-IDVLab/Sim2Real-Fire} & Apache-2.0 license \\ \midrule
+Wildfire Hazard Potential for the United States (270-m), version 2023 (4th Edition) &
+  \url{10.2737/RDS-2015-0047-4} &
+  Creative Commons CC-BY
+  \\ \bottomrule
+\end{longtable}
+
+\section{Instructions to download dataset and code}
+Our dataset can be downloaded from the following HuggingFace link: \url{https://huggingface.co/datasets/MasterYoda293/DroneBench}. Our Library, \texttt{WFDroneBench}, its documentation, as well as the code used to generate our experiments and data, can be downloaded from the following GitHub repository: \url{https://github.com/RomainPuech/wildfire_drone_routing}.
+
+\section{Assumptions for testing}
+In our setup, we assume that drones undergo instantaneous battery replacement upon returning to a charging station. While such automated swapping systems are not yet standard in wildfire detection practice, this assumption reflects an emerging direction in drone logistics aimed at minimizing downtime. The model can be easily adapted to account for longer recharging durations if necessary.
+
+% Observe that we have assumed that a drone only detects a wildfire at the grid point it occupies. This can be naturally extended to allow partial detection of wildfires in neighboring grid points, see  \danique{A.2.1}. 
+
+% \subsection{Ground sensors and charging stations placement model}
+% \begin{subequations}
+%     \begin{align}
+%         \max_{\bm a, \bm b, \bm c} &\quad \sum_{i \in \set I_g} r_i^s x_i + \sum_{i \in \set I_c} r_i^s y_i + \sum_{i \in \set I_d \setminus \left(\set C \cup \set G\right)} \sum_{t \in \set T} r_{it}^d \theta_{it} %+ \varepsilon \sum_{s,t} b_{ts} \label{eq:obj_maxcov}
+%         \\ {\rm s.t. } &\quad \displaystyle x_i + y_i \leq 1, &\quad \forall i \in \set I_g \cap \set I_c, \\
+%         &\quad \displaystyle \sum_{i \in \set I_g} x_i \leq N_g, \\
+%         &\quad \displaystyle \sum_{i \in \set I_c} y_i \leq N_c, \\
+%         &\quad \displaystyle \sum_{i \in \set I_c} (a_{i1s} + c_{i1s}) = 1, &\quad  s \in \set S, \\
+%         &\quad \displaystyle a_{i1s} + c_{i1s} \leq y_i &\quad i \in \set I_c, s \in \set S, \\
+%         &\quad \displaystyle \sum_{i \in \set I_d} a_{its} + \sum_{i \in \set I_c} c_{its} = 1, &\quad  t \in \set T \setminus \{1\}, s \in \set S, \\
+%         &\quad \displaystyle c_{its} \leq y_i, &\quad i \in \set I_c, t \in \set T \setminus \{1\}, s \in \set S, \\
+%         &\quad \displaystyle \sum_{s \in \set S} (a_{i1s} + c_{i1s}) \leq N_d \ y_i, &\quad i \in \set I_c, \\
+%         &\quad \displaystyle \sum_{s \in \set S} c_{its} \leq N_d \ y_i, &\quad i \in \set I_c, t \in \set T \setminus \{1\}, \\
+%         &\quad \displaystyle c_{j,t+1,s} + a_{j,t+1,s} \leq \sum_{i \in \set I_d \cap \set N(j)} a_{its} + c_{jts}, &\quad  j \in \set I_c, t \in \set T \setminus \{T\}, s \in \set S, \\
+%         &\quad \displaystyle a_{j,t+1,s} \leq \sum_{i \in \set I_d \cap \set N(j)} a_{its}, &\quad  j \in \set I_d \setminus \set I_c, t \in \set T \setminus \{T\}, s \in \set S,\\
+%         &\quad \displaystyle b_{1s} = B_{\text{max}}, &\quad s \in S, \\
+%         &\quad \displaystyle 0 \leq b_{ts} \leq B_{\text{max}}, & t \in \set T, s \in \set S, \\
+%         &\quad \displaystyle b_{ts} \geq B_{\text{max}} \sum_{i \in \set I_c} c_{its}, &\quad t \in \set T, s \in \set S, \\
+%         &\quad \displaystyle b_{t+1,s} \leq b_{ts} - 1 + (B_{\text{max}} + 1) \sum_{j \in \set I_c} c_{j,t+1,s} &\quad t \in \set T \setminus \{T\}, s \in \set S, \\
+%         &\quad \displaystyle b_{Ts} \geq D_i \cdot a_{iTs}, &\quad i \in \set I_d, s \in \set S, \\
+%         &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} a_{its} + x_i + y_i, &\quad i \in \set I_d, t \in \set T, 
+%         % &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} a_{its} + x_i &\quad i \in \set I_d \cap \set I_g \setminus \set I_c, t \in \set T, \label{eq:maxcov_k} \\    
+%         % &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} a_{its} + y_i &\quad i \in \set I_d \cap \set I_c \setminus \set I_g, t \in \set T, \label{eq:maxcov_k} \\ 
+%         % &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} a_{its} + y_i &\quad i \in \set I_d \setminus \set I_c \setminus \set I_g, t \in \set T, \label{eq:maxcov_k} \\    
+%     \end{align}
+% \end{subequations}
+
+\section{Team orienteering problem}
+We adopt the Team Orienteering Problem (TOP) formulation of El-Hajj et al. (2016), which assumes distinct start and end depots. In our case, the start and end depot (i.e., charging station) share the same physical location, but are modeled as separate vertices in the graph. At the end of the planning horizon, each drone can return to the start location without incurring any cost, allowing us to directly apply the original TOP formulation without modification. The algorithm is as follows. It starts with solving the following MILP:
+
+\begin{subequations}
+    \begin{align}
+    \max_{\bm x, \bm y} &\quad \sum_{i \in \set I_d^-}  \sum_{s \in \set S} y_{is}r_{i} \\
+    {\rm s.t. } &\quad \sum_{s \in \set S} y_{is} \leq 1, & i \in \set I_d^-, \\
+    &\quad \sum_{j \in \set I_d^e} x_{bis} = \sum_{j \in \set I_d^b} x_{ies} = 1, &\quad s \in \set S, \\
+    &\quad \sum_{i \in \set I_d^e \setminus \{k\}} x_{kis} = \sum_{j \in \set I_d^b \setminus \{k\}} x_{jks} = y_{ks}, &\quad k \in \set I_d^-, s \in \set S, \\
+    &\quad \sum_{i \in \set I_d^b} \sum_{j \in \set I_d^e \setminus \{i\}} c_{ij} x_{ijs} \leq L, &\quad s \in \set S, \\
+    &\quad x_{ijs} \in \{0,1\}, &i,j \in \set I_d, s \in \set S, \\
+    &\quad y_{is} \in \{0,1\}, &i \in \set I_d^-, s \in \set S.
+    \end{align}
+\end{subequations}
+Observe that the constraint
+\begin{align}\label{eq:nosubtour}
+    \sum_{(i,j) \in \set U \times \set U} x_{ijs} \leq \vert \set U \vert -1 &\quad \set U \in \set I_d^-, |\set U| \geq 2, s \in \set S,
+\end{align}
+is not included as numerating all such constraints results in an exponential number of constraints. As a result, it is possible that the found solution contains subtours. To find such a subtour we use Tarjan's algorithm. Then, instead of including \eqref{eq:nosubtour}, we add Generalized Subtour Eliminiation Constraints (GSECs), in the following way. Let $\set V$ be a subset of gridpoints. We define $\delta(V)$ to be the set of arcs that connect vertices in $V$ with those outside $V$, i.e., vertices in $\set I_d \setminus V$. We also use $\gamma(V)$ to represent the set of arcs interconnecting vertices in $V$. 
+% Hence, it is possible that the found solution contains subtours. 
+% Each strong connected component of the subgraph associated with a tour of the solution represents a subtour, thus the checking can be done by examining the corresponding subgraphs.
+
+\section{Additional Visualizations}
+
+\include{visualization}
+
+
+\end{document}

@@ -1,0 +1,64 @@
+\begin{table}[htbp]
+\centering
+\tiny
+\begin{tabular}{@{}llp{1.5cm}p{1.5cm}p{1.5cm}p{2cm}p{2cm}@{}}
+\toprule
+ & & Overall & Slow Small & Slow Big & Fast Small & Fast Big \\
+\midrule
+\textbf{Sensor Strategy} & \textbf{Drone Strategy} & & & & & \\
+\midrule
+
+\multirow{4}{*}{Random} 
+  % & TOP      & \textbf{92\%}; 2.69 (4.03) & 76\%; \textbf{2.68} (3.81) & \textbf{94\%}; 3.04 (4.08) & 86\%; 2.50 (4.32) & \textbf{100\%}; \textbf{4.18} (4.38) \\
+  & MaxCov   & 89\%; \textbf{2.49} (3.74) & 78\%; 3.72 (4.39) & 89\%; \textbf{2.88} (3.66) & \textbf{100\%}; 2.14 (3.67) & \textbf{100\%}; 4.55 (5.24) \\
+  & UniCov   & \textbf{92\%}; 3.74 (5.11) & \textbf{93\%}; 4.71 (5.04) & 92\%; 4.19 (5.22) & \textbf{100\%}; \textbf{1.86} (4.06) & 91\%; 4.20 (4.05) \\
+  & Brownian & 66\%; 3.77 (5.55) & 29\%; 7.83 (4.73) & 68\%; 6.16 (5.38) & 43\%; 7.67 (1.15) & 91\%; 5.40 (5.93) \\
+\midrule
+
+\multirow{4}{*}{GaussianCov} 
+  % & TOP      & 91\%; \textbf{3.04} (4.44) & 73\%; \textbf{2.80} (4.01) & 92\%; 3.49 (4.49) & \textbf{100\%}; \textbf{0.86} (1.21) & \textbf{100\%}; 6.45 (5.52) \\
+  & MaxCov   & 95\%; 3.20 (4.21) & 78\%; 4.44 (6.16) & 96\%; \textbf{3.32} (4.01) & \textbf{100\%}; 3.57 (3.21) & \textbf{100\%}; \textbf{5.73} (5.50) \\
+  & UniCov   & \textbf{96\%}; 3.41 (4.39) & \textbf{83\%}; 3.35 (3.60) & \textbf{97\%}; 3.58 (4.40) & \textbf{100\%}; 2.14 (2.48) & 82\%; 8.22 (5.93) \\
+  & Brownian & 73\%; 5.11 (6.53) & 63\%; 7.92 (5.93) & 75\%; 7.23 (6.34) & 86\%; 9.00 (7.13) & 36\%; 8.75 (5.32) \\
+
+\bottomrule
+\end{tabular}
+\caption{Percentage of fires detected in under 12 hours and mean detection time (±SD in hours) using the ``ground truth'' dynamic map, across sensor/drone strategies and fire scenarios (by size and speed). }\label{tab:ground_truth}
+\end{table}
+
+%  \hline \hline \\
+%   \multicolumn{2}{l}{BP risk map} & Overall &  Slow Small &  Slow Big &  Fast Small &  Fast Big \\
+% \midrule
+% sensor strategy & drone strategy &  &  &  &  &  \\
+% \midrule
+% \multirow[t]{8}{*}{ Random} & \multirow[t]{2}{*}{TOP} & 80\% ; \textbf{2.96} & 63\% ; \textbf{2.50} & 81\% ; 4.08 & 86\% ; \textbf{1.67} & 82\% ; \textbf{7.45} \\
+%  &  & (5.29) & (4.37) & (5.53) & (3.61) & (7.46) \\
+% \cmidrule{2-7}
+%  & \multirow[t]{2}{*}{MaxCov} & 91\% ; 3.19 & 78\% ; 3.75 & 93\% ; 3.54 & \textbf{100\%}; 2.29 & 55\% ; 9.67 \\
+%  &  & (4.42) & (3.40) & (4.40) & (3.40) & (9.63) \\
+% \cmidrule{2-7}
+%  & \multirow[t]{2}{*}{UniCov} & \textbf{93\%}; 3.08 & \textbf{88\%}; 3.97 & \textbf{94\%}; \textbf{3.21} & \textbf{100\%}; 3.00 & \textbf{100\%}; 7.45 \\
+%  &  & (4.23) & (4.84) & (4.12) & (2.08) & (5.35) \\
+% \cmidrule{2-7}
+%  & \multirow[t]{2}{*}{Brownian} & 74\% ; 5.22 & 46\% ; 5.37 & 77\% ; 7.66 & 57\% ; 5.25 & 82\% ; 8.78 \\
+%  &  & (6.71) & (6.99) & (6.52) & (4.72) & (6.28) \\
+% \midrule
+% \multirow[t]{8}{*}{GaussianCov} & \multirow[t]{2}{*}{TOP} & 84\% ; \textbf{3.16} & 76\% ; \textbf{3.71} & 85\% ; 4.06 & 86\% ; 4.67 & 45\% ; 3.40 \\
+%  &  & (4.76) & (4.42) & (4.92) & (3.72) & (2.19) \\
+% \cmidrule{2-7}
+%  & \multirow[t]{2}{*}{MaxCov} & 96\% ; \textbf{3.16} & 90\% ; 5.11 & \textbf{97\%}; 3.23 & \textbf{100\%}; 3.71 & 73\% ; \textbf{2.00} \\
+%  &  & (4.24) & (5.65) & (4.08) & (6.90) & (2.14) \\
+% \cmidrule{2-7}
+%  & \multirow[t]{2}{*}{UniCov} & \textbf{97\%}; 3.17 & \textbf{93\%}; 5.05 & \textbf{97\%}; \textbf{3.18} & \textbf{100\%}; \textbf{1.00} & \textbf{100\%}; 5.73 \\
+%  &  & (4.17) & (5.45) & (3.97) & (1.00) & (6.17) \\
+% \cmidrule{2-7}
+%  & \multirow[t]{2}{*}{Brownian} & 81\% ; 4.99 & 59\% ; 6.96 & 83\% ; 6.34 & 86\% ; 8.00 & 91\% ; 6.10 \\
+%  &  & (6.33) & (7.42) & (6.31) & (4.69) & (3.51) \\
+% \bottomrule
+% \end{tabular}
+% }
+
+% \caption{Percentage of fire detected in less than 12 hours and mean detection time in hours (with standard deviation) \textbf{using the ``ground-truth'' dynamic risk map and the BP risk map}, for each sensor/drone strategy combination, for different fire sizes and propagation speed. Best values in bold.}
+% \end{table}
+
+

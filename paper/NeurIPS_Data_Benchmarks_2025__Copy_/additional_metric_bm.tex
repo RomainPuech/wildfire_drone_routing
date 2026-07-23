@@ -1,0 +1,76 @@
+\begin{table}[htbp]
+\centering
+\begin{minipage}{0.48\textwidth}
+\centering
+\rotatebox{90}{%
+\begin{minipage}{.85\textheight} % container to hold table + caption
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llllllll}
+\toprule
+ &  & execution time & fire size cells & fire percentage & map explored & total distance & drone detection pct \\
+\midrule
+sensor strategy & drone strategy &  &  &  &  &  &  \\
+\midrule
+\midrule
+\multirow[t]{4}{*}{Random} & MaxCov & 20.315 (9.243) & 317.865 (500.740) & 0.115 (0.162) & 0.089 (0.058) & 10811.368 (8586.738) & 99.7\% (1.0\%) \\
+% \midrule
+%  & TOP & 2555.125 (1044.639) & 334.081 (393.133) & 0.128 (0.149) & 0.100 (0.052) & 14058.159 (12273.762) & 99.2\% (2.6\%) \\
+\midrule
+ & UniCov & 13.777 (1.405) & 394.954 (659.147) & 0.137 (0.220) & 0.133 (0.051) & 12539.380 (8558.823) & 100.0\% (0.0\%) \\
+\midrule
+ & Brownian & 0.668 (0.150) & 1891.451 (2025.248) & 0.818 (0.699) & 0.346 (0.224) & 40051.673 (19738.856) & 80.6\% (37.9\%) \\
+\midrule
+\cline{1-8}
+\multirow[t]{4}{*}{GaussianCov} & MaxCov & 19.748 (9.022) & 198.689 (239.398) & 0.076 (0.076) & 0.106 (0.058) & 11170.125 (6990.986) & 94.0\% (14.1\%) \\
+% \midrule
+%  & TOP & 2818.260 (531.631) & 380.725 (481.171) & 0.150 (0.187) & 0.117 (0.049) & 13585.247 (12393.535) & 94.2\% (13.3\%) \\
+\midrule
+ & UniCov & 12.263 (1.566) & 295.289 (387.528) & 0.107 (0.127) & 0.120 (0.063) & 14744.375 (13057.346) & 95.2\% (10.4\%) \\
+\midrule
+ & Brownian & 0.643 (0.133) & 2011.373 (2886.966) & 0.835 (1.081) & 0.346 (0.213) & 39164.918 (20949.228) & 71.5\% (40.2\%) \\
+\midrule
+\cline{1-8}
+\bottomrule
+\end{tabular}}
+\caption{Results with baseline sensor strategies}\label{additional_metrics_bm}
+\end{minipage}}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\rotatebox{90}{%
+\begin{minipage}{.85\textheight}
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llllllll}
+\toprule
+ &  & execution time & fire size cells & fire percentage & map explored & total distance & drone detection pct \\
+\midrule
+sensor strategy & drone strategy &  &  &  &  &  &  \\
+\midrule
+\midrule
+\multirow[t]{4}{*}{ Random} & MaxCov & 0.000 (0.000) & 641.130 (1152.963) & 0.225 (0.396) & 0.113 (0.060) & 14930.118 (12428.318) & 99.4\% (1.1\%) \\
+% \midrule
+%  & TOP & 2317.133 (1110.519) & 655.801 (1206.986) & 0.216 (0.377) & 0.096 (0.033) & 14005.731 (14018.440) & 99.9\% (0.4\%) \\
+\midrule
+ & UniCov & 0.000 (0.000) & 577.594 (1180.993) & 0.204 (0.407) & 0.132 (0.057) & 14472.535 (11741.451) & 99.5\% (1.0\%) \\
+\midrule
+ & Brownian & 0.618 (0.120) & 1094.617 (1523.182) & 0.367 (0.489) & 0.130 (0.070) & 18401.000 (16735.612) & 97.4\% (7.7\%) \\
+\midrule
+\cline{1-8}
+\multirow[t]{4}{*}{GaussianCov} & MaxCov & 0.000 (0.000) & 256.074 (301.431) & 0.098 (0.098) & 0.123 (0.053) & 12036.871 (7137.082) & 99.7\% (0.9\%) \\
+% \midrule
+%  & TOP & 1845.730 (1377.287) & 1004.588 (1728.804) & 0.344 (0.597) & 0.091 (0.042) & 14231.619 (14177.320) & 99.0\% (2.9\%) \\
+\midrule
+ & UniCov & 0.000 (0.000) & 237.247 (299.693) & 0.086 (0.098) & 0.116 (0.031) & 10157.665 (6907.177) & 100.0\% (0.1\%) \\
+\midrule
+ & Brownian & 0.627 (0.126) & 1029.781 (1240.544) & 0.372 (0.400) & 0.206 (0.130) & 24515.343 (15633.415) & 96.2\% (9.6\%) \\
+\midrule
+\cline{1-8}
+\bottomrule
+\end{tabular}}
+\caption{Results with Gaussian sensor strategies (Table 2)}\label{additional_metrics_bp}
+\end{minipage}}
+\end{minipage}
+\end{table}

@@ -1,0 +1,43 @@
+\begin{table}[!htb]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ll|ll} \toprule
+\textbf{Sets}                  & \textbf{Description}             & \textbf{Variables} & \textbf{Description}          \\ \midrule
+$\set I$ & Set of all possible grid points on the map & $x_i^g \in \{0,1\}$ & 1 if a ground sensor is placed at grid point $i$ \\
+$\set I_g$ & Set of all feasible grid points for the ground sensors & $x_i^c \in \{0,1\}$ & 1 if a charging station is placed at grid point $i$ \\
+$\set I_c$ & Set of all feasible grid points for the charging stations & $a_{its} \in \{0,1\}$ & 1 if drone $s$ flies at grid point $i$ at time $t$  \\
+$\set I_d$ & Set of all feasible grid points for the drones & $c_{its} \in \{0,1\}$ & 1 if drone $s$ is charging at grid point $i$ at time $t$ \\
+$\set T$ & Total time horizon with cardinality $T$ & $\theta_{it} \in \{0,1\}$ & 1 if grid point $i$ is covered by a drone at time $t$ \\
+$\set H$ & Optimization time horizon with cardinality $H$ & $b_{ts} \in \mathbb{Z}$ & Battery of time $s$ at time $t$ (unit time) \\
+% $\set A_1(i)$ & Set of direct neighbors of grid points $i$, including $i$ \\
+$\set S$ & Set of drones &   \\ \cmidrule{1-2}
+% $\set G$ & Set of ground sensors with cardinality $G$ \\
+% $\set C$ & Set of charging stations with cardinality $C$ \\ \hline
+\textbf{Parameters}                  & \textbf{Description}             &           \\ \cmidrule{1-2}
+% $n_g$ & Total number of ground sensors \\
+% $n_c$ & Total number of charging stations \\
+% $n_d$ & Total number of drones \\
+% $\rho_d$ & Drone detection radius \\
+% $\rho_g$ & Ground sensor detection radius \\
+% $\rho_c$ & Charging station detection radius \\
+% $R$ & Transmission range of the drones \\
+% B$_{\text{max}}$ & Maximal drone battery duration (time units) \\
+$r_{it}^d$ & Dynamic wildfire risk in grid point $i$ at time $t$ &    \\
+$r_i^s$ & Static wildfire risk in grid point $i$ \\
+$T_{\text{reev}}$ & Reevaluation step \\
+% $\lambda_{\text{disp}}$ & Weight of dispersion of the drones \\ 
+\bottomrule \addlinespace
+% \textbf{Variables}                  & \textbf{Description}             &    \textbf{Type}         \\ \hline
+% $x_i^g$ & 1 if a ground sensor is placed at grid point $i$ & Binary \\
+% $x_i^c$ & 1 if a charging station is placed at grid point $i$ & Binary \\
+% $a_{its}$ & 1 if drone $s$ flies at grid point $i$ at time $t$ & Binary \\
+% $c_{its}$ & 1 if drone $s$ is charging at grid point $i$ at time $t$ & Binary \\
+% $\phi_{it}$ & 1 if grid point $i$ is covered by a drone  for the first time at time $t$ & Binary  \\
+% $\theta_{it}$ & 1 if grid point $i$ is covered by a drone at time $t$ & Continuous \\
+% $b_{ts}$ & Battery of time $s$ at time $t$ (unit time) & Integer \\
+% $\bm {p^{s,t}}$ & Grid point coordinates in $\mathbb{Z}^2$ of drone $s$ at time $t$ & Continuous \\
+\end{tabular}}
+\caption{Notation used in the problem formalism and the formulation in Section~\ref{sec:strategies}.}
+\label{tab:sets}
+\end{table}
+%We refer to Figure \ref{fig:optimizationframework} for an overview of our optimization framework.

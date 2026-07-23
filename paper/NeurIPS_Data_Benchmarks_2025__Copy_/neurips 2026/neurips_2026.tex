@@ -1,0 +1,1559 @@
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2026
+
+% The authors should use one of these tracks.
+% Before accepting by the NeurIPS conference, select one of the options below.
+% 0. "default" for submission
+\usepackage{neurips_2026}
+
+
+% the "default" option is equal to the "main" option, which is used for the Main Track with double-blind reviewing.
+% 1. "main" option is used for the Main Track
+%  \usepackage[main]{neurips_2026}
+% 2. "position" option is used for the Position Paper Track
+%  \usepackage[position]{neurips_2026}
+% 3. "eandd" option is used for the Evaluations & Datasets Track
+ % \usepackage[eandd]{neurips_2026}
+ % if you want to opt-in for a de-anomymized submission (not recommended, but OK):
+ %\usepackage[eandd, nonanonymous]{neurips_2026}
+% 4. "creativeai" option is used for the Creative AI Track
+%  \usepackage[creativeai]{neurips_2026}
+% 5. "sglblindworkshop" option is used for the Workshop with single-blind reviewing
+ % \usepackage[sglblindworkshop]{neurips_2026}
+% 6. "dblblindworkshop" option is used for the Workshop with double-blind reviewing
+%  \usepackage[dblblindworkshop]{neurips_2026}
+
+% After being accepted, the authors should add "final" behind the track to compile a camera-ready version.
+% 1. Main Track
+ % \usepackage[main, final]{neurips_2026}
+% 2. Position Paper Track
+%  \usepackage[position, final]{neurips_2026}
+% 3. Evaluations & Datasets Track
+ % \usepackage[eandd, final]{neurips_2026}
+% 4. Creative AI Track
+%  \usepackage[creativeai, final]{neurips_2026}
+% 5. Workshop with single-blind reviewing
+%  \usepackage[sglblindworkshop, final]{neurips_2026}
+% 6. Workshop with double-blind reviewing
+%  \usepackage[dblblindworkshop, final]{neurips_2026}
+% Note. For the workshop paper template, both \title{} and \workshoptitle{} are required, with the former indicating the paper title shown in the title and the latter indicating the workshop title displayed in the footnote.
+% For workshops (5., 6.), the authors should add the name of the workshop, "\workshoptitle" command is used to set the workshop title.
+% \workshoptitle{WORKSHOP TITLE}
+
+% "preprint" option is used for arXiv or other preprint submissions
+ % \usepackage[preprint]{neurips_2026}
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips_2026}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+
+\usepackage{multirow}
+\usepackage{graphicx}   % for \rotatebox and \resizebox
+\usepackage{caption}
+\usepackage{enumitem}
+
+\usepackage{tabularx}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2025
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2025}
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2025}
+
+% to avoid loading the natbib package, add option nonatbib:
+% \usepackage[nonatbib]{neurips_2025}
+
+% 49 layouts, 7746 scenarios, 248 historical matches
+\newcommand{\layoutsNo}{49}
+\newcommand{\scenariosNo}{7746}
+\newcommand{\historicalNo}{248}
+
+\newcommand{\Expect}[1]{\mathbb{E}\left[#1\right]}
+\newcommand{\Prob}[1]{\mathbb{P}\left[#1\right]}
+\newcommand{\I}{\mathcal{I}}
+\newcommand{\D}{\mathcal{D}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\J}{\mathcal{J}}
+\newcommand{\T}{\mathcal{T}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\set}[1]{\mathcal{#1}}
+\newcommand{\norm}[1]{\big\| #1\big\| }
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{xcolor}         % colors
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsthm, bm}
+\usepackage{dsfont}
+\usepackage[english]{babel}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage[normalem]{ulem}
+\newcommand{\danique}[1]{\textcolor{orange}{#1}}
+\newcommand{\rev}[1]{\textcolor{black}{#1}}
+\newcommand{\rr}[1]{\textcolor{teal}{#1}}
+\newcommand{\ana}[1]{\textcolor{purple}{#1}}
+\newcommand{\romain}[1]{\textcolor{gray}{#1}}
+\newcommand{\blue}[1]{\textcolor{black}{#1}}
+
+
+\usepackage{soul}
+\usepackage{appendix}
+\usepackage{algorithmic}            
+\usepackage{algorithm}
+\usepackage{subcaption}
+
+% Note. For the workshop paper template, both \title{} and \workshoptitle{} are required, with the former indicating the paper title shown in the title and the latter indicating the workshop title displayed in the footnote. 
+\title{\texttt{WFDroneBench:} A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+
+\author{%
+  Romain Puech \thanks{Use footnote for providing further information
+    about author (webpage, alternative address)---\emph{not} for acknowledging
+    funding agencies.} \\
+  Operations Research Center\\
+  Massachusetts Institute of Technology\\
+  Cambridge, MA 02139 \\
+  \texttt{romainp@mit.edu} \\
+  % examples of more authors
+  % \And
+  Danique de Moor \\
+  Sloan School of Management \\
+  Massachusetts Institute of Technology \\
+  Cambridge, MA 02139
+  \texttt{demoor@mit.edu} \\
+  % \AND
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+
+\begin{document}
+
+
+\maketitle
+
+\begin{abstract}
+Increasingly frequent and severe wildfires threaten ecosystems, public health, and infrastructure. Early detection is vital but limited by existing monitoring systems. Drones offer mobile, real-time coverage, but optimizing sensor placement and drone routing in dynamic fire zones remains challenging. To address this, we introduce \texttt{WFDroneBench}, an open-source Python benchmarking library for early wildfire detection that integrates machine-learned risk maps with optimization-based deployment strategies for sensors, charging stations, and drones. It evaluates risk maps, optimization strategies, and monitoring equipment using standardized metrics and realistic wildfire simulations. The framework supports benchmarking across predictive and decision-making components: machine learning researchers can assess risk models \rev{and compare routing strategies}. \texttt{WFDroneBench} includes \scenariosNo{} scenarios across \layoutsNo{} locations, built from historical ignitions, real-world wildfire risk maps, and simulated fire spread, along with two ground detector and \blue{three} drone routing strategies. Our experiments show that \blue{the risk-aware strategy Max-Coverage significantly outperforms other baselines when risk maps
+are sufficiently accurate, achieving the fastest detection on the most difficult fires.} We further find that risk-aware static infrastructure helps even under an imperfect
+riskmap and drone-based detection outperforms ground sensors. Finally, our results reveal two key open challenges: (i) detecting small fires rapidly and reliably, and (ii) improving risk-map prediction, where the gap between ground-truth ignition patterns and available risk maps highlights a significant opportunity for ML innovation. \blue{We openly release all code, data, and documentation.}
+\end{abstract}
+
+\section{Introduction}
+
+Wildfires and the resulting deforestation have been on the rise in recent years~\citep{curtis2018classifying, tyukavina2022global, hu2025coexposure}, causing substantial economic damage and costs exceeding \$70 billion annually~\citep{thomas2017costs}. The 2018 California wildfires alone resulted in \$149 billion in total damages, including \$32 billion in health-related costs from mortality, medical care, and lost productivity~\citep{wang2021economic}. Despite increased wildfire awareness and resource investments, the January 2025 Los Angeles wildfires devastated the wildland–urban interface, causing \$150 billion in damages and evacuating 200,000 residents~\citep{diGiuseppe2025california}. This highlights critical gaps in current detection and response systems. Effective monitoring and early wildfire detection is therefore crucial to ensure fires remain manageable and to minimize damage.
+
+Traditional approaches rely on ground sensors and satellites, but both have notable limitations. Ground sensors provide limited visibility and are costly to build and maintain, while satellites often lack the spatial and temporal resolution needed for timely detection \citep{WildfireDetectionBouguettaya}. Notably, more than half of U.S. counties, particularly in rural regions, lack any air quality monitoring infrastructure \citep{roque2025identifying}. Drones are increasingly recognized as a promising solution for wildfire detection. Their ability to scan large, remote areas with high spatial and temporal resolution makes them well-suited for early fire detection~\citep{WildfireDetectionBouguettaya, WildfireDetectionDLGhali22}. Advances in onboard sensing and deep learning have significantly improved the accuracy of aerial wildfire detection, enabling drones to reliably identify smoke or flames~\cite{WildfireDetectionDLGhali22, WildfireDetectionDLKim, WildfireDetectionDLKumar24, WildfireDetectionDLYandouzi22, WildfireDetectionDLYang}. However, most studies in this domain assume that drones follow pre-defined flight paths. The critical question of how to actively plan drone routes to maximize early discovery of fires remains largely unaddressed. 
+
+Most existing work on drone routing focuses on post-detection monitoring and response 
+% in which the fire has already been located and the objective is to track its perimeter, coordinate suppression efforts, or support firefighter operations 
+(see e.g., \cite{FirefightingPSO, WildfireMonitoringBailonruiz22, DroneroutingPostGhamry17}). 
+% These reactive strategies assume prior knowledge of fire locations. 
+In contrast, proactive wildfire detection, where drones search for unknown fires across large landscapes, is far less explored. Existing detection efforts largely center on the placement of ground sensor networks \cite{BAO2015100, f12040453, 10756651, 9068226} or on ML-driven image analysis to enhance onboard fire recognition by drones (see e.g., \cite{RAMADAN2024101248, WildfireDetectionBouguettaya}), neglecting the integration of active routing strategies. Yet, successful early detection demands tight coupling between intelligent routing and accurate sensing. This includes integrating mobile drones and stationary sensors, dynamically adapting to changing risk conditions, and operating under constraints like battery life, transmission range, and real-time data availability. Key challenges include: how to route drones to maximize early detection probability, how to adapt to evolving risk, and how to coordinate drone and sensor deployments under limited resources.
+
+In this paper, we address the underexplored challenge of proactive wildfire detection. We introduce an integrated framework for optimizing and evaluating risk-aware sensor placement and drone routing, supported by a modular open-source Python library with standardized evaluation metrics and semi-synthetic benchmarking datasets. Our main contributions are:
+
+% In this paper, we propose a decision-making framework for proactive wildfire surveillance that optimizes drone routing under operational constraints and evolving wildfire risk, incorporating both wildfire ignition and spread due to factors like terrain, wind, and fuel. Including both risks is valuable for all fires, but particularly essential for large fires (e.g., 20–50 km)\citep{WildfireriskXu2024}. The framework incorporates evolving risk information, supports integration with the placement of ground sensor networks, and accounts for practical limitations such as drone battery life, communication range, and multi-drone coordination. This enables an adaptive, risk-aware routing strategy designed to improve the timeliness and effectiveness of wildfire detection efforts.
+
+% optimizes drone routing under operational constraints and evolving wildfire risk, incorporating both wildfire ignition and spread due to factors like terrain, wind, and fuel. Including both risks is valuable for all fires, but particularly essential for large fires (e.g., 20–50 km)\citep{WildfireriskXu2024}. The framework 
+
+\begin{enumerate}
+    \item \textbf{Introducing a problem formalism for wildfire detection with ground sensors and aerial drones.} We develop a mathematically-grounded framework for proactive wildfire surveillance that integrates evolving risk information, and real-world constraints such as drone battery life, recharging, transmission range, and multi-drone coordination. This enables designing adaptive, risk-aware routing strategies designed to improve the timeliness and effectiveness of wildfire detection efforts. 
+    \item \textbf{\texttt{WFDroneBench}, a benchmarking framework for wildfire detection strategies.} \texttt{WFDroneBench} is a flexible, open-source framework that integrates wildfire risk data, drone profiles, and operational constraints. It supports the development and evaluation of detection strategies, risk maps, and drone specifications using diverse metrics, enabling controlled ablations and cross-method comparisons. The framework facilitates experiment reproducibility, visual diagnostics, and community-driven development, and supports benchmarking of both predictive and decision-making components across varied use cases.
+
+    \item \textbf{A realistically diverse, semi-synthetic wildfire benchmark dataset.} We curate a semi-synthetic dataset combining historical ignition records with physics-based wildfire spread simulations to represent fires spreading without human intervention. Scenarios span diverse geographic and ecological conditions, capturing variations in climate and weather conditions, terrain, ignition, wildfire, size and rate of propagation, all captured in rich metadata enabling detailed subgroup analysis for robust benchmarking.  
+    \item \textbf{Developing, implementing, and benchmarking diverse wildfire detection strategies in a uniform code base.} We adapt, implement and evaluate \blue{six} wildfire monitoring strategies: two for ground sensor placement and \blue{three} for drone routing. These include both heuristic and optimization-based methods, all implemented within a consistent Julia codebase. Our experiments reveal that high-accuracy risk maps are essential for enabling effective risk-aware strategies, risk-aware static infrastructure helps even under an imperfect riskmap, and drone-based detection outperforms ground sensors.
+\end{enumerate}
+
+
+
+
+% Here, wildfire risk incorporates both wildfire ignition and spread due to factors like terrain, wind, and fuel. To facilitate robust comparison of strategies, we define a standardized evaluation suite spanning seven metrics, including early detection rate, spatio-temporal coverage, computational responsiveness, and energy efficiency.
+
+% The AMSO-SFS paper proposes a real-time wildfire and smoke detection model that runs onboard drones. The model fuses data from optical, infrared (IR), and synthetic aperture radar (SAR) sensors, enabling it to detect fire and smoke accurately under diverse and challenging conditions (e.g., smoke, fog, low light).
+
+% Despite the impressive detection capabilities, the paper does not address the problem of drone routing or planning. It leaves open several fundamental questions:
+
+\section{Related Work}
+% This detection-focused setting introduces unique challenges: drones must prioritize uncertain and spatially heterogeneous risk, operate under tight battery and coverage constraints, and coordinate movement without a known target.
+
+Previous work on optimal drone routing for wildfire detection spans a range of modeling approaches. One line of work proposes mixed-integer linear programs (MILPs) to jointly optimize the placement of watchtowers or balloons alongside battery-constrained, single-route drone missions~\citep{DroneroutingDeLaFuente}. While these methods note that drones can be reused, recharging is not explicitly modeled. The probabilistic path planning (PPP) strategy proposed in \cite{fire7070254} uses logistic regression to estimate fire probabilities and subsequently employs a dynamic programming (DP) algorithm to generate an optimal routing for unmanned aerial vehicles (UAV). However, it does not explicitly consider operational constraints such as battery life, charging requirements, or return-to-base logistics. Other studies minimize the makespan, defined as the longest mission duration across all drones, motivated by constraints such as connectivity synchronization, coordinated data retrieval, and bandwidth limits; in some cases, this is coupled with the placement of recharging stations \citep{DroneroutingSantin, DroneroutingJemmali}. These approaches are well-suited for structured surveillance or exhaustive coverage, where all regions are considered equally important. An alternative strategy, the risk-specific UAV patrol path (RSUPP), uses Gaussian mixture clustering to partition high-risk regions into subareas, assigning each UAV to the shortest route through one such region based on static wildfire risk~\citep{DroneroutingXu}.
+%{\color{red}[ADD HERE WHY NOT APPLICABLE]} 
+Other modeling approaches include nature-inspired metaheuristics such as Particle Swarm Optimization (PSO) \cite{DroneroutingYan}. There are many approaches for generic UAV routing (see e.g. \citep{drones9040263, s23031463, rs16214019}).
+% , including the Traveling Salesman Problem (TSP) and its extension, the TOP. TSP emphasizes exhaustive coverage with minimal travel cost, while TOP focuses on selecting a subset of valuable locations to maximize collected reward. We build on the strategies applicable to our setup, using wildfire risk \rev{as} reward.
+
+We implement \blue{three} proactive drone routing approaches that leverage wildfire risk data, accounting for spatial heterogeneity and enabling adaptive replanning as conditions evolve. Unlike models assuming uniform importance or known fire locations, the incorporated methods adapt to evolving wildfire risk. 
+% As TOP and PSO are applicable to our framework, one of our drone routing approaches is based on a modified TOP strategy solved with a PSO algorithm. 
+% It serves as a first extensible framework supporting integration and comparison of a variety of  routing and detection strategies.
+
+
+
+
+% - REVIEWER -
+% Many existing strategies are not directly applicable to WFDroneBench, as they are developed for different objectives or assumptions. As discussed in Section 2 of the main paper, several approaches focus on full-area coverage, assume uniform importance across regions, or neglect operational constraints like charging requirements.
+
+% The trajectory planning methods in the referenced paper are mostly based on TSP variants, truck-drone coordination, or reinforcement learning—of which the former two differ fundamentally from our setting. While TSP emphasizes full coverage, WFDroneBench focuses on prioritizing high-risk areas under battery and communication constraints.
+
+% We recently explored the inclusion of another well-established strategy that we think is conceptually more aligned with our drone routing problem: the Team Orienteering Problem (TOP). Here, a team of agents (e.g., drones) aims to visit a subset of locations to maximize the total collected reward (e.g., high wildfire risk). To this end, we started to incorporate the cutting-plane-based method from "Solving the Team Orienteering Problem with Cutting Planes". This follows your suggestion directly.
+
+% However, our approach offers more flexibility than the TOP. In classical TOP, each route typically has a predefined start and end depot, meaning the decision maker must commit to where a drone will finish its route—requiring it to return to a predefined charging station. In WFDroneBench, by contrast, drones are not assigned a fixed end depot. Despite this difference, we think TOP could still provide a useful benchmark for assessing the framework’s performance and novelty.
+% - END REVIEWER -
+
+% In contrast, our approach proactively routes drones and it can use static, semi-dynamic and dynamic risk with real-time information. We avoid the assumption that all areas are equally critical by incorporating spatial heterogeneity in wildfire risk and updating drone paths as conditions evolve. This adaptivity is essential for effective early detection over extended time horizons, especially in environments where wildfire risk is highly dynamic.
+
+
+% Previous work on drone routing for wildfire monitoring spans several modeling approaches and objectives. \citet{DroneroutingDeLaFuente} propose a mixed-integer linear program (MILP) to determine the optimal placement of watchtowers and balloons and plans single-route drone missions constrained by battery-limited travel distances. Although the paper acknowledges that drones can return, recharge, and be dispatched again, this behavior is not captured in their optimization model, limiting the method's applicability to longer time horizons or dynamic fire monitoring needs.  \citet{DroneroutingSantin} and \citet{DroneroutingJemmali} minimize the longest mission time (makespan) among all drones. Motivated by practial constraints such as connectivity synchronization, coordinated data retrieval, and limited bandwidth, this objective is best suited to routine surveillance or full-area coverage tasks where all regions are of equal importance. However, in real-world fire detection, not all areas are equally important, and the system should adapt frequently to changing wildfire risk as new information becomes available. \citet{DroneroutingXu} propose a risk-specific patrol path (RSUPP) method that uses fire risk maps to plan UAV patrol routes. The approach clusters high-risk areas using a Gaussian mixture model and divides them into subareas, each assigned to a UAV for efficient coverage within its cruise range. Shortest paths in each subarea are computed using the RSOM algorithm, allowing coordinated multi-UAV patrols tailored to varying fire risk levels. The method plans patrol routes offline using the RSOM algorithm. These paths are fixed per UAV and not designed to update in response to new information.
+
+
+% \subsection{Insufficiency of current solutions.}
+
+\section{Problem Formulation}
+\label{sec:formulation}
+
+Our objective is to effectively deploy a limited number of ground sensors, charging stations, and drones across a real-world geographic region for early wildfire detection. To formalize the problem, we consider a spatiotemporal environment represented as a two-dimensional grid $\mathcal{I}$ of size $N \times M$ over a discrete time horizon $\set T = \{1, \dots, T\}$. At each time step $t \in \set T$, a fire may ignite and propagate to adjacent grid points. If a fire ignites at grid point $i$ and time $t_0$, it is considered detected once it enters the sensing radius of any deployed device at time $t_\text{det}$, resulting in a detection delay $\Delta t = t_\text{det} - t_0$.
+
+To minimise the expected detection delay $\mathbb{E}[\Delta t]$ over the ignition distribution, we define a \textbf{detection strategy} that optimizes the placement of ground sensors and charging stations, denoted by $\{x_i^g, x_i^c\}$, and the routing of and charging of drones over time, denoted by $\{a_{its}, c_{its}\}$. This strategy is guided by a spatiotemporal wildfire risk map, which informs both infrastructure deployment and drone movement decisions. The fire risk is encoded as a burn risk field $r_{it} \in [0,1]$, representing the probability that grid point $i$ is burning at time $t$, incorporating both ignition and spread probability. This risk map can be obtained from physical simulation models or predicted using machine learning methods that capture the underlying dynamics of wildfire behavior.
+
+Devices may only be deployed at feasible subsets: ground sensors on $\set I_g \subseteq \set I$ and charging stations on $\set I_c \subseteq \set I$. We define binary placement variables $x_i^g \in \{0,1\}$ and $x_i^c \in \{0,1\}$ to indicate whether a sensor or station is placed at location $i$. A drone fleet $\set S$ is routed through the domain according to binary variables $a_{its}$ and $c_{its}$, where $a_{its} = 1$ if drone $s$ flies at location $i$ at time $t$ and $c_{its} = 1$ if drone $s$ is charging at grid point $i$ at time $t$ (see notation overview in Table~\ref{tab:sets}.) Device allocation is constrained by resource limits. Spatial exclusion constraints further prevent deployments from being placed too close to one another. Drones follow a single-hop kinematic rule—after spatial and temporal rescaling using the drone cruising speed, they may move only to neighboring cells at each time step—and must remain within a communication radius $R$ of a charging station. Each drone’s endurance is limited to $D_{\max}$ time steps and is fully replenished upon landing at a charging station.
+
+\input{notation}
+
+% The core challenge we address is how to effectively deploy a limited number of ground sensors, charging stations, and drones to detect wildfires as early as possible. We consider a spatiotemporal environment represented as a two-dimensional grid $\set I$ of dimension $N \times M$ over a discrete time horizon $T$. At each time step, a fire may ignite and spread according to a dynamic wildfire risk map, which provides spatial and temporal probabilities of ignition and propagation, and can be generated via simulation or predicted by a machine learning model. A fire is considered detected once it enters the sensing radius of any deployed device.
+
+% The broader problem involves integrating predictive wildfire risk modeling with the coordinated deployment of drones, ground sensors, and charging stations, requiring decisions on both: (1) where to place ground sensors and charging stations, and (2) how to route drones dynamically over time. The sensor placement is constrained by the maximum number of ground sensors and charging stations, mutual exclusivity at shared grid points (i.e., a location cannot host both a ground sensor and a charging station), and spatial exclusion constraints that prevent placing devices too close to one another. The drone routing problem follows a set of constraints that ensure real-life relevance. Specifically, the number of drones is given as input. All drones are limited by a finite battery life (e.g., 5–10 discrete time steps of continuous flight) and must return to a charging station to replenish power; their sensing range is typically restricted to a fixed radius around their current location (e.g., 1–2 grid points), and they must remain within communication range (e.g., 10–15 km) of a charging station to transmit fire detection data in real time. We rescale time and space so that drones can only fly to a neighboring cell at each time step. More information about this rescaling is provided in Section~\ref{terminology}.
+
+% To bridge data-driven risk modeling with operational decision-making, we provide \danique{WFDroneBench}, an open-source benchmark for wildfire detection that supports integration of machine learning risk maps and optimization-based strategies. The library includes deployment strategies, wildfire risk maps, dynamic wildfire scenarios, and evaluation metrics designed to measure early detection performance. The framework is designed to be extensible: while we present a specific optimization-based framework in Section~\ref{sec:strategies} for the deployment of ground sensors, charging stations, and drones, the benchmarking environment is designed to support alternative approaches -- users can implement and evaluate their own strategies within the same framework. Moreover, users can plug in their own risk maps.
+
+% We aim to minimize the detection time of a wildfire in a rectangular grid $\I$ of dimension $N\times M$ over a time horizon $T$, using drones flying off charging stations and fixed ground sensors. The detection time is defined as the time between the wildfire ignition and the time of detection by any device (drone, charging station, or sensor). 
+% % For example, if a fire starts at time $t_0 = 3$ and is detected at time $t_d=6$, the detection time is $\Delta t = 3$. 
+% Every type of device has a coverage radius, given as a parameter of the problem. The fire is detected if it spreads to a cell included in the coverage radius of any device. 
+
+% The models make two types of decisions: The first is the location of the ground sensors and charging stations, referred to as the \textit{sensor placement problem}; The second is the movement of the drones within the time horizon, the \textit{routing problem}. 
+% % We denote $x_i^g \in \{0,1\}$ (resp $x_i^c \in \{0,1\}$) the decision variable for placing a ground sensor in cell $i\in \I$, e.g, if $x_i^c = 1$, then we build a charging station at $i$. Similarly, we denote by $y_{i,t,d} \in {0,1}$ the decision variable for flying drone $d$ to cell $i$ at step $t$.
+% The input to the decision model is a spatial-temporal grid of burn risk. 
+% % , where $r_{i,t} \in [0,1]$ represents the risk that cell $i$ starts burning at $t$. 
+% This \textit{burn risk map} can be taken from preexisting wildfire forecast~\cite{hu2025coexposure} or generated by a deep learning model. Different types of risk maps are discussed in Section~\ref{sec:risk_maps}.
+
+% The \textit{sensor placement problem} is constrained by the maximum number of ground sensors and charging stations, mutual exclusivity at shared grid points (i.e., a location cannot host both a ground sensor and a charging station), and spatial exclusion constraints that prevent placing devices too close to one another. The \textit{routing problem} follows a set of constraints that ensure real-life relevance. Specifically, the number of drones $n_d$ is given as input. Each drone has to remain within a transmission radius of any charging station
+% Their flight duration is limited by a battery that allows up to $B_{\text{max}}$ consecutive time steps of operation, and is replenished when charging. 
+% We rescale time and space so that drones can only fly to a neighboring cell at each time step. More information about this rescaling processing is given in Section \ref{terminology}. 
+
+% % \begin{itemize} \textbf{Global problem parameters}
+
+%     % We can summarize all the main parameters of the problem as: 
+%     \begin{itemize}
+%     \item \textbf{Global parameters:}
+%     \begin{itemize}
+%         \item $\mathcal{I}$: The set of coordinates of pixel cells on the map.
+%     \item $H$: Optimization time horizon.
+%     \item $\T$: The set of time windows, i.e. $\T:=\{1,\ldots,H\}$.
+%     \item \( \mathcal{N}(i) \): The set of direct neighbors of cell \(i\)
+%     \item $r_{i,t}$: The probability that a cell $i\in \I$ starts burning at time $t\in \T$, due to either ignition or spread from a nearby burning cell.
+%     \item $p_{i,t}$: The ignition probability of a cell $i\in \I$ at time $t\in \T$ (no spread considered).
+%     \end{itemize}
+%     %\textit{Note: The data curation process for the ignition/burn probabilities is explained in section \ref{methodology}}.
+% \end{itemize}
+
+
+%  % \item \textbf{Sensor placement parameters}
+% % \end{itemize}
+
+% \begin{itemize}
+%     \item \textbf{Sensor placement parameters:}
+
+% \begin{itemize}
+
+%     \item $n_g$: The total number of basic ground sensors.
+%     % \item $\G:$ The set of basic ground sensors, with $\G\subseteq \I$.
+%     \item $n_c$: The total number of charging stations.
+%     % \item $\C:$ The set of charging station sensors available, with $\C\subseteq \I$.
+%     % \item $ch_{i}:=\begin{cases}
+%     %     1, & \text{ if cell $i$ is a charging station } \\
+%     %     0, & \text{ otherwise }
+%     % \end{cases}$ 
+%  \end{itemize}
+ 
+    
+% \end{itemize}
+
+%  % \subsection{Sensor placement parameters}
+%  % \item \textbf{Drone routing parameters}
+
+%  \begin{itemize}
+
+% \item \textbf{Drone routing parameters:}\begin{itemize}
+%     \item $D_\text{max}$: The drones' maximal battery duration in time units. We assume $1\leq D_\text{max}$.
+%     \item $n_d$: The total number of drones.
+%     \item $\D:$ The set of drones available, i.e. $\D:=\{1,\ldots,n_d\}$.
+% \end{itemize}
+
+% \item \textbf{Sensor placement decision:}
+
+% \begin{itemize}
+%     \item  $x_{i}^g:=\begin{cases}
+%         1, & \text{ if there is a ground sensor placed in cell $i$}\\
+%         0, & \text{ otherwise }
+%     \end{cases}$
+%     \item $x_{i}^c:=\begin{cases}
+%         1, & \text{ if there is a charging sensor placed in cell $i$}\\
+%         0, & \text{ otherwise }
+%     \end{cases}$
+% \end{itemize}
+
+% \item \textbf{Drone routing decision:}
+
+% \begin{itemize}
+%     \item $y_{i,t,d}:=\begin{cases}
+%         1, & \text{ if drone $d$ is in cell $i$ at time $t$}\\
+%         0, & \text{ otherwise }
+%     \end{cases}$
+%     \item $c_{i,t,d}:=\begin{cases}
+%         1, & \text{ if drone $d$ is charging in cell $i$ at time $t$}\\
+%         0, & \text{ otherwise }
+%     \end{cases}$
+%     \item $b_{t,d}:=$ Battery level of drone $d$ at the end of time $t$.
+% \end{itemize}
+
+
+% Below is more compact
+% \paragraph{Decision Variables}
+% \begin{align*}
+% & y_{i,t,d} \in \{0,1\} && \text{1 if drone } d \text{ is at gridpoint } i \text{ at time } t \\
+% & c_{k,t,d} \in \{0,1\} && \text{1 if drone } d \text{ is charging at station } k \text{ at time } t \\
+% & b_{t,d} \in \mathbb{Z} && \text{battery level of drone } d \text{ at time } t 
+% \end{align*}
+    
+ % \end{itemize}
+
+ % Compact notation for model parameters and variables
+
+% \paragraph{Global Parameters}
+% \begin{align*}
+% & \mathcal{I} && \text{Set of pixel cell coordinates on the map} \\
+% & H && \text{Optimization time horizon} \\
+% & \mathcal{T} := \{1,\ldots,H\} && \text{Time window set} \\
+% & \mathcal{N}(i) && \text{Set of direct neighbors of cell } i \\
+% & r_{i,t} && \text{Probability cell } i \text{ starts burning at time } t \\
+% & \phi_{\text{drone}} && \text{Drone detection radius} \\
+% & \phi_{\text{sensor}} && \text{Sensor/Charging Station detection radius} \\
+% \end{align*}
+
+% \paragraph{Sensor Placement Parameters}
+% \begin{align*}
+% & n_g && \text{Total number of basic ground sensors} \\
+% & n_c && \text{Total number of charging stations}
+% \end{align*}
+
+% \paragraph{Drone Routing Parameters}
+% \begin{align*}
+% & D_\text{max} && \text{Maximal drone battery duration (time units)} \\
+% & n_d && \text{Total number of drones} \\
+% & \mathcal{D} := \{1,\ldots,n_d\} && \text{Set of drones} \\
+% & R && \text{Transmission range of the stations}
+% \end{align*}
+
+% \paragraph{Sensor Placement Decisions}
+% \begin{align*}
+% & x_i^g \in \{0,1\} && \text{1 if a ground sensor is placed at cell } i \\
+% & x_i^c \in \{0,1\} && \text{1 if a charging sensor is placed at cell } I
+% \end{align*}
+
+% \paragraph{Drone Routing Decisions}
+% \begin{align*}
+% & y_{i,t,d} \in \{0,1\} && \text{1 if drone } d \text{ is in cell } i \text{ at time } t \\
+% & c_{i,t,d} \in \{0,1\} && \text{1 if drone } d \text{ is charging in cell } i \text{ at time } t
+% \end{align*}
+
+% Scenario generation and weather data (left side) serve as inputs to a preprocessing step ("Do something"), which synthesizes relevant information into a spatial and temporal wildfire risk map. This map captures both environmental uncertainty and likely ignition areas.
+
+% The risk map is a central input to:
+
+% A ground sensor and charging station placement model, which determines where to place permanent infrastructure based on long-term value,
+
+% And the drone routing model, which uses the current risk to decide optimal drone paths.
+
+% The output of the infrastructure placement model includes:
+
+% A set of charging stations, which is passed to a clustering model that partitions the region based on charging station accessibility or spatial structure,
+
+% A set of ground sensors, which are passed to the routing model to avoid redundant surveillance.
+
+% The drone routing model determines drone paths based on the current risk landscape, sensor layout, and cluster structure.
+
+% \kern-1em
+\section{\texttt{WFDroneBench}}
+
+\paragraph{Design goal.} To bridge data-driven risk modeling with operational decision-making, we introduce \texttt{WFDroneBench}, an open-source benchmark for early wildfire detection. The framework supports the integration of machine learning–generated risk maps with optimization-based deployment strategies for ground sensors, charging stations, and drones (see Figure~\ref{fig:optimizationframework}). It includes tools for loading wildfire risk maps, simulating dynamic wildfire scenarios, implementing deployment strategies, and evaluating early detection performance through standardized metrics. \texttt{WFDroneBench} is modular and extensible. Users can implement custom deployment policies or integrate their own risk maps and fire scenarios to evaluate end-to-end performance. The framework supports benchmarking across both predictive and decision-making components across diverse use cases: ML researchers can benchmark risk models via their impact on detection with fixed routing and OR experts can compare routing strategies on a shared risk map.
+
+\begin{figure}[!t]
+     \centering              \includegraphics[width=.85\textwidth]{figures/Kopie van WF-DRONE-BENCH.png}
+         \caption{\blue{Workflow of the integrated wildfire monitoring optimization framework.
+Given a wildfire risk map, a strategy, and system parameters (number of drones, charging stations, sensors, and drone specifications), the model optimizes (i) infrastructure placement and (ii) drone allocation and routing. The framework simulates detection over time and evaluates performance via detection time, coverage, travel distance, and computational efficiency metrics.}}
+         % The \texttt{WFDroneBench} workflow supports key stakeholder groups: ML researchers benchmark AI-based risk maps with fixed routing; OR experts compare routing models with a fixed risk map; policy makers explore resource allocation trade-offs; and ME engineers evaluate drone spec impacts. The figure shows inputs, decisions, and output metrics for each group.}
+         
+         
+         \label{fig:optimizationframework}
+\end{figure}
+
+\paragraph{Framework overview.}\label{terminology} 
+The benchmarking dataset is organized into \textbf{layouts}, each representing a distinct geographic map. Each layout is associated with multiple wildfire \textbf{scenarios}, defined as spatiotemporal grids $\set I \times \set T$ that capture wildfire spread over time along with environmental conditions such as weather and vegetation. Scenarios provide the spatial and temporal context in which detection strategies—covering both device placement and drone routing—are evaluated.
+
+
+To ensure consistency between simulation dynamics and decision-making, we align each scenario’s temporal structure with drones’ operational capabilities by distinguishing between two levels of resolution: \textbf{data} and \textbf{operational}. The \emph{data temporal resolution} defines the duration of each simulation step (e.g., one hour), while the \emph{data spatial resolution} specifies the physical size of each grid point in $\set I$. In contrast, the \textbf{operational resolution} defines the granularity of decisions. The \textbf{operational spatial resolution} corresponds to the distance unit for drone routing, typically a multiple of the drone’s coverage radius. The \textbf{operational time resolution} indicates how many operational grid cells a drone can traverse per simulation step.
+
+
+A \textbf{strategy} refers to a decision-making policy for wildfire detection, comprising sensor placement and drone routing. The sensor placement component determines where ground sensors and charging stations are deployed, while the drone routing component governs the movement of drones across the grid. Each strategy operates on a \textbf{wildfire risk map} where $r_{it} \in [0,1]$ represents the burn probability of grid point $i$ at time $t$. Our library distinguishes between two types of risk maps: \emph{static} (fixed over time) and \emph{dynamic} (continuously updated in response to changing weather or environmental conditions). During runtime, the risk map is continuously adjusted, lowering ignition and burn probabilities in regions currently monitored by drones to model the mitigating impact of real-time aerial surveillance.
+
+Drones operate under physical and operational constraints. These include finite battery life ($D_{\max}$), limited transmission range ($R$), and bounded mobility. The \textbf{maximum effective speed} of a drone does not reflect raw flight velocity but instead the rate at which it can effectively scan and update grid points within its coverage area. These constraints, together with the scenario resolution, define the feasible range of strategic decisions.
+
+
+% this should be a config file in Python.
+%\kern-1em
+\subsection{Benchmark Datasets}\label{subsec:benchmarkdatasets} 
+
+% The detailed steps of constructing our Wildfire-Drone-Bench dataset are outlined below. 
+
+\paragraph{Data collection.} To model wildfire spread, we use the Sim2Real-Fire dataset~\citep{NEURIPS2024_02e978a2}, which contains over one million high-fidelity simulated fire trajectories and 1,000 real-world wildfire cases, each annotated with five aligned modalities: topography, vegetation, fuel, weather, and satellite imagery. While rich in fire dynamics, its ignition points are synthetically and uniformly distributed, limiting realism. To address this, we incorporate historical ignition data from the Fire Program Analysis Fire-Occurrence Database (FPA FOD)~\citep{short2021spatial}, which includes 2.17 million geo-referenced ignition records across the U.S. This integration enables more realistic study of ignition and spread behavior while avoiding confounding effects from suppression, using counterfactual simulations from physics-based and empirical models. We constrain matches to ignition points within 150 meters of historical locations and allow any calendar day, further limiting selection to large-scale regions at least 15 kilometers wide for operational relevance. The final curated dataset includes \scenariosNo{} fire-spread scenarios across \layoutsNo{} rectangular layouts, with final dimensions ranging from 30 km to 60 km.
+
+
+
+% We use the Sim2Real-Fire~\citep{NEURIPS2024_02e978a2} dataset to simulate realistic wildfire spread trajectories in the absence of human intervention, enabling analysis of fire behavior uninfluenced by suppression efforts. The dataset includes 1 million simulated wildfire scenarios and 1,000 real-world cases, each with five aligned modalities: topography, vegetation, fuel characteristics, weather conditions, and satellite imagery. The synthetic data, generated using physics-based and empirical wildfire simulators (FARSITE, WFDS, and WRF-SFIRE), captures diverse ignition locations and progression patterns, facilitating training of AI models under varying environmental conditions. This enables us to investigate spread dynamics without intervention bias and evaluate generalization to real-world settings via structured simulation-to-reality transfer.
+
+% In future work, we aim to incorporate state of the art sampling technique for ignition points like Log Gaussian. 
+
+% \citep{dronebench2025} bring back later on
+\paragraph{Benchmarking dataset categorization.}  
+To enable structured analysis of drone deployment strategies under diverse wildfire conditions, we categorize each fire-spread scenario along five key axes: (i) fire size (small vs. large, with large defined as a final burn radius exceeding 20 km), (ii) spread rate (slow vs. fast, where fast denotes rapid expansion within the first 10 hours), (iii) historical match (alignment in both spatial location and calendar day with recorded wildfire events), (iv) seasonal match (correct region and seasonality), and (v) layout inclusion (all fires occurring within a given deployment layout). This categorization facilitates the evaluation of risk maps and response strategies across a range of fire behaviors and temporal conditions, and is especially important for assessing robustness to both localized and large-scale events (e.g., 20–50 km fires)\citep{WildfireriskXu2024}. To avoid temporal bias from fixed ignition times, we introduce a random delay of one to twelve hours in each scenario. This ensures that drone systems begin in a stable operational state and prevents routing algorithms from exploiting prior knowledge of fire onset time.
+
+% Contributions on the data:
+% (1) principaled sampling for train-test split.
+% (2) ABADONED: regredding from 30x30m to XX ?
+% (3) preselection of layouts - bigger maps with higher number of ignition points
+
+% \textbf{Environment 2: Historical California from 2006-2020}. Wildfire spread for 15 years in Califoria (daily). Daily, Wildfire spread map
+
+% \textbf{Environment 3} \ana{Another dataset we can consider: https://arxiv.org/pdf/2412.11555}
+
+\subsection{Evaluation Metrics}\label{subsec:evaluationmetrics}
+
+% Danique formal eval metrics 
+
+% \begin{enumerate}
+%     \item Detection time
+%     \item Percentage of the wildfire detected (or not detected/omitted)
+%     \item Execution time of the algorithm
+%     \item Spatial coverage metric: ie, percentage of map explored/not explored over time (maybe multiply with risk)
+%     \item Distance traveled by drone on average
+%     \item Farthest distance from drone to charging station 
+%     \item [maybe] Population weighted coverage 
+% \end{enumerate}
+
+To evaluate monitoring strategies, we measure detection time, coverage, and computational cost. The main detection metric is the ~\textbf{mean detection time} or the expected detection delay $\mathbb{E}[\Delta t] = \frac{1}{|\mathcal{W}|} \sum_{(i, t_0) \in \mathcal{W}} (t_d(i) - t_0(i))$, averaged over wildfire scenarios $\mathcal{W}$ per each layout. To focus on early detection, we consider a fire undetected if it is not spotted within its first twelve hours after ignition. We report the percentage of  detected fires, the mean fire size at detection, and the proportion of detections attributed to each device type (ground sensors, charging stations, and drones). Spatial efficiency and resource metrics include the mean percentage of the map explored, mean distance traveled, and mean distance to the nearest charging station. To account for algorithmic efficiency, we report the mean drone routing execution time, measuring computational overhead. These metrics provide a comprehensive basis for evaluating trade-offs between responsiveness, resource utilization, and computational cost (see Appendix \ref{appendix:evaluation metrics} for full definitions of evaluation metrics).
+
+
+
+
+
+% Remind me ANA 
+% \subsection{Drone specification}
+
+% Explain input
+
+%%
+% all specs:
+% https://www.muginuav.com/wildfire-drones-how-are-drones-used-in-wildfire/
+% •130km flight range  
+% •120 minutes flight time  
+% •24m/s cruising speed  
+% •50km/80km transmission and control range  
+% •2kg payload capability  
+% •Triple sensor 40x zoom AI camera  
+% •Grade 6 wind resistance
+
+% JOUAV
+% - 180 minutes flight time
+% - 61.2km/h cruising speed
+% - 50km transmission and control range
+% - 3kg payload capability
+% - 1920x1080 px, 30x zoom camera
+% - 640x512 px uncooled infrared camera
+% - AI identification and tracking
+% - 20°C to 50°C Operating Temperature
+% - Open SDK
+% - Obstacle avoidance
+% https://www.jouav.com/blog/drones-in-firefighting.html
+%%
+
+% https://www.muginuav.com/wildfire-drones-how-are-drones-used-in-wildfire/
+% https://www.jouav.com/blog/drones-in-firefighting.html
+
+% We take realistic drone specification.
+% Drone Variables:
+% \begin{itemize}
+%     \item Battery anything between 1hr to 4hrs. It is specified by the user.
+%     \item Drone coverage is specified (chemical sensors, thermal cameras (1-2km), cameras up to 15km); We prioritize very early detection, so our coverage is 200 m to 1 km.
+%     \item Max speed of reliable detection -- drone detects every cell in this speed. Not max Speed of flying. (then we infer operational resolution - time step based on benchmark environment temporal resolution)
+%     \item Spatial range of transmission - instant (max 15 km)
+% \end{itemize}
+% For our experiments, we start with a single type of a drone, and then test different variations in our variables. 
+
+% Optional (abondaned for now)
+% detection range falls exponentionally? 
+% 1 1 0.5
+% 1 0.5 0.5
+% 1 0 0.5
+
+% RQ1 best strategy to route the drone.
+% RQ2 key characteristics of optimal drone (mechanical eng of creating a drone)
+
+% Conclude in the discussion: coverage is more important than speed ... or something like that.
+
+\begin{figure}
+    \centering
+\includegraphics[width=\textwidth]{iclr/iclr2026/Diagram.png}
+    \caption{Architectural diagram showing the benchmark components and how they relate to one another.}
+    \label{fig:diagram}
+\end{figure}
+
+\section{Experiments} ~\label{sec:experiments}
+
+We conducted a comprehensive set of experiments to evaluate wildfire detection strategies under realistic, operational constraints. Our aim was to assess the performance of various sensor placement and drone routing methods across diverse terrains and ignition patterns. This section outlines the detection strategies and baselines, wildfire risk map selection, drone specs, and experimental setup, including hardware configurations.
+
+
+\subsection{Wildfire Detection Strategies and  Baselines}\label{sec:strategies}
+We implement several wildfire detection strategies, consisting of the placement of ground sensors and charging stations, and the routing of drones, and systematically evaluate their performance. To ensure scalability, charging station locations serve as anchors for a decomposition algorithm (see Appendix \ref{appendix:decomposition alg}) that partitions the surveillance area into operational zones, each assigned to a subset of drones. An overview of the framework is shown in Figure~\ref{fig:diagram}. 
+
+
+
+% \danique{Our experimental setup evaluates a two-stage wildfire detection strategy, consisting of (i) the placement of ground sensors and charging stations, and (ii) the routing of drones. In the first stage, we solve a facility location problem using a static wildfire risk map to determine optimal sensor and charger placements. To ensure scalability, charging station locations serve as anchors for a decomposition algorithm (see Appendix B) that partitions the surveillance area into operational zones, each assigned to a subset of drones. In the second stage, drone routing is performed using a rolling-horizon optimization framework. At each decision step, we solve a Mixed-Integer Linear Program (MILP) over a limited horizon to account for the future implications of routing decisions while maintaining tractability. Only the immediate $T_{\text{reev}}$ steps are executed before risk data is updated and the optimization is re-solved. This enables the system to adapt dynamically to evolving wildfire conditions based on drone observations (e.g., risk decay following surveillance) or external updates such as weather changes. }
+
+% We implement a set of ground sensor placement and drone routing baselines 
+% %\st{within a unified Julia-based codebase} 
+% and systematically evaluate their performance. Each wildfire detection strategy consists of a paired ground sensor placement and routing baseline.
+
+% In the first stage, we solve a facility location problem using an initial (static) risk map to determine optimal placements for ground sensors and drone charging stations. This step is performed once, prior to drone employment, and ensures coverage and accessibility across high-risk areas. 
+% To enable scalable and efficient drone coordination, the selected charging stations are then used as inputs to a decomposition algorithm that divides the surveillance area into distinct operational zones. 
+% Each cluster defines a spatial region assigned to a specific subset of drones, allowing independent routing within each zone and reducing computational complexity. 
+% In the second stage, drones are routed dynamically over time using a rolling-horizon optimization approach. At regular intervals, the drone paths are re-optimized based on the most recent wildfire risk information. The risk map is updated between planning steps using new data from drone observations and evolving weather forecasts. This allows the system to continuously adapt and prioritize high-risk areas. 
+
+
+\paragraph{Ground Sensor and Charging Station Placement Baselines}
+
+\begin{enumerate}[leftmargin=1.1em, itemsep=0.3em, topsep=0.5em]\label{gaussian-coverage}
+    \item \textbf{Gaussian-weighted Max-Coverage} (GaussianCov): We model the placement of ground sensors and drone charging stations as a maximum risk coverage location problem, first introduced by~\cite{MCLPChurchRevelle}. We extend the objective to maximize the total monitored wildfire risk, i.e., $$\max_{(\bm{x^g}, \bm{x^c}) \in \mathcal{F}_1} \sum_{t \leq H}\sum_{i \in \mathcal{I}} r^d_{it} \dot \min(1, K_i(x_i^c), x^g_i)$$ with $\mathcal{F}_1 = \{ (\bm{x^g}, \bm{x^c}) \in \{0,1\}^{\mathcal{I}} \times \{0,1\}^{\mathcal{I}} \ \vert \ x^g_i = 0 \ \forall i \in \mathcal{I} \setminus \mathcal{I}_g \text{ and }  x^c_i = 0 \ \forall i \in \mathcal{I} \setminus \mathcal{I}_c    \}$ the set of all valid decisions, $r^d_{it}$ the wildfire risk at cell $i$ and time $t$, and $H$ the optimization horizon. Our approach extends traditional max coverage by introducing a kernel function $K_i$ that captures both direct and indirect coverage effects. For ground sensors we consider standard binary coverage of their immediate location. For charging stations, however, we account for the indirect impact on risk coverage through the drones that will utilize them. Beyond covering their immediate cell, charging stations enable drone operations that can monitor surrounding areas. To model this accessibility, we compute $K_i(x_i^c)$ as the probability that a drone starting from charging station locations will visit cell $i$, based on a 2D Brownian motion model. This yields a Gaussian distribution centered at each station, with variance determined by drone battery life. Overlapping coverage is handled by summing individual probabilities, capped at 1. We estimate $K_i$ via iterative $3 \times 3$ convolutions with a uniform kernel to a grid initialized with zeros and ones to simulate diffusion (see Appendix~\ref{appendix:max coverage ground} for details).
+
+    \item \textbf{Uniform} (Random): We draw uniformly at random the location of each ground sensor and charging station across the grid. This approach ignores wildfire risk, spatial structure, and feasibility constraints. While impractical for real-world use, it provides a useful baseline to assess the benefits of informed, risk-aware placement strategies.
+\end{enumerate}
+
+\paragraph{Drone Routing Baselines}
+\begin{enumerate}[leftmargin=1.1em, itemsep=0.3em, topsep=0.5em]
+    \item \textbf{Max-Coverage} (MaxCov): 
+    We formulate drone routing as a rolling-horizon, risk-weighted maximum unique coverage optimization problem. The objective is to maximize cumulative risk observed across all drones and time steps within a planning horizon: $\max_{(\bm a, \bm b, \bm c, \bm \theta) \in \set F_2} \sum_{i \in \set I_d} \left\{r_{i1}^d \theta_{i1} + \sum_{t \in \set H \setminus \{1\}} r_{it}^d (\theta_{it} - \theta_{i,t-1}) \right\}, $ where $\set F_2$ represents the set of feasible decisions subject to drone dynamics and operational constraints (formally defined in Appendix \ref{appendix:max coverage drones}). Wildfire risk scores $r_{it}^d$ are updated every $T_{\text{reev}}$ steps based on drone observations and external data sources. This strategy plans over a finite optimization horizon $\set H$ to identify routing decisions that maximize first-time surveillance of high-risk areas, while accounting for long-term feasibility, including battery depletion, and station returns. 
+
+    % \item \textbf{TOP} (TOP): Our drone routing strategy extends the classical TOP, which itself generalizes TSP. While TSP seeks to visit all locations while minimizing travel cost, TOP allows selecting a subset of locations to visit in order to maximize the sum of profits collected, subject to a travel cost constraint. In our wildfire monitoring context, we treat wildfire risk as the reward, incentivizing drones to visit high-risk areas. Our extension modifies the standard TOP formulation in two key ways: first, rather than requiring drones to start and end at the same depot, our multi-drone system allows each drone to freely choose different charging stations for departure and arrival; second, we employ a rolling optimization approach that optimizes one battery cycle at a time. During each cycle, drones start fully charged from their current charging station locations, jointly optimize their routes to maximize total risk coverage, and must return to a charging station before battery depletion. In subsequent cycles, each drone begins from the charging station where it ended the previous cycle. The total travel distance for each drone is constrained by its battery capacity. We solve this multi-drone joint optimization problem using an adapted particle swarm optimization (PSO) algorithm to improve performance on grid graphs, \rev{ particularly by adapting the local search algorithm to exploit the grid structure more efficiently (achieving up to 400 times speedup). The detailed problem formulation and solution methodology is provided in Appendix~\ref{appendix:TOP_details}.}
+
+    \item \textbf{Uniform Coverage} (UniCov):
+    As an "uninformed" stochastic baseline, drones are directed to locations sampled uniformly at random within their assigned operational zone. We consider a drone routing strategy for maximum coverage under a uniform risk map, where every grid cell is equally important. This approach, which ignores wildfire risk and prior coverage, serves as a baseline to quantify the added value of risk maps in drone routing.
+    \item \textbf{Brownian} (Brownian): At each step, the next waypoint is sampled with probability proportional to the current risk level. Drones are initially placed uniformly across charging stations and move randomly to neighboring grid points at each time step. All movements are constrained to ensure feasibility with respect to battery levels and charging station accessibility. This strategy ignores wildfire risk and provides a simple, constraint-satisfying baseline.
+\end{enumerate}
+
+\subsection{Wildfire Risk Map Specification}~\label{sec:risk_maps}
+
+In our experimental setup, we incorporate a real-world, static wildfire Burn Probability (BP) risk map developed by the USDA Forest Service for all U.S. lands~\citep{dillon2023whp}. BP represents the annual probability of wildfire occurrence at a specific location. The dataset provides high spatial resolution at 30 meters, enabling fine-grained, risk-aware planning for both ground sensor placement and drone routing. It is widely adopted in federal and community-level wildfire risk assessments and is publicly available alongside comprehensive methodological documentation.
+
+Our library also supports dynamic wildfire risk maps that evolve over time. To demonstrate this capability and establish a benchmark for evaluation, we compute a mock “ground-truth” burn map using a frequentist approach. For each layout, we average the simulated fire propagation scenarios over time to estimate the empirical burn probability of each cell at each time step, corresponding to $r^d_{i,t}$ in our framework. This dynamic map enables evaluation of detection strategies under ideal conditions and allows comparison with the static BP map to assess sensitivity to risk map accuracy.
+
+%\rev{WHP is a} nationally consistent metric developed by the USDA Forest Service for all U.S. lands~\citep{dillon2023whp} \rev{and} integrates burn probability with expected fire intensity to estimate the potential for high-intensity wildfires that are challenging to manage and suppress. The dataset offers a fine spatial resolution of 30 meters, enabling high-resolution, risk-aware planning for ground sensor placement and drone routing. Notably, WHP quantifies \emph{in situ} wildfire risk—that is, the potential for adverse fire effects at specific landscape locations—while intentionally excluding structural vulnerability factors such as building susceptibility. This distinction is well-aligned with the objectives of our system, which is designed for environmental surveillance in non-urban areas, rather than for structural fire risk mitigation in urban settings. \rev{The BP risk map is a component of WHP that reflects the annual likelihood of wildfire occurrence without factoring in intensity. Both risk maps are widely used in federal and community wildfire planning efforts, and are publicly available along with extensive methodological documentation.}
+
+
+% Our library also supports dynamic risk maps as real-time, model-driven wildfire risk estimates—such as those generated by deep learning models incorporating weather, seasonality, and other features. 
+
+
+% ----- BEFORE -----
+% In our experimental setup, we employ a real-world, static wildfire risk map derived from the Wildfire Hazard Potential (WHP), a nationally consistent metric developed by the USDA Forest Service for all U.S. lands~\citep{dillon2023whp}. WHP integrates burn probability with expected fire intensity to estimate the potential for high-intensity wildfires that are challenging to manage and suppress. The dataset offers a fine spatial resolution of 30 meters, enabling high-resolution, risk-aware planning for ground sensor placement and drone routing. Notably, WHP quantifies \emph{in situ} wildfire risk—that is, the potential for adverse fire effects at specific landscape locations—while intentionally excluding structural vulnerability factors such as building susceptibility. This distinction is well-aligned with the objectives of our system, which is designed for environmental surveillance in non-urban areas, rather than for structural fire risk mitigation in urban settings. 
+% Our library also supports dynamic risk maps as real-time, model-driven wildfire risk estimates—such as those generated by deep learning models incorporating weather, seasonality, and other features. 
+% ----- END BEFORE ----- 
+
+
+%—and we demonstrate this capability using an hourly-updating predictive model (see Appendix \ana{A}).
+
+% \danique{Mention also Mock DL and refer to appendix. Also emphasize (maybe at the end of paper or here) that dynamics is also because of drone location updates to riskmap}
+
+% \textbf{Dynamic risk map.} We define dynamic risk maps as maps that are generated by deep learning (or other) models which update the risk map in real time based on various features including the weather variables, time of the year and other. Our library and implemented strategies support working with real-time dynamic risk models and we demonstrate our results on a simplified deep learning wildfire prediction model, which provides hourly updates on the wildfire risk, in Appendix A.
+
+% We train a simple deep learning model to demonstrate the usage of dynaic risk map. It provides hourly updates on the wildfire risk. 
+
+\subsection{Drone Specification}
+
+We model wildfire monitoring using real-world drone specifications to ensure operational feasibility. Our experiments use the Mugin EV350, a long-range, fully electric VTOL drone designed for autonomous environmental monitoring. It offers a 130 km flight range, 120-minute flight time, and a cruising speed of 24 m/s, making it suitable for rapid response over large areas. It supports a 2 kg payload, has a transmission range of up to 80 km, and withstands wind conditions up to Grade 6~\cite{mugin_ev350}.
+
+
+
+% The EV350 is equipped with a triple-sensor, 40x zoom AI gimbal camera for precise fire detection and assessment. 
+
+% We model wildfire monitoring using realistic drone specifications to ensure operational feasibility. We utilize the Mugin EV350, a long-range, fully electric vertical takeoff and landing (VTOL) drone designed for autonomous operations across diverse applications. The EV350 offers a flight range of up to 130 kilometers and a maximum flight time of 120 minutes, enabling sustained coverage of large surveillance areas. With a cruising speed of 24 meters per second, it is well-suited for rapid deployment in emergency response scenarios. The drone is equipped with a triple-sensor, 40x zoom AI gimbal camera, which facilitates the detection and assessment of fire locations with high precision. Additional specifications include a transmission and control range of up to 50–80 kilometers, a payload capacity of 2 kilograms, and Grade 6 wind resistance, ensuring reliable performance under challenging environmental conditions~\cite{mugin_ev350}.
+
+% Key drone parameters include battery life, which can range from 1 to 4 hours depending on user configuration, and sensor-based detection coverage, which varies by payload type—ranging from 200 meters to 1 kilometer for early-stage thermal or chemical detection, up to 15 kilometers for high-resolution visual imaging. To support prompt response, we focus on short-range, high-sensitivity detection, favoring thermal and gas sensors with tighter spatial coverage. The maximum detection speed is defined by sensor reliability and drone flight dynamics, while real-time transmission is assumed within a 15-kilometer communication range. For our experiments, we begin with a baseline drone configuration, and subsequently vary these parameters to evaluate their impact on detection performance, coverage efficiency, and alert latency.
+
+%\subsection{Experiments}
+
+\subsection{Experimental Setup}
+
+To evaluate the effectiveness of our sensor placement and drone routing strategies under realistic wildfire conditions, we design a suite of experiments grounded in operational constraints and historical fire data. Each scenario deploys \textbf{eight} ground stations, \textbf{two} drones, and \textbf{two} charging stations to simulate a realistic and resource-constrained wildfire monitoring operation. To ensure consistency and comparability, all experiments use standardized specifications for the drone platform, charging infrastructure, and ground sensors (see Appendix~\ref{appendix:sets} for full list of variables and Appendix~\ref{appendix:par values} for their specific values). For testing, we use a subset of our dataset (introduced in Section~\ref{subsec:benchmarkdatasets}), which has 80\% or more historical ignition and simulation (Sim2Real) matches, resulting in 12 layouts with 474 wildfire spread scenarios in total. We adopt a high match threshold of 80\% to improve the alignment with real-world risk patterns and to maintain statistical consistency across scenarios.
+
+Our strategies (introduced in Section~\ref{sec:strategies}) comply with operational constraints of planning drone routing in one-hour increments. The runtime remains efficient across methods. For \blue{all strategies}, each hour of operation requires less than 30 seconds of computation. 
+% TOP is designed to run in real time, taking approximately one hour of computation for each hour of operation. 
+Ground station placement strategies require less than two seconds.
+
+\paragraph{Hardware specification.} All our experiments are conducted in parallel on a cluster of Intel Xeon Platinum 8260. Each burn map and sensor placement strategy combination is run as a single job on 32 CPUs with 125 GB of RAM. Within each job, the drone strategies are run sequentially. For each drone strategy, every layout is run in parallel on a separate thread. The routing and placement strategies are implemented in Julia version 1.11.3 using the \texttt{JuMP.jl} version 1.26.0 optimization modeling package and solved with Gurobi version 12.0.3 \citep{Gurobi}.
+
+
+\section{Results and Discussion} \label{sec:results}
+
+
+Our experimental results using a real-world wildfire BP map are shown in Table~\ref{tab:bp_results}. To illustrate the outcomes under an ideal risk map, assess sensitivity to risk map quality, and demonstrate the use of the dynamic risk map available in our library, we present results using our “ground truth” risk map (described in Section~\ref{sec:risk_maps}) in Table~\ref{tab:ground_truth}. This map serves as a high-fidelity benchmark with hourly resolution, enabling us to evaluate the upper bound of performance for risk-informed strategies. These results reveal several key insights.
+
+Most notably, the best strategy depends on risk-map fidelity -- \blue{Max-Coverage} excel when risk maps are accurate, whereas spread-out coverage performs better under a less informative risk map.
+% Uniform Coverage proves robust under the imperfect BP risk map, whereas TOP and Max-Coverage perform best under the ground-truth risk map. 
+From Table~\ref{tab:bp_results}, we observe that Uniform Coverage frequently yields the highest detection rates -- and even achieves perfect detection (100$\%$) in all fast-fire scenarios -- while maintaining reasonable detection times. By assuming all areas have the same risk, Uniform Coverage avoids the risk of missing fires due to inaccurate risk assessments. In contrast, Max-Coverage can detect a subset of fires very quickly (e.g., 2.00 hours detection in Fast Big) when the risk map is accurate, but misses many fires when the BP risk prediction provides unreliable guidance (e.g., 73$\%$ versus $100\%$ detection in Fast Big). 
+%\danique{(we provide the distribution of fire sizes and quality metrics in the appendix to contextualize these declines, make reference to figures in appendix that are to be added)}
+% Thus, under noisy risk maps, these risk-aware strategies 
+% % effectively trade detection rate for speed: they 
+% offer rapid detection where the risk map is correct but decrease in performance where it is wrong.
+Importantly, Table~\ref{tab:ground_truth} shows the opposite behavior under the ground-truth map: when risk information is perfect, Max-Coverage outperforms Uniform Coverage on detection speed while performing similarly on overall detection rate. This demonstrates that risk-aware routing can be substantially more efficient when risk maps are sufficiently accurate, as Uniform coverage cannot exploit the efficiency gains that come from focusing on high-risk regions. The dependence on risk-map fidelity highlights a central challenge in wildfire monitoring: optimizing drone routing requires matching the routing strategy to the quality of risk information available.
+
+
+
+% \rev{Most notably, Uniform Coverage is extremely robust under the imperfect BP risk map, while TOP and Max Coverage perform best in terms of detection time under the ground truth risk map. Uniform Coverage often gives the highest detection rate, and even achieves perfect detection (100$\%$) in all fast fire scenarios, while keeping detection times reasonable. By treating all areas as equally likely to contain fires, Uniform Coverage avoids the risk of missing fires due to incorrect risk assessments, but lacks the efficiency gains that come from prioritizing high-risk areas. Strategies like TOP and Max-Coverage that rely on risk map information can achieve faster detection times by making educated decisions about where fires are most likely to occur, concentrating their search efforts on promising locations. However, this focused approach occasionally results in missed detections when these strategic ``bets'' prove incorrect and fires occur in areas deemed lower priority. This matches the intuition that when the risk map is noisy, spread-out coverage is safer than aggressively chasing predicted hotspots, whereas risk aware coverage is better under a perfect risk map. }
+
+% risk-based routing strategies such as Max-Coverage and TOP can detect a subset of fires very fast (e.g. 2.00 - 3.40 hours) but miss many fires when the BP risk prediction is inaccurate (45 versus 100 percent). So under BP, risk-aware routing trades recall for speed: you get quick detection where the risk map is right, but lose many events where it is wrong
+
+Second,
+% among the methods evaluated, \danique{the TOP strategy demonstrates notable robustness, maintaining strong performance across both risk maps, unlike Max-Coverage, which shows more sensitivity.} 
+the comparison between Max-Coverage and Uniform Coverage further highlights the importance of the risk map. Since Uniform Coverage is an ablation of Max-Coverage that follows the same routing logic but assumes a uniform risk distribution, differences in their performance directly reflect how effectively Max-Coverage leverages the input risk information. When using the dynamic ground-truth map, Max-Coverage consistently outperforms Uniform Coverage in terms of detection time. However, this advantage largely disappears when the static BP risk map is used. This trend demonstrates the critical importance of accurate, temporally dynamic risk maps in supporting the effective operation of risk-informed strategies.
+
+Third, risk-aware static infrastructure helps even under an imperfect risk map, and becomes even more beneficial when the map is accurate. This can be observed from the consistent improvement of GaussianCov over Random sensor placement in both Table~\ref{tab:bp_results} and \ref{tab:ground_truth} as in nearly all fire types, GaussianCov yields higher detection rates and often faster detection times because the ground sensors and charging stations are concentrated around regions identified as high risk.
+
+Fourth, drone-based detection consistently outperforms ground sensors, with drones identifying most fires despite only two drones versus eight sensors and two charging stations (Appendix~\ref{appendix:evaluation metrics results}). This suggests drones may offer better returns on investment due to their greater coverage. 
+
+Finally, unsurprisingly, the Brownian strategy is the worst-performing baseline. \blue{Additional data plots are provided in Appendix \ref{appendix:dataset_plots}.}
+
+\input{leaderboardBP}
+\input{leaderboardBM}
+% \begin{table}[h!]
+% \centering
+% \begin{tabular}{cccc}
+% \toprule
+% \textbf{Max-Coverage} & \textbf{Uniform
+% Coverage} & \textbf{Greedy} & \textbf{Brownian} \\
+% \midrule
+% 27.02s & 7.69s & 2.29s & 0.00s \\
+% \hline
+% \addlinespace
+% \end{tabular}
+% \caption{Execution time of the four drone routing baselines for the planning of one hour of drone flight.}
+% \label{tab:execution_times}
+% \end{table}
+
+
+
+% \begin{table}[htbp]
+% \centering
+% \small
+% \setlength{\tabcolsep}{4pt}
+% \begin{tabular}{lccccc c}
+% \toprule
+% \textbf{Strategy} & \textbf{L4} & \textbf{L58} & \textbf{L111} & \textbf{L244} & \textbf{L250} & \textbf{Overall Average} \\
+% \midrule
+% MaxCov-MaxCov     & 1.29  & 20.80 & 6.15  & 19.55 & 29.68 & 15.49 $\pm 10.34$ \\
+% MaxCov-Greedy     & 24.71 & 40.84 & 15.88 & 33.10 & 37.83 & 30.47 $\pm 9.11$ \\
+% MaxCov-UniCov    & 4.59  & 17.89 & 10.56 & 15.62 & 14.92 & 12.72 $\pm 4.71$ \\
+% MaxCov-Brownian   & 5.88  & 18.76 & 9.79  & 23.44 & 18.35 & 15.24 $\pm 6.43$ \\
+% Uniform-MaxCov    & 5.30  & 32.20 & 18.39 & 9.50  & 35.50 & 20.18 $\pm 11.98$ \\
+% Uniform-Greedy    & 11.00 & 33.13    & 27.43    & 35.97    & 29.52 & 27.41 $\pm 8.71$ \\
+% Uniform-UniCov   & 4.59  & 17.89 & 10.56 & 15.62 & 14.92 & 12.72 $\pm 4.71$ \\
+% Uniform-Brownian  & 13.13 & 22.83 & 15.08 & 24.00 & 14.67 & 17.94 $\pm 4.53$ \\
+% \bottomrule
+% \addlinespace
+% \end{tabular}
+
+% \vspace{0.5cm} % Optional space between the tables
+
+% \begin{tabular}{lcc}
+% \toprule
+% \textbf{Strategy} & \textbf{Percentage of Fires Detected by Drones} & \textbf{Wildfires Detected} \\
+% \midrule
+% MaxCov-MaxCov     & 37.63\% & 38.20\% \\
+% MaxCov-Greedy     & 8.89\%  & 9.92\%  \\
+% MaxCov-Uniform    & 45.04\% & 48.92\% \\
+% MaxCov-Brownian   & 52.68\% & 53.02\% \\
+% Uniform-MaxCov    & 33.78\% & 39.86\% \\
+% Uniform-Greedy    & 16.67\% & 51.85\% \\
+% Uniform-Uniform   & 45.04\% & 48.92\% \\
+% Uniform-Brownian  & 67.39\% & 71.72\% \\
+% \bottomrule
+% \addlinespace
+% \end{tabular}
+% \caption{Comparison of combined ground and drone strategies on detection time across layouts (top), and drone usage and detection percentage (bottom). \label{tab:results}}
+% \end{table}
+
+% \begin{table}[htbp]
+% \centering
+% \small
+% \setlength{\tabcolsep}{4pt}
+% \begin{minipage}{0.62\textwidth}
+% \centering
+% \begin{tabular}{lccccc c}
+% \hline
+% \textbf{Strategy} & \textbf{L4} & \textbf{L58} & \textbf{L111} & \textbf{L244} & \textbf{L250} & \textbf{Avg} \\
+% \hline
+% MaxCov-MaxCov     & 1.29  & 20.80 & 6.15  & 19.55 & 29.68 & 15.49 \\
+% MaxCov-Greedy     & 24.71 & 40.84 & 15.88 & 33.10 & 37.83 & 30.47 \\
+% MaxCov-Uniform    & 4.59  & 17.89 & 10.56 & 15.62 & 14.92 & 12.72 \\
+% MaxCov-Brownian   & 5.88  & 18.76 & 9.79  & 23.44 & 18.35 & 15.24 \\
+% Uniform-MaxCov    & 5.30  & 32.20 & 18.39 & 9.50  & 35.50 & 20.18 \\
+% Uniform-Greedy    & 11.00 & --    & --    & --    & 29.52 & 20.26 \\
+% Uniform-Uniform   & 4.59  & 17.89 & 10.56 & 15.62 & 14.92 & 12.72 \\
+% Uniform-Brownian  & 13.13 & 22.83 & 15.08 & 24.00 & 14.67 & 17.94 \\
+% \hline
+% \end{tabular}
+% \end{minipage}%
+% \hfill
+% \begin{minipage}{0.34\textwidth}
+% \centering
+% \begin{tabular}{lcc}
+% \hline
+% \textbf{Strategy} & \textbf{Drones Used} & \textbf{Detected} \\
+% \hline
+% MaxCov-MaxCov     & 37.63\% & 38.20\% \\
+% MaxCov-Greedy     & 8.89\%  & 9.92\%  \\
+% MaxCov-Uniform    & 45.04\% & 48.92\% \\
+% MaxCov-Brownian   & 52.68\% & 53.02\% \\
+% Uniform-MaxCov    & 33.78\% & 39.86\% \\
+% Uniform-Greedy    & 16.67\% & 51.85\% \\
+% Uniform-Uniform   & 45.04\% & 48.92\% \\
+% Uniform-Brownian  & 67.39\% & 71.72\% \\
+% \hline
+% \end{tabular}
+% \end{minipage}
+% \caption{Comparison of combined ground and drone strategies on detection time across layouts (left), and drone usage and detection percentage (right). \label{tab:results}}
+% \end{table}
+
+
+% Maybe uncomment for camera-ready:
+\section{Conclusion}\label{sec:conclusion}
+% \texttt{WFDroneBench} is a flexible, extensible, and open-source benchmarking environment designed to support early wildfire detection through the joint optimization of ground sensor placement and drone routing, which can help mitigate environmental destruction, economic loss, and threats to public health by enabling faster detection and as a consequence faster response times. The framework enables reproducible evaluation across a range of dimensions, including wildfire risk modeling (e.g., deep learning-based dynamic risk maps), strategic planning for monitor deployment and coverage, and operational decision-making under real-world constraints. 
+% It also allows for drone-specific benchmarking by incorporating hardware parameters such as battery life, transmission range, detection coverage, and cruising speed. 
+% By aligning algorithmic research with practical deployment considerations, \texttt{WFDroneBench} offers a unified platform for advancing wildfire response systems. It fosters interdisciplinary collaboration across machine learning, operations research, and environmental science, and lays the foundation for engagement with public agencies and field responders working toward scalable, data-driven wildfire resilience. Our results demonstrate that the risk-informed drone routing strategy Max-Coverage significantly outperforms baseline approaches when paired with high-quality dynamic risk maps. We also observe that drone-based detection dominates ground sensor-based ones. We identify that the bottleneck for drone-based wildfire detection systems lies in developing accurate, temporally dynamic burn probability maps rather than routing optimization alone, calling for more research in Machine Learning devoted to the creation of high-resolution risk maps.
+
+\blue{\texttt{WFDroneBench} is a flexible, extensible, open-source benchmarking framework for early wildfire detection that jointly optimizes ground sensor placement and drone routing under realistic operational constraints. It enables reproducible evaluation across multiple dimensions, including wildfire risk modeling (e.g., dynamic, learning-based risk maps), deployment strategies, and operational decision-making. The framework also incorporates drone-specific characteristics such as battery capacity, transmission range, and detection coverage, bridging algorithmic development with real-world deployment considerations. It fosters interdisciplinary collaboration across machine learning, operations research, and environmental science, and lays the foundation for engagement with public agencies and field responders working toward scalable, data-driven wildfire resilience.}
+
+\blue{Our results show that risk-aware routing (Max-Coverage) significantly outperforms baselines when accurate dynamic risk maps are available, and that drone-based detection is generally more effective than ground sensors. We identify that the bottleneck for drone-based wildfire detection systems lies in developing accurate, temporally dynamic burn probability maps rather than routing optimization alone, calling for more research in Machine Learning devoted to the creation of high-resolution risk maps.}
+
+
+
+% Our work supports early wildfire detection, which can help mitigate environmental destruction, economic loss, and threats to public health by enabling faster detection and as a consequence faster response times. By releasing \texttt{WFDroneBench} as an open, reproducible benchmark, we aim to empower researchers and policymakers to evaluate detection strategies under realistic operational constraints. While we do not foresee direct negative societal impacts, we acknowledge that autonomous monitoring technologies could potentially be repurposed for surveillance; however, our framework is designed explicitly for non-urban, environmental monitoring with no integration of personally identifiable information.
+
+
+\paragraph{Limitations.} Despite its strengths, \texttt{WFDroneBench} has several limitations. The simulated environment abstracts away operational complexities such as communication failures, terrain constraints, and execution uncertainties. Additionally, the current implementation assumes full observability and reliable risk updates, which may not hold in real deployments. %Moreover, we evaluate only one standardized drone specification. \
+Finally, environmental factors (e.g., wind, temperature) that may directly impact drone performance are not considered. Since such factors typically vary little within an hour, they can be incorporated into the rolling-horizon framework without jeopardizing the drones’ ability to return to a charging station, as long as the optimization horizon is small enough.
+
+% - REVIEWER - 
+% We would like to clarify that while weather variables indeed affect the probability of fire, these effects can be entirely captured by the risk map and, as a result, will affect the routing through the risk map. For example, both the WHP and BP risk maps are derived from the FSim large-fire simulator and related physical models, and these models heavily factor in weather, including wind, temperature, humidity, and precipitation patterns that create "conducive weather conditions" for extreme fire behavior. Therefore, the specifics of how weather affects the fire probability are out of scope for this work, as they are the concern of the risk map providers. We have made this clear in the revised version of our paper.
+
+%Our framework is explicitly designed for rural environments, where drone-to-environment interactions are naturally limited. Additionally, our library supports constraints through user-defined no-fly zones, allowing users to restrict drones from entering specific cells based on terrain or obstacle data.
+% - END REVIEWER -
+
+\paragraph{Future research.} 
+While \texttt{WFDroneBench} currently emphasizes optimization-based routing, reinforcement learning (RL)~\cite{electronics13132568} presents a promising avenue for adaptive decision-making in complex, uncertain environments. RL methods could enable end-to-end policies that respond directly to environmental feedback and stochastic fire behavior, potentially reducing dependence on precise real-time risk inputs. Other directions for future exploration include incorporating high-resolution, weather-conditioned dynamic risk maps, designing routing strategies that minimize expected detection time, and investigating heterogeneous fleet deployments. Additional work may also involve integrating dynamic predictions with real-time decision-making and expanding the benchmark suite with datasets derived from historical wildfire propagation events. Additionally, future work could extend the framework’s relevance to policy makers and mechanical engineers by enabling deeper analyses of resource-allocation decisions and by quantifying how drone hardware characteristics -- such as battery capacity and communication range -- shape achievable detection performance, as illustrated in the broader stakeholder landscape of Figure \ref{fig:optimizationframework} in Appendix \ref{appendix:additional visualizations}.
+
+
+Our findings highlight two important open challenges: (i) achieving rapid, reliable detection of small fires, and (ii) improving wildfire risk-map prediction, where the gap between ground-truth ignition patterns and available risk maps underscores a substantial opportunity for machine learning innovation.
+
+% While our current framework focuses on optimization-based routing informed by risk maps, RL offers a promising alternative for fast, adaptive decision-making in complex, uncertain environments. Unlike optimization approaches that depend on accurate, real-time risk inputs, RL can learn end-to-end routing policies that respond directly to environmental feedback and uncertain fire behavior. Another future research avenue includes generating accurate dynamic wildfire risk maps with high temporal resolution conditioned on the weather. From the operations research perspective, promising directions involve incorporating new routing strategies that directly minimize expected detection time. Future iterations of \texttt{WFDroneBench} will also support heterogeneous sensors and drone fleets, evaluate more joint strategies that integrate dynamic predictions with real-time routing decisions, and more benchmarking datasets based on historical wildfire propagation.
+
+% \paragraph{Reproducibility statement.}
+% We are committed to open and reproducible research. All code, data, and experimental configurations used in this study are included as supplementary material and are publicly available and free to access. The README file in the supplementary material provides detailed instructions for reproducing our results, including environment setup and experiment scripts. This enables all experiments to be reliably replicated and extended by the research community.
+
+% \paragraph{Ethics and LLM statement.} An LLM was used to shorten and improve the readability of the text.
+
+
+% \section{Submission of papers to NeurIPS 2026}
+
+
+% Please read the instructions below carefully and follow them faithfully.
+
+
+% \subsection{Style}
+
+
+% Papers to be submitted to NeurIPS 2026 must be prepared according to the
+% instructions presented here. Papers may only be up to {\bf nine} pages long, including figures. \textbf{Papers that exceed the page limit will not be reviewed (or in any other way considered) for presentation at the conference.}
+% Additional pages \emph{containing acknowledgments, references, checklist, and optional technical appendices} do not count as content pages. 
+
+
+% The margins in 2026 are the same as those in previous years.
+
+
+% Authors are required to use the NeurIPS \LaTeX{} style files obtainable at the NeurIPS website as indicated below. Please make sure you use the current files and not previous versions. Tweaking the style files may be grounds for desk rejection.
+
+
+% \subsection{Retrieval of style files}
+
+
+% The style files for NeurIPS and other conference information are available on the website at
+% \begin{center}
+%   \url{https://neurips.cc}.
+% \end{center}
+% % The file \verb+neurips_2026.pdf+ contains these instructions and illustrates the various formatting requirements your NeurIPS paper must satisfy.
+
+
+% The only supported style file for NeurIPS 2026 is \verb+neurips_2026.sty+, rewritten for \LaTeXe{}. \textbf{Previous style files for \LaTeX{} 2.09,  Microsoft Word, and RTF are no longer supported.}
+
+
+% The \LaTeX{} style file contains three optional arguments: 
+% \begin{itemize}
+% \item \verb+final+, which creates a camera-ready copy, 
+% \item \verb+preprint+, which creates a preprint for submission to, e.g., arXiv, \item \verb+nonatbib+, which will not load the \verb+natbib+ package for you in case of package clash.
+% \end{itemize}
+
+
+% \paragraph{Preprint option}
+% If you wish to post a preprint of your work online, e.g., on arXiv, using the NeurIPS style, please use the \verb+preprint+ option. This will create a nonanonymized version of your work with the text ``Preprint. Work in progress.'' in the footer. This version may be distributed as you see fit, as long as you do not say which conference it was submitted to. Please \textbf{do not} use the \verb+final+ option, which should \textbf{only} be used for papers accepted to NeurIPS.
+
+
+% At submission time, please omit the \verb+final+ and \verb+preprint+ options. This will anonymize your submission and add line numbers to aid review. Please do \emph{not} refer to these line numbers in your paper as they will be removed during generation of camera-ready copies.
+
+
+% The file \verb+neurips_2026.tex+ may be used as a ``shell'' for writing your paper. All you have to do is replace the author, title, abstract, and text of the paper with your own.
+
+
+% The formatting instructions contained in these style files are summarized in Sections \ref{gen_inst}, \ref{headings}, and \ref{others} below.
+
+
+% \section{General formatting instructions}
+% \label{gen_inst}
+
+
+% The text must be confined within a rectangle 5.5~inches (33~picas) wide and
+% 9~inches (54~picas) long. The left margin is 1.5~inch (9~picas).  Use 10~point
+% type with a vertical spacing (leading) of 11~points.  Times New Roman is the
+% preferred typeface throughout, and will be selected for you by default.
+% Paragraphs are separated by \nicefrac{1}{2}~line space (5.5 points), with no
+% indentation.
+
+
+% The paper title should be 17~point, initial caps/lower case, bold, centered
+% between two horizontal rules. The top rule should be 4~points thick and the
+% bottom rule should be 1~point thick. Allow \nicefrac{1}{4}~inch space above and
+% below the title to rules. All pages should start at 1~inch (6~picas) from the
+% top of the page.
+
+
+% For the final version, authors' names are set in boldface, and each name is
+% centered above the corresponding address. The lead author's name is to be listed
+% first (left-most), and the co-authors' names (if different address) are set to
+% follow. If there is only one co-author, list both author and co-author side by
+% side.
+
+
+% Please pay special attention to the instructions in Section \ref{others}
+% regarding figures, tables, acknowledgments, and references.
+
+% \section{Headings: first level}
+% \label{headings}
+
+
+% All headings should be lower case (except for first word and proper nouns),
+% flush left, and bold.
+
+
+% First-level headings should be in 12-point type.
+
+
+% \subsection{Headings: second level}
+
+
+% Second-level headings should be in 10-point type.
+
+
+% \subsubsection{Headings: third level}
+
+
+% Third-level headings should be in 10-point type.
+
+
+% \paragraph{Paragraphs}
+
+
+% There is also a \verb+\paragraph+ command available, which sets the heading in
+% bold, flush left, and inline with the text, with the heading followed by 1\,em
+% of space.
+
+
+% \section{Citations, figures, tables, references}
+% \label{others}
+
+
+% These instructions apply to everyone.
+
+
+% \subsection{Citations within the text}
+
+
+% The \verb+natbib+ package will be loaded for you by default.  Citations may be
+% author/year or numeric, as long as you maintain internal consistency.  As to the
+% format of the references themselves, any style is acceptable as long as it is
+% used consistently.
+
+
+% The documentation for \verb+natbib+ may be found at
+% \begin{center}
+%   \url{http://mirrors.ctan.org/macros/latex/contrib/natbib/natnotes.pdf}
+% \end{center}
+% Of note is the command \verb+\citet+, which produces citations appropriate for
+% use in inline text.  For example,
+% \begin{verbatim}
+%    \citet{hasselmo} investigated\dots
+% \end{verbatim}
+% produces
+% \begin{quote}
+%   Hasselmo, et al.\ (1995) investigated\dots
+% \end{quote}
+
+
+% If you wish to load the \verb+natbib+ package with options, you may add the
+% following before loading the \verb+neurips_2026+ package:
+% \begin{verbatim}
+%    \PassOptionsToPackage{options}{natbib}
+% \end{verbatim}
+
+
+% If \verb+natbib+ clashes with another package you load, you can add the optional
+% argument \verb+nonatbib+ when loading the style file:
+% \begin{verbatim}
+%    \usepackage[nonatbib]{neurips_2026}
+% \end{verbatim}
+
+
+% As submission is double blind, refer to your own published work in the third
+% person. That is, use ``In the previous work of Jones et al.\ [4],'' not ``In our
+% previous work [4].'' If you cite your other papers that are not widely available
+% (e.g., a journal paper under review), use anonymous author names in the
+% citation, e.g., an author of the form ``A.\ Anonymous'' and include a copy of the anonymized paper in the supplementary material.
+
+
+% \subsection{Footnotes}
+
+
+% Footnotes should be used sparingly.  If you do require a footnote, indicate
+% footnotes with a number\footnote{Sample of the first footnote.} in the
+% text. Place the footnotes at the bottom of the page on which they appear.
+% Precede the footnote with a horizontal rule of 2~inches (12~picas).
+
+
+% Note that footnotes are properly typeset \emph{after} punctuation
+% marks.\footnote{As in this example.}
+
+
+% \subsection{Figures}
+
+
+% \begin{figure}
+%   \centering
+%   \fbox{\rule[-.5cm]{0cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
+%   \caption{Sample figure caption. Explain what the figure shows and add a key take-away message to the caption.}
+% \end{figure}
+
+
+% All artwork must be neat, clean, and legible. Lines should be dark enough for
+%  reproduction purposes. The figure number and caption always appear after the
+% figure. Place one line space before the figure caption and one line space after
+% the figure. The figure caption should be lower case (except for the first word and proper nouns); figures are numbered consecutively.
+
+
+% You may use color figures.  However, it is best for the figure captions and the
+% paper body to be legible if the paper is printed in either black/white or in
+% color.
+
+
+% \subsection{Tables}
+
+
+% All tables must be centered, neat, clean, and legible.  The table number and
+% title always appear before the table.  See Table~\ref{sample-table}.
+
+
+% Place one line space before the table title, one line space after the
+% table title, and one line space after the table. The table title must
+% be lower case (except for the first word and proper nouns); tables are
+% numbered consecutively.
+
+
+% Note that publication-quality tables \emph{do not contain vertical rules}. We
+% strongly suggest the use of the \verb+booktabs+ package, which allows for
+% typesetting high-quality, professional tables:
+% \begin{center}
+%   \url{https://www.ctan.org/pkg/booktabs}
+% \end{center}
+% This package was used to typeset Table~\ref{sample-table}.
+
+
+% \begin{table}
+%   \caption{Sample table caption. Explain what the table shows and add a key take-away message to the caption.}
+%   \label{sample-table}
+%   \centering
+%   \begin{tabular}{lll}
+%     \toprule
+%     \multicolumn{2}{c}{Part}                   \\
+%     \cmidrule(r){1-2}
+%     Name     & Description     & Size ($\mu$m) \\
+%     \midrule
+%     Dendrite & Input terminal  & $\approx$100     \\
+%     Axon     & Output terminal & $\approx$10      \\
+%     Soma     & Cell body       & up to $10^6$  \\
+%     \bottomrule
+%   \end{tabular}
+% \end{table}
+
+% \subsection{Math}
+% Note that display math in bare TeX commands will not create correct line numbers for submission. Please use LaTeX (or AMSTeX) commands for unnumbered display math. (You really shouldn't be using \$\$ anyway; see \url{https://tex.stackexchange.com/questions/503/why-is-preferable-to} and \url{https://tex.stackexchange.com/questions/40492/what-are-the-differences-between-align-equation-and-displaymath} for more information.)
+
+% \subsection{Final instructions}
+
+% Do not change any aspects of the formatting parameters in the style files.  In
+% particular, do not modify the width or length of the rectangle the text should
+% fit into, and do not change font sizes. Please note that pages should be
+% numbered.
+
+
+% \section{Preparing PDF files}
+
+
+% Please prepare submission files with paper size ``US Letter,'' and not, for
+% example, ``A4.''
+
+
+% Fonts were the main cause of problems in the past years. Your PDF file must only
+% contain Type 1 or Embedded TrueType fonts. Here are a few instructions to
+% achieve this.
+
+
+% \begin{itemize}
+
+
+% \item You should directly generate PDF files using \verb+pdflatex+.
+
+
+% \item You can check which fonts a PDF files uses.  In Acrobat Reader, select the
+%   menu Files$>$Document Properties$>$Fonts and select Show All Fonts. You can
+%   also use the program \verb+pdffonts+ which comes with \verb+xpdf+ and is
+%   available out-of-the-box on most Linux machines.
+
+
+% \item \verb+xfig+ ``patterned'' shapes are implemented with bitmap fonts.  Use
+%   "solid" shapes instead.
+
+
+% \item The \verb+\bbold+ package almost always uses bitmap fonts.  You should use
+%   the equivalent AMS Fonts:
+% \begin{verbatim}
+%    \usepackage{amsfonts}
+% \end{verbatim}
+% followed by, e.g., \verb+\mathbb{R}+, \verb+\mathbb{N}+, or \verb+\mathbb{C}+
+% for $\mathbb{R}$, $\mathbb{N}$ or $\mathbb{C}$.  You can also use the following
+% workaround for reals, natural and complex:
+% \begin{verbatim}
+%    \newcommand{\RR}{I\!\!R} %real numbers
+%    \newcommand{\Nat}{I\!\!N} %natural numbers
+%    \newcommand{\CC}{I\!\!\!\!C} %complex numbers
+% \end{verbatim}
+% Note that \verb+amsfonts+ is automatically loaded by the \verb+amssymb+ package.
+
+
+% \end{itemize}
+
+
+% If your file contains type 3 fonts or non embedded TrueType fonts, we will ask
+% you to fix it.
+
+
+% \subsection{Margins in \LaTeX{}}
+
+
+% Most of the margin problems come from figures positioned by hand using
+% \verb+\special+ or other commands. We suggest using the command
+% \verb+\includegraphics+ from the \verb+graphicx+ package. Always specify the
+% figure width as a multiple of the line width as in the example below:
+% \begin{verbatim}
+%    \usepackage[pdftex]{graphicx} ...
+%    \includegraphics[width=0.8\linewidth]{myfile.pdf}
+% \end{verbatim}
+% See Section 4.4 in the graphics bundle documentation
+% (\url{http://mirrors.ctan.org/macros/latex/required/graphics/grfguide.pdf})
+
+
+% A number of width problems arise when \LaTeX{} cannot properly hyphenate a
+% line. Please give LaTeX hyphenation hints using the \verb+\-+ command when
+% necessary.
+
+% \begin{ack}
+% Use unnumbered first level headings for the acknowledgments. All acknowledgments
+% go at the end of the paper before the list of references. Moreover, you are required to declare
+% funding (financial activities supporting the submitted work) and competing interests (related financial activities outside the submitted work).
+% More information about this disclosure can be found at: \url{https://neurips.cc/Conferences/2026/PaperInformation/FundingDisclosure}.
+
+
+% Do {\bf not} include this section in the anonymized submission, only in the final paper. You can use the \texttt{ack} environment provided in the style file to automatically hide this section in the anonymized submission.
+% \end{ack}
+
+{\raggedright
+\bibliography{iclr/iclr2026/iclr2026_conference}
+}
+
+\bibliographystyle{plain}
+
+% {
+% \small
+
+
+% [1] Alexander, J.A.\ \& Mozer, M.C.\ (1995) Template-based algorithms for
+% connectionist rule extraction. In G.\ Tesauro, D.S.\ Touretzky and T.K.\ Leen
+% (eds.), {\it Advances in Neural Information Processing Systems 7},
+% pp.\ 609--616. Cambridge, MA: MIT Press.
+
+
+% [2] Bower, J.M.\ \& Beeman, D.\ (1995) {\it The Book of GENESIS: Exploring
+%   Realistic Neural Models with the GEneral NEural SImulation System.}  New York:
+% TELOS/Springer--Verlag.
+
+
+% [3] Hasselmo, M.E., Schnell, E.\ \& Barkai, E.\ (1995) Dynamics of learning and
+% recall at excitatory recurrent synapses and cholinergic modulation in rat
+% hippocampal region CA3. {\it Journal of Neuroscience} {\bf 15}(7):5249-5262.
+% }
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\appendix
+
+\section{Summary of sets, parameters, and decision variables}\label{appendix:sets}
+
+To ensure clarity in the mathematical formulations presented in the appendices, Table~\ref{tab:overview} summarizes all sets, parameters, and decision variables referenced in the appendices.
+\small
+\begin{longtable}{lll}
+\caption{Overview of sets, parameters, and decision variables used in the supplementary materials.} \label{tab:overview} \\
+\toprule
+\textbf{Sets} & \textbf{Description} & \textbf{Definition} \\
+\midrule
+\endfirsthead
+
+\multicolumn{3}{c}%
+{{\bfseries \tablename\ \thetable{} -- continued from previous page}} \\
+\toprule
+\textbf{Parameters} & \textbf{Description}  \\
+\midrule
+\endhead
+
+\midrule \multicolumn{3}{r}{{Continued on next page}} \\
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+$\set I$ & Set of all possible grid points & \\
+$\set I_g$ & Feasible grid points for ground stations & $\subseteq \set I$ \\
+$\set I_c$ & Feasible grid points for charging stations & $\subseteq \set I$ \\
+$\set I_d$ & Feasible grid points for drones & $\subseteq \set I$ \\
+$\set A_d(i)$ & Neighboring grid points of $i$ within \\
+& distance $d$ (including $i$) & \\
+$\set T$ & Set of all time periods & $\{1, \ldots, T\}$ \\
+$\set H$ & Time periods in optimization time horizon & $\{1, \ldots, H\}$ \\
+$\set S$ & Set of drones & $\{1, \ldots, S\}$ \\
+$\set C$ & Set of charging stations & Cardinality $C$ \\
+$\set G$ & Set of ground sensors & Cardinality $G$ \\
+$\set N_{c}$ & Nearby charging station pairs & $\{(i,j) \in \set I_c^2 \mid i \neq j, \ \norm{i-j} \leq \rho_c\}$ \\
+$\set N_{g}$ & Nearby ground sensor pairs & $\{(i,j) \in \set I_g^2 \mid i \neq j, \ \norm{i-j} \leq \rho_g\}$ \\
+$\set N_{cg}$ & Charging–ground sensor pairs within & $\{(i,j) \in \set I_c \times I_g \mid i \neq j,$ \\
+& exclusion radius & $\quad \norm{i-j} \leq \rho_{cg}\}$\\
+$\set W$ & Set of historical wildfires \\
+\midrule
+\textbf{Parameters} & \multicolumn{2}{l}{\textbf{Description}} \\
+\midrule
+$\Delta_i$ & \multicolumn{2}{l}{Minimum distance from grid point $i$ to nearest charging station} \\
+$B_{\text{max}}$ & \multicolumn{2}{l}{Maximum number of time steps a drone can fly without recharging} \\
+$r_{i}^s$ & \multicolumn{2}{l}{Static wildfire risk at grid point $i$} \\
+$r_{it}^d$ & \multicolumn{2}{l}{Dynamic wildfire risk at grid point $i$ at time $t$} \\
+$f_{it}^w$ & \multicolumn{2}{l}{Indicator of if grid point $i$ is burnt at time $t$ in wildfire scenario $w$.} \\
+$n_g$ & \multicolumn{2}{l}{Maximum number of ground sensors that can be placed} \\
+$n_c$ & \multicolumn{2}{l}{Maximum number of charging stations that can be placed} \\
+$n_d$ & \multicolumn{2}{l}{Maximum number of drones assignable to each charging station} \\
+$\tau$ & \multicolumn{2}{l}{Coverage memory window: revisits provide no reward during this time} \\
+$\rho_c$ & \multicolumn{2}{l}{Exclusion radius: minimum spacing between charging stations} \\
+$\rho_g$ & \multicolumn{2}{l}{Exclusion radius: minimum spacing between ground sensors} \\
+$\rho_{cg}$ & \multicolumn{2}{l}{Exclusion radius: minimum spacing between charging stations and ground sensors} \\
+$\lambda_{\text{disp}}$ & \multicolumn{2}{l}{Weight of drone dispersion in the objective function} \\
+$t_{\text{det}}^w$ & \multicolumn{2}{l}{Time of detection of wildfire $w \in \set W$} \\
+$t_{\text{ign}}^w$ & \multicolumn{2}{l}{Time of ignition of wildfire $w \in \set W$} \\
+$t_{\text{det}}^s$ & \multicolumn{2}{l}{Time at which drone $s$ detects a wildfire; equals $T$ if no fire is detected by drone $s$} \\
+$t_{\text{exe}}$ & Execution time of the drone routing algorithm \\ 
+$\bm p^c$ & Grid coordinates in $\mathbb{Z}^2$ of charging station $c$ \\ 
+$T_{\text{reev}}$ & Reevaluation step for rolling optimization \\ 
+    $D_i$ & \multicolumn{2}{l}{\blue{Distance from grid point i to the nearest charging station}} \\ \midrule
+\textbf{Variables} & \multicolumn{2}{l}{\textbf{Description}} \\ \midrule
+    $x_i^g$ & \multicolumn{2}{l}{\text{Binary variable denoting if a ground sensor is placed at grid point i}} \\
+    $x_i^c$ & \multicolumn{2}{l}{\text{Binary variable denoting if a charging station is placed at grid point i}} \\
+    $a_{its}$ & \multicolumn{2}{l}{\text{Binary variable denoting if drone $s$ flies at grid point $i$ at time $t$}} \\
+    $c_{its}$ & \multicolumn{2}{l}{\text{Binary variable denoting if drone $s$ charges at grid point $i$ at time $t$}} \\
+    $\theta_{it}$ & \multicolumn{2}{l}{\text{Binary variable denoting if grid point $i$ is covered by a drone at time $t$}} \\
+    $b_{ts}$ & \multicolumn{2}{l}{\text{Battery of drone $s$ at time $t$ defined as the number of time steps drone $s$ can operate}} \\
+    & \multicolumn{2}{l}{\text{without recharging}} \\
+    % $\phi_{it}$ &= \text{binary variable denoting if grid point $i$ is covered by a drone for the first time at time $t$}; \\
+    $\bm p^{s,t}$ & \multicolumn{2}{l}{\text{Grid coordinates in $\mathbb{Z}^2$ of drone $s$ at time $t$}} \\
+\end{longtable}
+\normalsize
+
+\section{Definitions of evaluation metrics}\label{appendix:evaluation metrics}
+
+In Table \ref{tab:evaluation metrics} we give the mathematical formulations of the evaluation metrics as described in Section \ref{subsec:evaluationmetrics} of the main paper. 
+\begin{table}[!htb]
+\centering
+\resizebox{0.95\textwidth}{!}{%
+\begin{tabular}{lll} \toprule
+\textbf{Evaluation metric}             & \textbf{Formula}                  \\ \midrule
+Mean detection time (MDT) & $\frac{1}{\sum_{w \in \mathcal{W}} \mathds{1}\{t_{\text{det}}^w \leq T \}} \sum_{w \in \mathcal{W}} \mathds{1}\{t_{\text{det}}^w \leq T \} (t_{\text{det}}^w - t_{\text{ign}}^w)$ \\ \addlinespace
+Mean fire size at detection (MSD) & $\frac{1}{|\mathcal{I}|}\sum_{i \in \mathcal{I}}f_{it}^w, \ \text{with } t = t_{\text{exe}}^w$ \\ \addlinespace
+\% \text{ fires detected} (FDR) &  $\frac{1}{|\set W|} \sum_{w \in \set W} \mathds{1}\{t_{\text{det}}^w \leq T \} \cdot 100 \%$ \\ \addlinespace
+\text{Proportion of detection by device D} (DS-D) & $\displaystyle \frac{\sum_{w \in \set W} \mathds{1}\{t_{\text{det}}^w \leq T \} \mathds{1}\{\text{fire detected by device D}\}}{\sum_{w \in \set W} \mathds{1}\{t_{\text{det}}^w \leq T \}}$ \\ \addlinespace
+Mean percentage of map explored (MCE) & 
+    $\frac{1}{|\set I|} \sum_{i \in \set I} \mathds{1}\left(\sum_{t \in \set T} \theta_{it} \geq 1 \vee x_i^g = 1 \vee x_i^c = 1 \right) $ \\ \addlinespace
+Mean distance traveled by drones (MDist) & $\frac{1}{S} \sum_{s \in \set S} \sum_{t=1}^{t_{\text{det}}^s} d\left(\bm{p^{s,t}},\bm{p^{s,t+1}}\right)$ \\ \addlinespace
+Mean distance to nearest charging station (DCSD) & $\frac{1}{ST} \sum_{s \in \set S} \sum_{t \in \set T} \min_{c \in \set C} d\left(\bm{p^{s,t}},\bm{p^c} \right)$ \\ \addlinespace
+Mean drone routing execution time (RTE) & $\frac{1}{\# \text{scenarios}} \sum_{i=1}^{\# \text{scenarios}} t_{\text{exe}}$  \\
+\bottomrule \addlinespace
+\end{tabular}}
+\caption{Mathematical formulations of the evaluation metrics.}
+\label{tab:evaluation metrics}
+\end{table}
+
+\section{Decomposition algorithm}\label{appendix:decomposition alg}
+To enhance scalability and reduce computational complexity, we partition the full set of charging stations into spatial operational zones, where each operational zone includes stations that are mutually reachable within a drone’s battery range. Specifically, two stations are placed in the same operational zone if the Euclidean distance between them is less than or equal to the drone's battery range, ensuring that any drone can travel between stations in the operational zone. The decomposition algorithm is given in Algorithm \ref{alg:clustering_model}.
+ \begin{algorithm}[h]
+        \caption{Decomposition model \label{alg:clustering_model}} 
+        \textbf{Input}: set of charging stations $\set C$. \\ 
+        \textbf{Output}: operational zones $\set K_1, \ldots, \set K_m$, where $\set K_k \subseteq \set C$ for all $k \in [m]$, $\cap_{k \in [m]} \set K_k = \emptyset$.
+
+      \begin{algorithmic}[1]
+            \STATE Set $k = 1$ 
+            \WHILE{$\set C \neq \emptyset$}
+            \STATE Select a charging station $i \in \set C$
+            \STATE Remove $i$ from $\set C$
+            \STATE Set $\set K_k = \{i\}$
+            \FOR{$j \in \set C \setminus \{i\}$}
+            \IF{the Euclidean distance between $i$ and $j$ is less or equal than $\lambda$}
+            \STATE add $j$ to operational zone $\set K_k$
+            \STATE remove $j$ from $\set C$
+            \ENDIF
+            \ENDFOR
+            \ENDWHILE
+            \RETURN $\set K_1, \ldots, \set K_m$.
+         \end{algorithmic}
+    \end{algorithm}
+
+\section{Parameter values used in the experiments}\label{appendix:par values}
+In Table \ref{tab:parameter_values} we give an overview of the parameter values used in the experiments when using the max-coverage ground sensor placement baseline in combination with a drone routing strategy.
+\begin{table}[H]
+    \centering
+        \caption{Parameter values used in the experiments.}
+    \begin{tabular}{lc}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\ \midrule
+    $n_g$ & 8 \\
+    $n_c$ & 2  \\
+    $n_d$ & 2  \\
+    $\rho_c$ & 10 \\
+    $\rho_{cg}$ & 10 \\
+    $\rho_g$ & 1 \\
+    Drone speed (m/min) & 600  \\
+    Coverage radius (m) & 300 \\
+    Grid point size (m) & 30 \\
+    Transmission range (m) & 50000 \\
+    $T_{\text{reev}}$ & 5  \\
+    $H$ & 10  \\
+    $B_{\text{max}}$ (h) & 1  \\
+    \bottomrule
+    \end{tabular}
+    \label{tab:parameter_values}
+\end{table}
+
+\section{Mathematical model formulations}\label{appendix:math model formulations}
+In this section the mathematical formulations are given for all models. All distances are measured in the $L^{\infty}$ norm, unless specified otherwise.  
+
+
+\subsection{Ground sensors and charging stations placement model}\label{appendix:max coverage ground}
+The simplest version of the ground sensors and charging stations max-coverage model only considers direct coverage of a device at its immediate location. \textit{We first present this model before extending it to the indirect and partial coverage model we used.} The simple model is given by:
+\allowdisplaybreaks
+\begin{subequations}\label{eq:maxcov_placement}
+    \begin{align} 
+        \max_{\bm x^g, \bm x^c} &\quad \displaystyle \sum_{i \in \set I_g} r_i^s x_i^g + \sum_{i \in \set I_c} r_i^s x_i^c \label{eq:maxcov_placement_a} \\
+        {\rm s.t. } &\quad \displaystyle x_i^g + x_i^c \leq 1, &\quad \forall i \in \set I_g \cap \set I_c, \label{eq:maxcov_placement_b} \\
+        &\quad \displaystyle \sum_{i \in \set I_g} x_i^g \leq n_g, \label{eq:maxcov_placement_c} \\
+        &\quad \displaystyle \sum_{i \in \set I_c} x_i^c \leq n_c, \label{eq:maxcov_placement_d} \\
+        &\quad \displaystyle x_i^g + x_i^c \leq 1, &\quad (i,j) \in \set N_g, \label{eq:maxcov_placement_e} \\
+        &\quad \displaystyle x_i^g + x_j^c \leq 1, &\quad (i,j) \in \set N_c, \label{eq:maxcov_placement_f} \\
+        &\quad \displaystyle x_j^g + x_i^c \leq 1, &\quad (i,j) \in \set N_{cg}.\label{eq:maxcov_placement_g} 
+    \end{align}
+\end{subequations}
+Here, constraints \eqref{eq:maxcov_placement_b} ensure that there can either be a charging station or a ground sensor at grid point $i$, but not both. Constraints \eqref{eq:maxcov_placement_c} and \eqref{eq:maxcov_placement_d} are capacity constraints on the ground sensors and charging stations respectively. Finally, \eqref{eq:maxcov_placement_e}-\eqref{eq:maxcov_placement_g} are spatial exclusion constraints between two ground sensors, two charging stations, and a ground sensor and a charging station, respectively.
+
+\textbf{Extensions.}
+Observe that we have assumed that a ground sensor as well as a charging station only detects a wildfire at the grid point it occupies. This can be naturally extended to allow partial detection of wildfires in neighboring grid points by replacing \eqref{eq:maxcov_placement} by 
+\begin{align*}
+    \displaystyle \max_{\bm \phi, \bm x, \bm y} &\quad \displaystyle \sum_{i \in \set I_g \cup \set I_c} \phi_i \\
+    {\rm s.t. } 
+    &\quad \displaystyle \phi_i \leq \sum_{k \in \set I_g \cap \set A_d(k)} \gamma_{ik}^g x_k^g + \sum_{k \in \set I_c \cap \set A_{d'}(k)} \gamma_{ik}^c x_k^c, &\quad i \in \set I_g \cup \set I_c,\\
+    % &\quad \displaystyle \theta_i^G \leq \sum_{k \in \set I_g \cap \set A_d(k)} \gamma_{ik}^G x_k  &\quad i \in \set I_g \setminus \set I_c,\\
+    % &\quad \displaystyle \theta_i^G \leq \sum_{k \in \set I_c \cap \set A_{d'}(k)} \gamma_{ik}^C y_k, &\quad i \in \set I_c \setminus \set I_g,\\
+    &\quad \displaystyle 0 \leq \phi_i \leq 1, &\quad i \in \set I_g \cup \set I_c,
+\end{align*}
+where $\gamma_{ik}^G$ and $\gamma_{ik}^C$ denote the partial contribution from a ground sensor and charging station at grid point $k$ to grid point $i$ respectively, and $\phi_i^g$ denotes the total fractional coverage in grid point $i$ due to ground sensors and charging stations nearby.
+
+% In the basic model, a sensor or charging station is assumed to only monitor the grid point it occupies. This can be easily extended by allowing each device to (partially) cover nearby locations, reflecting its sensing or communication range. In this setting, each grid point accumulates coverage from all nearby devices, weighted by their proximity, see \danique{A.1}.
+
+Observe that our model readily allows for the integration of existing ground sensors alongside newly optimized placements by explicitly including them in the formulation with fixed variable values (e.g., setting $x_i^g = 1$ for grid points with pre-existing sensors) or alternatively excluding them from the decision variable domains.
+
+\textbf{Gaussian Coverage}
+Notice that the Gaussian coverage model we use and presented in section \ref{gaussian-coverage} is a special case of the extension presented above with the following parameters: 
+\begin{itemize}
+    \item $\gamma^g_{ik}$ is 1 for $i = k$ and 0 otherwise, as ground sensors only cover their immediate location.
+    \item All $\gamma^c_{ik}$ are precomputed at the same time for a given $i$. We start with a grid of zeros with a unique 1 at cell $i$ and iteratively take convolutions with a $3 \times 3$ kernel of ones, simulating the diffusion process of a drone over neighboring cells. After dividing the resulting grid by the number of convolutions applied, the value of cell $k$ gives the expected number of visits of cell $k$ by a drone following a Brownian motion starting at $i$. Capping this value by 1 gives $\gamma^c_{ik}$.
+\end{itemize}
+ Expressing the Gaussian coverage as a special case of the extended max coverage model allows us to solve it efficiently using linear programming.
+
+\subsection{Max coverage drone routing model}\label{appendix:max coverage drones}
+The drone routing optimization model with the objective to maximize coverage is given by:
+\allowdisplaybreaks
+\begin{subequations} \label{eq:maxcov}
+    \begin{align}
+        \max_{\bm a, \bm b, \bm c, \bm \theta}  &\quad \displaystyle \sum_{i \in \set I_d} \left\{r_{i1}^d \theta_{i1} + \sum_{t \in \set H \setminus \{1\}} r_{it}^d (\theta_{it} - \theta_{i,t-1}) \right\} \label{eq:maxcov_a}%+ \varepsilon \sum_{s,t} b_{ts} \label{eq:obj_maxcov}
+        \\ {\rm s.t. } 
+        &\quad \displaystyle \sum_{i \in \set I_d} a_{its} + \sum_{i \in \set C} c_{its} = 1, & t \in \set H \setminus \{1\}, s \in \set S, \label{eq:maxcov_b}\\
+        % &\quad \displaystyle \sum_{s \in \set S} (a_{i1s} + c_{i1s}) \leq n_d, & i \in \set C, \label{eq:maxcov_d}\\
+        &\quad \displaystyle \sum_{s \in \set S} c_{its} \leq n_d, & i \in \set C, t \in \set H \setminus \{1\}, \label{eq:maxcov_c}\\
+        &\quad \displaystyle c_{j,t+1,s} + a_{j,t+1,s} \leq \sum_{i \in \set I_d \cap \set A_1(j)} a_{its} + c_{jts}, &  j \in \set C, t \in \set H \setminus \{H\}, s \in \set S, \label{eq:maxcov_d}\\
+        &\quad \displaystyle a_{j,t+1,s} \leq \sum_{i \in \set I_d \cap \set A_1(j)} a_{its}, &  j \in \set I_d \setminus \set C, t \in \set H \setminus \{H\}, s \in \set S, \label{eq:maxcov_e}\\
+        &\quad \displaystyle 0 \leq b_{ts} \leq B_{\text{max}}, & t \in \set H, s \in \set S, \label{eq:maxcov_f}\\
+        &\quad \displaystyle b_{ts} \geq B_{\text{max}} \sum_{i \in \set C} c_{its}, & t \in \set H, s \in \set S, \label{eq:maxcov_g}\\
+        &\quad \displaystyle b_{t+1,s} \leq b_{ts} - 1 + (B_{\text{max}} + 1) \sum_{j \in \set C} c_{j,t+1,s} & t \in \set H \setminus \{H\}, s \in \set S, \label{eq:maxcov_h}\\
+        &\quad \displaystyle b_{Ts} \geq D_i \cdot a_{iTs}, & i \in \set I_d, s \in \set S, \label{eq:maxcov_i}\\
+        % &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} a_{its}, & i \in \set I_d, t \in \set H, \label{eq:maxcov_j}\\
+        % &\quad \displaystyle 0 \leq \theta_{it} \leq 1, & i \in \set I_d \setminus (\set G \cup \set C), t \in \set H, \label{eq:maxcov_k}\\
+        &\quad \displaystyle \theta_{it} = 0, & i \in \set I_d \cap (\set G \cup \set C), t \in \set H, \label{eq:maxcov_l} \\
+        &\quad \displaystyle \theta_{it} \geq a_{its}, &\quad i \in \set I_d, t \in \set T, s \in \set S, \label{eq:maxcov_m} \\
+        &\quad \displaystyle \theta_{1t} \leq \sum_{s \in \set S} a_{1ts}, &\quad t \in \set H, \label{eq:maxcov_n} \\
+        &\quad \displaystyle \theta_{it} \leq \sum_{s \in \set S} a_{its} + \theta_{i,t-1}, &\quad i \in \set I_d, t \in \set H \setminus \{1\}, \label{eq:maxcov_o} \\
+        &\quad \displaystyle \theta_{it} \geq \theta_{i,t-1}, &\quad i \in \set I_d, t \in \set H \setminus \{1\}. \label{eq:maxcov_p}
+        % &\quad \displaystyle \phi_{it} \leq \theta_{it}, &\quad i \in \set I_d, t \in \set H, \label{eq:maxcov_p} \\
+        % &\quad \displaystyle \sum_{t \in \set H} \phi_{it} \leq 1, &\quad i \in \set I_d, \label{eq:maxcov_q}\\
+        % &\quad \displaystyle \phi_{it} + \sum_{\tau = 1}^{t-1} \theta_{it} \leq 1, &\quad i \in \set I_d, t \in \set H.\label{eq:maxcov_r}
+        % &\quad \displaystyle \theta_{i,t+\delta} \leq 1 - \sum_{s \in \set S} a_{its}, & i \in \set I_d, t \in [T-\delta], \delta \in [\tau].\label{eq:maxcov_p}
+    \end{align}
+\end{subequations}
+Constraints \eqref{eq:maxcov_b} ensure that each drone at time $t$ is either charging or flying, but not both. 
+Constraints \eqref{eq:maxcov_c} ensure that there can be at most $n_d$ drones at a time at a charging station.
+Constraints \eqref{eq:maxcov_d} - \eqref{eq:maxcov_e} ensure that a drone can only fly or charge at location $j$ at time $t+1$ if it was charging already in the same location or the drone was in a neighboring location at time $t$.
+% Constraints \eqref{eq:maxcov_f} - \eqref{eq:maxcov_g} ensure that a drone can only be at grid point $j$ at time $t+1$ if it was flying in a point $i$ adjacent to $j$ at time $t$ or if it was charging at $j$ at time $t$. 
+\eqref{eq:maxcov_f}  - \eqref{eq:maxcov_h} are battery constraints that ensure that when a drone is charging, the battery updates to $B_{\text{max}}$, when a drone is flying, the battery decreases with 1 every time step, and the battery does not drop below $0$. Constraints \eqref{eq:maxcov_i} enforce a ``no-suicide" condition for drones at the end of the planning horizon, that is, a drone must have enough battery remaining at the final time step to reach the nearest charging station from its final position. Constraints \eqref{eq:maxcov_l}-\eqref{eq:maxcov_p} are coverage constraints. 
+% Constraints \eqref{eq:maxcov_j} ensure a grid point $i$ at time $t$ is only covered if at least one drone is present there at that time. 
+% Constraints \eqref{eq:maxcov_k} ensure that once a location is observed by at least one drone, it is considered fully covered, and additional presence yields no additional benefit in the objective function. 
+Constraints \eqref{eq:maxcov_l} make sure that there is no need to consider drone-based coverage at points where ground sensors or charging stations are already installed. Constraints \eqref{eq:maxcov_m} ensures that grid point $i$ must be covered at time $t$ when there is a drone present at grid point $i$ at time $t$. Constraints \eqref{eq:maxcov_n} and \eqref{eq:maxcov_o} ensure that a grid point is only covered at time $t$ if at least one drone visits it at time $t$ or it was already covered at time $t-1$. Constraints \eqref{eq:maxcov_p} ensure that once a grid point is detected, it remains detected in all future time steps.
+
+The drone routing is performed using a rolling-horizon optimization framework (see Figure \ref{fig:rollinghorizon}). At each decision step, we solve the above MILP over a limited optimization horizon to account for the future implications of routing decisions while maintaining tractability. Only the immediate $T_{\text{reev}}$ steps (depicted in purple in Figure \ref{fig:rollinghorizon}) are executed before risk data is updated and the optimization is re-solved. This enables the system to adapt dynamically to evolving wildfire conditions based on drone observations (e.g., risk decay following surveillance) or external updates such as weather changes. 
+
+\begin{figure}[htbp]
+    \centering
+\includegraphics[width=0.95\textwidth]{iclr/iclr2026/rollinghorizon.png}
+    \caption{The rolling horizon optimization framework. The problem is solved over an optimization horizon of $o$ time steps using Mixed Integer Linear Programming (MILP). Even though solutions are generated for $o$ time steps, we only use the $e$ first ones, with $e$ the reevalution step parameter. After each reevaluation step of $e$ time steps, the horizon is shifted forward, and the problem is solved again. This process continues until the end of the total time horizon is reached, ensuring adaptability to new information and improved solution quality over time.}
+    \label{fig:rollinghorizon}
+\end{figure}
+
+% Constraints \eqref{eq:maxcov_p} ensure a grid point $i$ can only be first covered at time $t$ if it is actually covered at time $t$. Constraints \eqref{eq:maxcov_q} ensure that at each grid point can be covered at most once over the entire time horizon, preventing double-counting of rewards from covering the same point at different times. Finally, \eqref{eq:maxcov_r} makes sure that a grid point can only be covered for the first time at time $t$ if it was not covered before time $t$.
+
+
+% This is commonly used when you want to maximize total unique coverage, where you get reward for covering a point only the first time, not for revisiting it.
+
+% Finally, constraints \eqref{eq:maxcov_p} ensure that once a drone visits a location and no wildfire is detected, that location does not need rechecking for $\tau$ subsequent time periods. This avoids redundant surveillance and encourages drones to focus on unvisited or high-risk areas rather than repeatedly revisiting recently checked grid points.
+
+% Observe that although we model the coverage variable $\bm \theta$ as a continuous vector between $\bm 0$ and $\bm 1$, it naturally takes on binary values in the optimal solution. This is because our objective is to maximize the coverage, and the constraints only allow detection at a location if a drone is present. As a result, the model has no incentive to assign partial values, that is, either a location is covered (value 1) or it is not (value 0). This approach keeps the model efficient while preserving the intended binary behavior.
+
+In addition, we initialize the drone routing model by adding the following constraints to the optimization problem formulation
+\begin{align}
+    &\quad \displaystyle \sum_{i \in \set C} a_{i1s} + \sum_{i \in \set C} c_{i1s} = 1, &  s \in \set S, \label{eq:maxcov_b_init}\\
+    &\quad \displaystyle \sum_{s \in \set S} (a_{i1s} + c_{i1s}) \leq n_d, & i \in \set C, \label{eq:maxcov_d_init}\\
+    &\quad \displaystyle b_{1s} = B_{\text{max}}, & s \in S, \label{eq:maxcov_h_init}
+\end{align}
+ensuring that all drones start flying from a charging station (constraints \eqref{eq:maxcov_b_init}), there are at most $n_d$ drones either flying or charging at a charging station at $t = 1$ (constraints \eqref{eq:maxcov_d_init}), and each drone starts with full capacity (constraints \eqref{eq:maxcov_h_init}). 
+
+\textbf{Extensions.}
+Observe that we have assumed that a drone only detects a wildfire at the grid point it occupies. This can be naturally extended to allow partial detection of wildfires in neighboring grid points by replacing constraint \eqref{eq:maxcov_m} by 
+\begin{align*}
+            &\quad \displaystyle \theta_{it} \leq \sum_{s \in S} \sum_{k \in \set I_d \cap \set A_d(i)}\gamma_{ik}^d a_{kts}, &\quad i \in \set I_d, t \in \set T,
+\end{align*}
+where $\gamma_{ik}^d$ denotes the partial contribution from a drone at grid point $k$ to grid point $i$. In this case, the variable $\theta_{it}$ 
+may take fractional values and is interpreted as the degree of coverage at location $i$ and time $t$.
+
+To encourage drones to spatially disperse we can include a separation reward term in the objective, defined as the sum of pairwise $L_{\infty}$ distances between drones over time, i.e., we consider \eqref{eq:maxcov} in which we replace the objective \eqref{eq:maxcov_a} by
+\begin{align} \label{eq:maxcov_a_reg}
+    \max \left\{ \sum_{i \in \set I_d} \sum_{t \in \set T} r_{it} \phi_{it} + \lambda_{\text{disp}} \sum_{t \in \set T} \sum_{s_1 \in \set S} \sum_{s_2 < s_1, s_2 \in \set S} \max \left\{\big|p^{s_1,t}_1 - p^{s_2,t}_1\big|, \big|p^{s_1,t}_2 - p^{s_2,t}_2\big| \right\} \right\}. 
+    \end{align}
+Note that we can easily linearize the objective \eqref{eq:maxcov_a_reg} using auxiliary variables and big-M constraints.
+
+% \subsection{TOP drone routing model}\label{appendix:TOP_details}
+% Our drone routing strategy extends the classical TOP to accommodate the specific requirements of wildfire monitoring with multiple drones and flexible charging station usage. This section provides the detailed mathematical formulation and solution methodology.
+
+% \subsubsection{Graph-based TOP Formulation}
+
+
+% Following the formulation in \cite{PSO}, we model TOP with a graph $G = (V \cup \{d\} \cup \{a\}, E)$, where $V = \{1, 2, \ldots, n\}$ is the set of vertices representing grid cells (customers in the original TOP terminology), $E = \{(i, j) | i, j \in V, i \text{ and } j \text{ neighbors}\}$ is the edge set connecting adjacent grid cells, and $d$ and $a$ are respectively departure and arrival vertices for drones. Each vertex $i \in V$ is associated with a profit $P_i$ (corresponding to wildfire risk $r_i$ in our context), and each edge $(i, j) \in E$ is associated with a constant travel cost.
+
+% A tour $R$ is represented as an ordered list of $q$ customers from $V$, so $R = (R[1], \ldots, R[q])$. Each tour begins at the departure vertex and ends at the arrival vertex. The total profit collected from a tour $R$ is $P(R) = \sum_{i=1}^{q} P_{R[i]}$, and the total travel cost/time is $C(R) = C_{d,R[1]} + \sum_{i=1}^{q-1} C_{R[i],R[i+1]} + C_{R[q],a}$. A tour $R$ is feasible if $C(R) \leq L$ with $L$ being the predefined travel cost/time limit (battery capacity in our case).
+
+% The fleet is composed of $m$ identical vehicles (drones). A solution $S$ is consequently a set of $m$ (or fewer) feasible tours in which each customer is visited at most once. The goal is to find a solution $S$ such that $\sum_{R \in S} P(R)$ is maximized. In our case, we use wildfire risk as the profit.
+
+% \subsubsection{Modifications for Multi-Drone Flexible Routing}
+
+% Our approach differs from standard TOP in two key aspects. First, drones can start and end at different charging stations, unlike traditional TOP where vehicles return to their origin depot. Second, in subsequent battery cycles, each drone must start from the charging station where it ended the previous cycle.
+
+% To handle these modifications, we introduce a dummy depot node connected to dummy charging station nodes. The number of dummy nodes for each charging station equals the maximum number of drones allowed to start or end at that station. By using the same number of nodes as available drones, we can ensure that drones start at specific charging stations in subsequent cycles. The dummy depot has zero risk/profit, consistent with standard TOP depot formulations and is the starting and ending point of each drone.
+
+% \subsubsection{Particle Swarm Optimization Solution}
+
+% We solve this multi-drone TOP using an adapted Particle Swarm Optimization (PSO) algorithm based on \cite{PSO}. Our implementation includes several modifications to improve performance on grid graphs, particularly by adapting the local search algorithm to exploit the grid structure more efficiently.
+
+% \textbf{Warm-start heuristic:} We initialize particles with high-quality solutions using a greedy heuristic applied to as many particles as we have drones. The heuristic operates as follows:
+% \begin{enumerate}
+%     \item The drone selects the highest-risk cell it can reach given its remaining battery, considering the return trip to any charging station.
+%     \item To reach the selected cell, the drone follows the highest-risk path among all shortest paths to that destination, computed using dynamic programming.
+%     \item Steps 1-2 repeat until the drone's remaining battery equals the distance to the nearest charging station, at which point it returns.
+% \end{enumerate}
+
+% \textbf{Optimization process:} The PSO algorithm iteratively refines solutions through particle interactions and local search. We impose a computational time limit of 1 hour for planning each hour of drone operations to balance solution quality with operational constraints.
+
+% \textbf{Solution extension:} If the PSO converges to a solution shorter than the maximum battery life, we extend it using the same greedy heuristic from the drone's current ending position. This ensures full utilization of available battery capacity when the optimization algorithm terminates early.
+
+
+% \section{Runtime results}\label{appendix:runtime results}
+% \begin{table}[h!]
+% \centering
+% \begin{tabular}{cccc}
+% \toprule
+% \textbf{Max-Coverage} & \textbf{Uniform
+% Coverage} & \textbf{Greedy} & \textbf{Brownian} \\
+% \midrule
+% 27.02s & 7.69s & 2.29s & 0.00s \\
+% \hline
+% \addlinespace
+% \end{tabular}
+% \caption{Execution time of the four drone routing baselines for the planning of one hour of drone flight.}
+% \label{tab:execution_times}
+% \end{table}
+
+
+
+\section{Results of remaining evaluation metrics}\label{appendix:evaluation metrics results}
+The results across strategies and layouts for each secondary metric are displayed in Table~\ref{additional_metrics_bm} and Table~\ref{additional_metrics_bp}.
+
+\include{additional_metric_bm}
+
+\section{Licensing datasets \& assets used}
+
+We use several publicly available datasets in this study and ensure that each is properly credited and used in accordance with its license and usage terms. For the Sim2Real-Fire dataset, we use simulation data, which is released under the Apache-2.0 license as noted in the original publication and hosted repository (available at \url{https://github.com/TJU-IDVLab/Sim2Real-Fire}). The Burn Probability (BP) for the United States (270-m), version 2023 (4th Edition) dataset, released by the USDA Forest Service, is publicly accessible for research and other uses under a Creative Commons Attribution (CC BY) license. It is available at \url{https://www.fs.usda.gov/rds/archive/}. We also incorporate the Fire Program Analysis Fire-Occurrence Database (FPA FOD), maintained by the U.S. Forest Service, which is available for public research under open data access policy (CC0 1.0 License). All cited datasets are accompanied by their corresponding original publications in our bibliography. 
+
+A summary of the asset licenses and their corresponding source web locations is provided in Table \ref{tab:assetlicenses}. 
+
+{
+\small
+\begin{longtable}{p{4cm}p{6cm}p{2.5cm}}
+\toprule
+\textbf{Dataset} & \textbf{URL or DOI}                               & \textbf{License}   \\
+\endfirsthead
+%
+\endhead
+%
+\midrule
+National USFS Fire Occurrence Point (Feature Layer) &
+  \url{https://data-usfs.hub.arcgis.com/datasets/6059c1a4dca749d393e33ee5f8a0cbaf_9/about} &
+  CC0 1.0 \\ \midrule
+Sim2Real-Fire    & \url{https://github.com/TJU-IDVLab/Sim2Real-Fire} & Apache-2.0 \\ \midrule
+Wildfire Hazard Potential for the United States (270-m), version 2023 (4th Edition) &
+  \url{10.2737/RDS-2015-0047-4} &
+  Creative \newline Commons \newline CC-BY
+  \\ \bottomrule
+  \caption{Overview of the used asset licenses and their corresponding source web locations. \label{tab:assetlicenses}} \\
+\end{longtable}
+}
+
+\section{Instructions to download dataset and code}\label{appendix: instructions to download dataset and code}
+Our dataset and code are available in the supplementary material. Please refer to the README file for how to run the code and reproduce the results of our experiments.
+% Our dataset can be downloaded from the following HuggingFace link: \url{https://huggingface.co/datasets/MasterYoda293/DroneBench}. Our Library, \texttt{WFDroneBench}, its documentation, as well as the code used to generate our experiments and data, can be downloaded from the following GitHub repository: \url{https://github.com/RomainPuech/wildfire_drone_routing}.
+
+% \section{Assumptions for testing}\label{appendix:assumptions for testing}
+% In our setup, we assume that drones undergo instantaneous battery replacement upon returning to a charging station. While such automated swapping systems are not yet standard in wildfire detection practice, this assumption reflects an emerging direction in drone logistics aimed at minimizing downtime. The model can be easily adapted to account for longer recharging durations if necessary.
+
+\section{Dataset plots}\label{appendix:dataset_plots}
+\include{iclr/iclr2026/dataset_plots}
+
+\include{iclr/iclr2026/visualization}
+
+
+\newpage
+\input{checklist.tex}
+
+
+\end{document}

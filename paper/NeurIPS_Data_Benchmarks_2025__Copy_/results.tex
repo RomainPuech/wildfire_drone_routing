@@ -1,0 +1,216 @@
+% \begin{small}
+% \begin{longtable}{p{2cm} p{2cm} p{2cm} p{2.1cm} p{2.3cm}}
+% \toprule
+% \textbf{Ground Sensor Strategy} & \textbf{Drone Routing Strategy} & \textbf{Wildfires Detected} & \textbf{Mean Detection Time} &
+% \textbf{Percent of Drone Detection}\\
+% \addlinespace % Add spacing before data rows (optional)
+% \midrule
+% \endfirsthead
+% \multirow[t]{3}{*}{\textbf{Max-Coverage}} & \textbf{Max-Coverage} & 38.20  & 15.49 ± 10.34  & 37.63  \\
+% \cmidrule{2-5}
+%  & \textbf{Greedy} & 9.92   & 30.47 ± 9.11   & 8.89 \\
+% \cmidrule{2-5}
+%  & \textbf{Uniform-Coverage} & 48.92  & 12.72 ± 4.71  & 45.04 \\
+% \cmidrule{2-5}
+%  & \textbf{Brownian} & 53.02  & 23.44 ± 18.35  & 52.68 \\
+% \midrule
+% \multirow[t]{3}{*}{\textbf{Uniform}} & 
+
+% \textbf{Max-Coverage} & 39.86  & 20.18 ± 11.98  & 33.78\\ \cmidrule{2-5}
+% & \textbf{Greedy} 
+% &  51.85  & 20.26 ± 9.26   & 16.67 \\
+% \cmidrule{2-5}
+%  & \textbf{Uniform-Coverage} & 48.92  & 12.72 ± 4.71  & 45.04 \\
+% \cmidrule{2-5}
+%  & \textbf{Brownian} & 71.72  & 17.94 ± 4.53  & 67.39 \\
+% \bottomrule
+% \addlinespace
+% \caption{The experimental results comparing ground sensor and drone strategy combinations. The first metric indicates the percentage of wildfires successfully detected. The second metric reports the mean detection time (in hours), followed by the standard deviation of detection time. }\label{tab:results}\\ 
+% \end{longtable}
+% \end{small}
+
+
+% RG layout
+% 50.00 ± 9.05
+% RG - Drones: 16.67\%, 
+% Undetected: 48.15\%
+
+% RMC layout
+% 43.43 ± 19.24
+% RMC - Drones: 33.78\%, 
+% Undetected: 60.14\%
+
+% RR layout
+% 24.05 ± 10.21
+% RR - Drones: 67.39\%, 
+% Undetected: 28.28\%
+
+% RU layout
+% 27.16 ± 16.39
+% RU - Drones: 45.04\%, 
+% Undetected: 51.08\%
+
+% OMC layout
+% 28.83 ± 22.21
+% OMC - Drones: 37.63\%, 
+% Undetected: 61.80\%
+
+% OR layout
+% 24.49 ± 17.12
+% OR - Drones: 52.68\%, 
+% Undetected: 46.98\%
+
+% OU layout
+% 27.16 ± 16.39
+% OU - Drones: 45.04\%, 
+% Undetected: 51.08\%
+
+% OG layout
+% 61.50 ± 7.14
+% OG - Drones: 8.89\%, 
+% Undetected: 90.08\%
+
+
+
+
+\iffalse
+\begin{small}
+
+\begin{longtable}{p{1.8cm} |p{1.8cm} |p{1.1cm} |p{1.3cm} |p{1cm}| p{1cm}| p{1cm} |p{1cm}}
+\toprule
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Ground\\Sensor\\Strategy\end{tabular}}} &
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Drone\\Routing\\Strategy\end{tabular}}} &
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Overall\\Score\end{tabular}}} &
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Historical\\Score\end{tabular}}} &
+\multicolumn{2}{c}{\textbf{Fast}} &
+\multicolumn{2}{c}{\textbf{Slow}} \\
+\addlinespace % Add spacing before data rows (optional)
+\cmidrule(lr){5-6} \cmidrule(lr){7-8}
+ & & & & \textbf{Big} & \textbf{Small} & \textbf{Big} & \textbf{Small} \\
+
+\addlinespace % Add spacing before data rows (optional)
+\midrule
+\endfirsthead
+
+\toprule
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Ground\\Sensor\\Strategy\end{tabular}}} &
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Drone\\Routing\\Strategy\end{tabular}}} &
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Overall\\Score\end{tabular}}} &
+\multirow{3}{*}{\textbf{\begin{tabular}[c]{@{}l@{}}Historical\\Score\end{tabular}}} &
+\multicolumn{2}{c}{\textbf{Fast}} &
+\multicolumn{2}{c}{\textbf{Slow}} \\
+\cmidrule(lr){5-6} \cmidrule(lr){7-8}
+ & & & & \textbf{Big} & \textbf{Small} & \textbf{Big} & \textbf{Small} \\
+
+\addlinespace
+\midrule
+\endhead
+\small
+\multirow[t]{3}{*}{\textbf{Max-Coverage}} & \textbf{Max-Coverage} & 78\%
+34.18 (22.21) & 75\%
+34.10 (24.90) & 100\%
+46.00 (13.01) & 67\%
+53.45 (8.27) & 100\%
+41.10 (9.19) & 50\%
+ \\
+\cmidrule{2-8}
+ & \textbf{Greedy} & 67\%
+17.53 (16.91) & 75\%
+16.77 (12.57) & 100\%
+35.35 (21.57) & 67\%
+19.35 (0.07) &  & 100\%
+25.70 (4.10) \\
+\cmidrule{2-8}
+ & \textbf{Uniform-Coverage} & 67\%
+13.84 (15.18) & 100\%
+23.57 (15.77) & 50\%
+ & 67\%
+13.70 (2.40) & 50\%
+ & 100\%
+24.30 (4.24) \\
+\cmidrule{2-8}
+ & \textbf{Brownian} & 67\%
+13.84 (15.18) & 100\%
+23.57 (15.77) & 50\%
+ & 67\%
+13.70 (2.40) & 50\%
+ & 100\%
+24.30 (4.24) \\
+\midrule
+
+\multirow[t]{3}{*}{\textbf{Uniform}} & \textbf{Max-Coverage} & 57\%
+10.72 (16.92) & 
+ & &
+ & 56\%
+20.05 (18.10)
+ &  \\
+\cmidrule{2-8}
+ & \textbf{Greedy} 
+& 27\%
+8.82 (19.57) & & & & 28\%
+36.00 (20.92) &  \\
+\cmidrule{2-8}
+ & \textbf{Uniform-Coverage} & 89\%
+30.23 (24.49) & 100\%
+42.38 (18.34) & 100\%
+20.05 (26.52) & 100\%
+28.30 (27.42) & 50\%
+ & 100\%
+46.50 (15.84) \\
+\cmidrule{2-8}
+ & \textbf{Brownian} & 89\%
+30.23 (24.49) & 100\%
+42.38 (18.34) & 100\%
+20.05 (26.52) & 100\%
+28.30 (27.42) & 50\%
+ & 100\%
+46.50 (15.84) \\
+
+
+\bottomrule
+\addlinespace % Add spacing before data rows (optional)
+\caption{The experimental results comparing ground sensor and drone strategy combinations. The first metric indicates the percentage of wildfires successfully detected. The second metric reports the mean detection time (in hours), followed by the standard deviation of detection time. }\label{tab:results}\\ 
+\end{longtable}
+
+
+
+
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\hline
+\textbf{Strategy} & \textbf{L4} & \textbf{L58} & \textbf{L111} & \textbf{L244} & \textbf{L250} & \textbf{Avg} \\
+\hline
+OMC & 1.29 & 20.80 & 6.15 & 19.55 & 29.68 & 15.49 \\
+OG  & 24.71 & 40.84 & 15.88 & 33.10 & 37.83 & 30.47 \\
+OU  & 4.59 & 17.89 & 10.56 & 15.62 & 14.92 & 12.72 \\
+OR  & 5.88 & 18.76 & 9.79 & 23.44 & 18.35 & 15.24 \\
+RMC & 5.30 & 32.20 & 18.39 & 9.50 & 35.50 & 20.18 \\
+RG  & 11.00 & -- & -- & -- & 29.52 & 20.26 \\
+RU  & 4.59 & 17.89 & 10.56 & 15.62 & 14.92 & 12.72 \\
+RR  & 13.13 & 22.83 & 15.08 & 24.00 & 14.67 & 17.94 \\
+\hline
+\end{tabular}
+\vspace{0.5em}
+
+\begin{tabular}{lcc}
+\textbf{Strategy} & \textbf{Drones Used} & \textbf{Detected} \\
+\hline
+OMC & 37.63\% & 38.20\% \\
+OG  & 8.89\% & 9.92\% \\
+OU  & 45.04\% & 48.92\% \\
+OR  & 52.68\% & 53.02\% \\
+RMC & 33.78\% & 39.86\% \\
+RG  & 16.67\% & 51.85\% \\
+RU  & 45.04\% & 48.92\% \\
+RR  & 67.39\% & 71.72\% \\
+\hline
+\end{tabular}
+\caption{Performance comparison of 8 ground and drone strategy combinations across 5 layouts.}
+\end{table}
+
+\end{small}
+\fi
