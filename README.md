@@ -27,6 +27,15 @@ This tells Julia to use the environment located at ./julia_env, which contains `
 
 4. Download/unzip our dataset from the supplementary material.
 
+## Dataset curation
+
+The complete reviewer-facing curation workflow is documented in
+[`code/dataset_curation/README.md`](code/dataset_curation/README.md). It covers
+layout filtering, FPA-FOD/USFS ignition matching, BP/WHP alignment, JPG-to-NPY
+conversion, empirical burn maps, and scenario metadata. Recovered historical
+notebooks and scripts are retained separately under
+`code/dataset_curation/legacy/` for provenance.
+
 ## ✅ **Reproducing the paper's results**:
 
 ### 1. Preprocessing Dataset

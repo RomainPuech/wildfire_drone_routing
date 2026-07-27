@@ -98,8 +98,9 @@ Same fields as above, plus:
 | test | tables23 | 474 | 12 |
 
 The `tables23` split comprises layouts whose scenarios achieve ≥ 80%
-historical match with the USFS Burn Probability risk map.  See
-`splits/SELECTION_RULE.md` for full details.
+historical ignition match (spatial location and calendar day), not agreement
+with the USFS Burn Probability raster. See `splits/SELECTION_RULE.md` for full
+details and provenance limits.
 
 ## Raw Data Access
 
@@ -108,7 +109,7 @@ The raw fire-spread `.npy` arrays, risk maps, and satellite imagery are in
 `LLLL_SSSSS/` (layout ID + scenario suffix).  Each contains:
 
 - `scenarii/` — fire-spread `.npy` files (T × N × M grids)
-- `static_risk_bp2024.npy` — USFS Burn Probability risk map (int16, ÷1000 for [0,1])
+- `static_risk_bp2024.npy` — USFS Burn Probability risk map (int16, ÷10000 for [0,1])
 - `static_risk_whp.npy` — Wildfire Hazard Potential risk map
 - `burn_map.npy` — dynamic (empirical) burn map
 - `Fuel_Map/`, `Topography_Map/`, `Vegetation_Map/`, `Weather_Data/` — ancillary data

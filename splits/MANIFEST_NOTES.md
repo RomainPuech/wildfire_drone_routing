@@ -52,11 +52,11 @@ benchmark results).
 ## 5. `static_risk.npy` encoding
 
 Values are `int16` in the range ~11–385, *not* [0, 1] probabilities.  These
-are raw USFS Burn Probability grid values (× 1 000).  To recover [0, 1]:
+are raw USFS Burn Probability grid values (× 10 000).  To recover [0, 1]:
 
 ```python
 import numpy as np
-risk = np.load("static_risk.npy").astype(np.float32) / 1000.0
+risk = np.load("static_risk.npy").astype(np.float32) / 10000.0
 ```
 
 This normalization step was applied internally but not documented in the

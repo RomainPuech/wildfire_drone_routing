@@ -9,10 +9,11 @@ dataset.
 ## Selection procedure
 
 1. **Layout eligibility** — The paper states that experiments use layouts whose
-   fire scenarios achieve ≥ 80 % *historical match* with the USFS Burn
-   Probability risk map.  The `historical_match` flag in
-   `scenario_summary.csv` was computed per-scenario; layouts where ≥ 80 % of
-   scenarios carry `historical_match = True` qualified.
+   fire scenarios achieve ≥ 80 % *historical match*. The
+   `historical_match` flag means alignment in spatial location and calendar day
+   with a recorded wildfire event; it is not a comparison with the USFS Burn
+   Probability raster. Layouts where ≥ 80 % of scenarios carried
+   `historical_match = True` were treated as qualifying.
 
 2. **Scenario selection** — Within each qualifying layout, *all* scenarios
    with available benchmark results were included (no additional subsampling).
@@ -20,6 +21,12 @@ dataset.
    `combined_benchmark_resultsKMbm_parallel.csv`.
 
 3. **Resulting split** — 12 layouts, 474 unique (layout, scenario) pairs.
+
+The checked-in 474-row list is the authoritative recovered experiment
+manifest. Because the corrected reviewer-facing curation code fixes historical
+row/column and raster-alignment defects, we do not claim that rerunning it will
+regenerate this exact list. Seven one-scenario layouts in the run list also
+postdate the frozen 49-layout `scenario_summary.csv`.
 
 ## Authoritative source files
 
