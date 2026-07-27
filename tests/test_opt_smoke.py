@@ -1,4 +1,4 @@
-"""Smoke tests for Python HiGHS optimization backends."""
+"""Smoke tests for Python MILP optimization backends (HiGHS / SCIP)."""
 import os
 import sys
 import tempfile
@@ -47,8 +47,35 @@ def test_routing_init_solves():
         assert len(plan[0]) == 1
 
 
+def test_scip_sensor_maxcov_solves():
+    """Same placement MILP under SCIP; skip cleanly if SCIP is not installed."""
+    import opt as pyopt
+
+    prev = os.environ.get("WFDRONE_OPT_SOLVER")
+    os.environ["WFDRONE_OPT_SOLVER"] = "scip"
+    try:
+        try:
+            pyopt.get_solver()
+        except RuntimeError as exc:
+            print(f"skip SCIP smoke: {exc}")
+            return
+        with tempfile.TemporaryDirectory() as d:
+            f = _tiny_burnmap(os.path.join(d, "bm.npy"))
+            grounds, chargers = pyopt.sensor_maxcov_strategy(f, n_grounds=2, n_charging=1)
+            assert len(grounds) <= 2
+            assert len(chargers) <= 1
+            assert len(grounds) + len(chargers) >= 1
+    finally:
+        if prev is None:
+            os.environ.pop("WFDRONE_OPT_SOLVER", None)
+        else:
+            os.environ["WFDRONE_OPT_SOLVER"] = prev
+
+
 if __name__ == "__main__":
     test_sensor_maxcov_solves()
     print("sensor_maxcov OK")
     test_routing_init_solves()
     print("routing_init OK")
+    test_scip_sensor_maxcov_solves()
+    print("scip_sensor_maxcov OK (or skipped)")

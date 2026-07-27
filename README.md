@@ -365,13 +365,14 @@ Paper baselines (GaussianCov placement, MaxCov routing) can run with either:
 
 | Backend | Env var | Solver |
 |---------|---------|--------|
-| **Python (default)** | `WFDRONE_OPT_BACKEND=python` | **HiGHS** via Pyomo (`highspy`). Optional: `WFDRONE_OPT_SOLVER=gurobi` |
+| **Python (default)** | `WFDRONE_OPT_BACKEND=python` | **HiGHS** via Pyomo (`highspy`). Optional: `WFDRONE_OPT_SOLVER=scip` (SCIP / `pyscipopt`) or `gurobi` |
 | Julia | `WFDRONE_OPT_BACKEND=julia` | JuMP + Gurobi (requires a Gurobi license) |
 
 ```bash
 # Reproducible path without Gurobi (default)
 export WFDRONE_OPT_BACKEND=python
 # optional: export WFDRONE_OPT_SOLVER=highs   # default
+# optional: export WFDRONE_OPT_SOLVER=scip    # open-source SCIP via pyscipopt
 python tests/test_opt_smoke.py
 
 # Legacy Julia + Gurobi path

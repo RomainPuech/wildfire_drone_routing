@@ -57,6 +57,7 @@ dependencies:
       - python-dateutil==2.9.0.post0
       - pyomo>=6.7
       - highspy>=1.5
+      - pyscipopt>=5.0
       - pytz==2025.2
       - rasterio==1.4.3
       - scipy==1.15.3
