@@ -359,26 +359,26 @@ The library collects the following metrics:
 This project is licensed under the MIT License.
 
 
-## Optimization backends (Python / Julia)
+## Optimization backends (Julia / Python)
 
 Paper baselines (GaussianCov placement, MaxCov routing) can run with either:
 
 | Backend | Env var | Solver |
 |---------|---------|--------|
-| **Python (default)** | `WFDRONE_OPT_BACKEND=python` | **HiGHS** via Pyomo (`highspy`). Optional: `WFDRONE_OPT_SOLVER=scip` (SCIP / `pyscipopt`) or `gurobi` |
-| Julia | `WFDRONE_OPT_BACKEND=julia` | JuMP + Gurobi (requires a Gurobi license) |
+| **Julia (default)** | `WFDRONE_OPT_BACKEND=julia` | JuMP + Gurobi (requires a Gurobi license) |
+| Python (optional) | `WFDRONE_OPT_BACKEND=python` | **HiGHS** via Pyomo (`highspy`). Optional: `WFDRONE_OPT_SOLVER=scip` (SCIP / `pyscipopt`) or `gurobi` |
 
 ```bash
-# Reproducible path without Gurobi (default)
-export WFDRONE_OPT_BACKEND=python
-# optional: export WFDRONE_OPT_SOLVER=highs   # default
-# optional: export WFDRONE_OPT_SOLVER=scip    # open-source SCIP via pyscipopt
-python tests/test_opt_smoke.py
-
-# Legacy Julia + Gurobi path
+# Default: Julia + Gurobi
 export WFDRONE_OPT_BACKEND=julia
+
+# Optional open-source path (no Gurobi license)
+export WFDRONE_OPT_BACKEND=python
+# optional: export WFDRONE_OPT_SOLVER=highs   # default under python
+# optional: export WFDRONE_OPT_SOLVER=scip    # SCIP via pyscipopt
+python tests/test_opt_smoke.py
 ```
 
-**TOP** (team orienteering) routing remains Julia-only; set `WFDRONE_OPT_BACKEND=julia` to use it.
+**TOP** (team orienteering) routing remains Julia-only (the default backend).
 
-See `code/opt/` for the Python MILP implementations.
+See `code/opt/` for the optional Python MILP implementations.

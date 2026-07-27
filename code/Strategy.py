@@ -7,9 +7,9 @@ import time
 from typing import List, Tuple
 
 # ---------------------------------------------------------------------------
-# Backend selection: WFDRONE_OPT_BACKEND = python (default) | julia
+# Backend selection: WFDRONE_OPT_BACKEND = julia (default) | python
 # ---------------------------------------------------------------------------
-_OPT_BACKEND = os.environ.get("WFDRONE_OPT_BACKEND", "python").lower()
+_OPT_BACKEND = os.environ.get("WFDRONE_OPT_BACKEND", "julia").lower()
 
 if _OPT_BACKEND == "julia":
     from my_julia_caller import Main as jl

@@ -18,7 +18,7 @@ The independent-map stress test is already Table 2 (USFS Burn Probability), wher
 |---------|----------|
 | HF packaging | Local `hf_release/` with parquet indices, configs `default` / `tables23`, dataset card, `UPLOAD_INSTRUCTIONS.md` for MasterYoda293 ([#85](https://github.com/RomainPuech/wildfire_drone_routing/pull/85)). We do not push to Hugging Face from this PR. |
 | 474 / 12-layout split | `splits/tables23_layouts.txt`, `splits/tables23_scenarios.csv`, `SELECTION_RULE.md`, `reproduce_tables23.py`. Recovered from the authoritative experiment CSV (`combined_benchmark_resultsKMbm_parallel.csv`, 474 rows / 12 layouts). Per-layout \(n\) and fire bins documented; see `MANIFEST_NOTES.md` for residual metadata gaps on 10 scenarios. |
-| Open-source solver | Default path is **Python + HiGHS** (`WFDRONE_OPT_BACKEND=python`); optional **SCIP** via `WFDRONE_OPT_SOLVER=scip` (`pyscipopt`). Julia + Gurobi retained (`WFDRONE_OPT_BACKEND=julia`) ([#87](https://github.com/RomainPuech/wildfire_drone_routing/pull/87)). |
+| Open-source solver | Default remains **Julia + Gurobi**. Optional open-source path: **Python + HiGHS** (`WFDRONE_OPT_BACKEND=python`) or **SCIP** (`WFDRONE_OPT_SOLVER=scip`, `pyscipopt`) ([#87](https://github.com/RomainPuech/wildfire_drone_routing/pull/87)). |
 
 ### Q3. Will the framework include a learning-based (RL) baseline?
 
@@ -43,7 +43,7 @@ Documented in [`DATASET.md`](DATASET.md) (dtype/units, normalization path, JPG `
 
 ### W4 — Inconsistencies + configuration-specific drone claim
 - Five strategies (2 + 3), not six ([#83](https://github.com/RomainPuech/wildfire_drone_routing/pull/83)).
-- Dual stack: Python benchmarking library with Python+HiGHS default and Julia+Gurobi ([#83](https://github.com/RomainPuech/wildfire_drone_routing/pull/83), [#87](https://github.com/RomainPuech/wildfire_drone_routing/pull/87)).
+- Dual stack: Python benchmarking library with Julia+Gurobi default and optional Python+HiGHS/SCIP ([#83](https://github.com/RomainPuech/wildfire_drone_routing/pull/83), [#87](https://github.com/RomainPuech/wildfire_drone_routing/pull/87)).
 - Duplicate bibliography entries removed ([#83](https://github.com/RomainPuech/wildfire_drone_routing/pull/83)).
 - Drone vs ground-sensor claim qualified to the reported configuration (8 / 2 / 2, 300 m) ([#83](https://github.com/RomainPuech/wildfire_drone_routing/pull/83)).
 

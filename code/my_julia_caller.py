@@ -1,8 +1,9 @@
 """Lazy Julia session manager.
 
-Julia is only initialised when ``WFDRONE_OPT_BACKEND=julia`` **and** the first
-call through ``Main`` is made.  When the backend is ``python`` (default) no
-Julia process is spawned and importing this module is essentially free.
+Julia is only initialised when ``WFDRONE_OPT_BACKEND=julia`` (the default)
+**and** the first call through ``Main`` is made.  When the backend is
+``python``, no Julia process is spawned and importing this module is
+essentially free.
 """
 
 import os
@@ -13,7 +14,7 @@ _Main = None
 
 
 def _backend_is_julia() -> bool:
-    return os.environ.get("WFDRONE_OPT_BACKEND", "python").lower() == "julia"
+    return os.environ.get("WFDRONE_OPT_BACKEND", "julia").lower() == "julia"
 
 
 def initialize_julia_session():

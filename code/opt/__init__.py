@@ -1,8 +1,11 @@
 """Python MILP optimization models for wildfire drone routing.
 
-Drop-in replacement for the Julia/JuMP models in ``julia/``.
-Default solver: HiGHS (``highspy``).  Alternatives via ``WFDRONE_OPT_SOLVER``:
-``highs`` (default), ``scip`` (``pyscipopt`` / SCIP), ``gurobi``.
+Optional drop-in replacement for the Julia/JuMP models in ``julia/``.
+Enable with ``WFDRONE_OPT_BACKEND=python`` (default backend is Julia + Gurobi).
+
+Within the Python backend, default solver is HiGHS (``highspy``).
+Alternatives via ``WFDRONE_OPT_SOLVER``: ``highs`` (default), ``scip``
+(``pyscipopt`` / SCIP), ``gurobi``.
 """
 
 import os
