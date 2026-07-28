@@ -568,6 +568,8 @@ In our setup, we assume that drones undergo instantaneous battery replacement up
 %     \end{align}
 % \end{subequations}
 
+% TOP removed from paper baselines; section retained as commented archive.
+\iffalse
 \section{Team orienteering problem}
 We adopt the Team Orienteering Problem (TOP) formulation of El-Hajj et al. (2016), which assumes distinct start and end depots. In our case, the start and end depot (i.e., charging station) share the same physical location, but are modeled as separate vertices in the graph. At the end of the planning horizon, each drone can return to the start location without incurring any cost, allowing us to directly apply the original TOP formulation without modification. The algorithm is as follows. It starts with solving the following MILP:
 
@@ -589,6 +591,8 @@ Observe that the constraint
 is not included as numerating all such constraints results in an exponential number of constraints. As a result, it is possible that the found solution contains subtours. To find such a subtour we use Tarjan's algorithm. Then, instead of including \eqref{eq:nosubtour}, we add Generalized Subtour Eliminiation Constraints (GSECs), in the following way. Let $\set V$ be a subset of gridpoints. We define $\delta(V)$ to be the set of arcs that connect vertices in $V$ with those outside $V$, i.e., vertices in $\set I_d \setminus V$. We also use $\gamma(V)$ to represent the set of arcs interconnecting vertices in $V$. 
 % Hence, it is possible that the found solution contains subtours. 
 % Each strong connected component of the subgraph associated with a tour of the solution represents a subtour, thus the checking can be done by examining the corresponding subgraphs.
+
+\fi
 
 \section{Additional Visualizations}
 

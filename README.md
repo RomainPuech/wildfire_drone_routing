@@ -47,7 +47,7 @@ This makes the code execution faster, but requires Gigabytes of storage for each
 All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
 
 `all_experiments_parallell` takes as input two parameters:
-- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (the drone routing strategies presented in the paper will be run).
 - `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
 
 
@@ -76,17 +76,17 @@ layout_folder/
 ### Dataset Splits & HuggingFace Release
 
 The full dataset contains **7 746 scenarios across 49 layouts**.  Tables 2 & 3
-in the paper use a **474-scenario subset from 12 layouts** (those with ≥ 80%
+in the paper use a **471-scenario subset from 12 layouts** (those with ≥ 80%
 historical-match rate).
 
 - **`splits/`** — Reproducibility files for the Tables 2/3 subset:
   - `tables23_layouts.txt` — the 12 layout IDs
-  - `tables23_scenarios.csv` — all 474 (layout, scenario) pairs with metadata
+  - `tables23_scenarios.csv` — all 471 (layout, scenario) pairs with metadata
   - `SELECTION_RULE.md` — how the subset was selected
   - `MANIFEST_NOTES.md` — known folder/count inconsistencies vs. the paper
 - **`hf_release/`** — HuggingFace-compatible dataset release:
   - Parquet index files for `load_dataset()` with two configs: `default` (all
-    scenarios) and `tables23` (the 474-scenario split)
+    scenarios) and `tables23` (the 471-scenario split)
   - `NOTICE` — upstream license attribution
   - `UPLOAD_INSTRUCTIONS.md` — instructions for pushing to HuggingFace
 - **`reproduce_tables23.py`** — Script to reproduce Tables 2 & 3 from
@@ -206,7 +206,6 @@ The library includes several pre-implemented strategies:
    - `RandomDroneRoutingStrategy`: Random Brownian drone movements
    - `DroneRoutingMaxCoverageResetStatic`: Max Coverage strategy mentioned in the paper
    - `DroneRoutingUniformCoverageResetStatic`: Uniform Coverage strategy mentioned in the paper
-   - `DroneRoutingTOP`: TOP-based strategy mentioned in the paper
 
 ### Custom Parameters
 
@@ -273,7 +272,7 @@ The clustering wrapper:
 All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
 
 `all_experiments_parallell` takes as input two parameters:
-- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (the drone routing strategies presented in the paper will be run).
 - `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
 
 You can also use the library to run custom tests:
@@ -378,7 +377,5 @@ export WFDRONE_OPT_BACKEND=python
 # optional: export WFDRONE_OPT_SOLVER=scip    # SCIP via pyscipopt
 python tests/test_opt_smoke.py
 ```
-
-**TOP** (team orienteering) routing remains Julia-only (the default backend).
 
 See `code/opt/` for the optional Python MILP implementations.

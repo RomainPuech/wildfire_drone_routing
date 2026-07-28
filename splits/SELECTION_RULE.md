@@ -2,39 +2,30 @@
 
 ## Overview
 
-Tables 2 and 3 in the paper report benchmark results on a subset of 474
-fire-spread scenarios drawn from 12 layouts out of the full 7 746-scenario
+Tables 2 and 3 in the paper report benchmark results on a subset of **471**
+fire-spread scenarios drawn from **12** layouts out of the full 7 746-scenario
 dataset.
 
 ## Selection procedure
 
-1. **Layout eligibility** — The paper states that experiments use layouts whose
-   fire scenarios achieve ≥ 80 % *historical match* with the USFS Burn
-   Probability risk map.  The `historical_match` flag in
-   `scenario_summary.csv` was computed per-scenario; layouts where ≥ 80 % of
-   scenarios carry `historical_match = True` qualified.
+1. **Layout eligibility** — Experiments use layouts whose fire scenarios
+   achieve ≥ 80 % *historical match* with the USFS Burn Probability risk map.
+   The `historical_match` flag in `scenario_summary.csv` was computed
+   per-scenario; layouts where ≥ 80 % of scenarios carry
+   `historical_match = True` qualified.
 
-2. **Scenario selection** — Within each qualifying layout, *all* scenarios
-   with available benchmark results were included (no additional subsampling).
-   The authoritative run list comes from the combined benchmark output
-   `combined_benchmark_resultsKMbm_parallel.csv`.
+2. **Scenario selection** — Within each qualifying layout, scenarios included
+   in the published Tables 2/3 evaluation split are listed in
+   `splits/tables23_scenarios.csv` (and the `tables23` parquet config).
 
-3. **Resulting split** — 12 layouts, 474 unique (layout, scenario) pairs.
-
-## Authoritative source files
-
-| File | Purpose |
-|------|---------|
-| `combined_benchmark_resultsKMbm_parallel.csv` | Ground-truth list of (layout, scenario) pairs that were benchmarked |
-| `agg_by_layout_new.csv` | Per-layout sample sizes (column `n`) |
-| `scenario_summary.csv` | Per-scenario metadata incl. `historical_match`, size/speed bins |
+3. **Resulting split** — 12 layouts, 471 unique `(layout_id, scenario_id)` pairs.
 
 ## The 12 layouts
 
 ```
-0016  (n = 249)
-0024  (n =  30)
-0025  (n =  11)
+0016  (n = 248)
+0024  (n =  29)
+0025  (n =  10)
 0106  (n =  69)
 0111  (n = 108)
 0264  (n =   1)
@@ -46,14 +37,11 @@ dataset.
 0337  (n =   1)
 ```
 
-Total: 474 scenarios.
+Total: 471 scenarios.
 
 ## Notes
 
 - Layouts 0264, 0265, 0319, 0320, 0321, 0323, 0337 each contribute a single
-  scenario.  These layouts are present in `config_s2r.json` but absent from the
-  49-layout `scenario_summary.csv`, so their size/speed bin flags are not
-  available.
-- Layout 0016 alone accounts for 249 / 474 ≈ 52.5 % of the split.
-- 10 of the 474 scenarios are missing from `scenario_summary.csv` (they belong
-  to layouts added after that file was generated).
+  scenario and are present in `config_s2r.json` (extras beyond the 49-layout
+  summary index).
+- Layout 0016 alone accounts for 248 / 471 ≈ 52.7 % of the split.

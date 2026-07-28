@@ -17,7 +17,7 @@ python hf_release/build_parquet.py
 
 This creates:
 - `hf_release/data/scenarios_index.parquet` — full 7 746-scenario index
-- `hf_release/data/tables23_scenarios.parquet` — 474-scenario Tables 2/3 split
+- `hf_release/data/tables23_scenarios.parquet` — 471-scenario Tables 2/3 split
 
 ## Step 2: Upload to HuggingFace
 
@@ -89,4 +89,4 @@ print(ds_t23["test"][0])
 | `license: mit` | `license: cc-by-4.0` (matches upstream CC-BY data) |
 | No NOTICE / attribution | `NOTICE` with full source attribution |
 | `load_dataset` returns raw zip | `load_dataset` returns structured `Dataset` |
-| No Tables 2/3 split published | `tables23` config with 474 scenarios |
+| No Tables 2/3 split published | `tables23` config with 471 scenarios |

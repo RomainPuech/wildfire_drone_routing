@@ -27,7 +27,7 @@ frozen; their metadata (size/speed bins) is not recorded.
 | Paper total | 7 746 |
 | `scenario_summary.csv` rows | 7 746 |
 | `config_s2r.json` scenario keys | 7 753 |
-| Tables 2/3 subset | 474 (12 layouts) |
+| Tables 2/3 subset | 471 (12 layouts) |
 
 The 7-scenario difference (7 753 vs 7 746) corresponds to the 7 single-scenario
 layouts absent from `scenario_summary.csv`.
@@ -46,17 +46,18 @@ The reviewer reports ~4 716 / 7 746 scenarios have fire-spread frame data
 - Had fires too small to generate meaningful frame sequences, or
 - Were processed with a different output pipeline version.
 
-This is a known gap and does not affect Tables 2/3 (all 474 scenarios have
+This is a known gap and does not affect Tables 2/3 (all 471 scenarios have
 benchmark results).
 
 ## 5. `static_risk.npy` encoding
 
 Values are `int16` in the range ~11–385, *not* [0, 1] probabilities.  These
-are raw USFS Burn Probability grid values (× 1 000).  To recover [0, 1]:
+are raw USFS Burn Probability grid values (FSim annual BP × **10 000**).
+To recover [0, 1]:
 
 ```python
 import numpy as np
-risk = np.load("static_risk.npy").astype(np.float32) / 1000.0
+risk = np.load("static_risk.npy").astype(np.float32) / 10000.0
 ```
 
 This normalization step was applied internally but not documented in the

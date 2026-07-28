@@ -12,7 +12,7 @@ Usage:
 The script:
   1. Reads splits/tables23_layouts.txt and splits/tables23_scenarios.csv
   2. Loads benchmark results (pre-computed CSVs or from WideDataset layout folders)
-  3. Filters to the 474-scenario Tables 2/3 split
+  3. Filters to the 471-scenario Tables 2/3 split
   4. Aggregates by fire-size × fire-speed bins (Table 2) and by risk-map type (Table 3)
   5. Prints markdown tables to stdout and saves CSV summaries to splits/
 
@@ -38,19 +38,15 @@ STRATEGY_FILES = {
     # (sensor_prefix, drone_prefix): combined CSV filename fragment
     ("K", "M"):  "KMbm_parallel",    # MaxCov placement + MaxCov routing
     ("K", "U"):  "KUbm_parallel",    # MaxCov placement + Uniform routing
-    ("K", "TOP"): "KTOPbm_parallel", # MaxCov placement + TOP routing
     ("R", "M"):  "RMbm_parallel",    # Random placement + MaxCov routing
     ("R", "U"):  "RUbm_parallel",    # Random placement + Uniform routing
-    ("R", "TOP"): "RTOPbm_parallel", # Random placement + TOP routing
 }
 
 STRATEGY_DISPLAY = {
     ("K", "M"):   "MaxCov + MaxCov",
     ("K", "U"):   "MaxCov + Uniform",
-    ("K", "TOP"): "MaxCov + TOP",
     ("R", "M"):   "Random + MaxCov",
     ("R", "U"):   "Random + Uniform",
-    ("R", "TOP"): "Random + TOP",
 }
 
 
@@ -119,8 +115,6 @@ def _strategy_key_from_row(row):
         dp = "M"
     elif "Uniform" in drone:
         dp = "U"
-    elif "TOP" in drone:
-        dp = "TOP"
     else:
         return None
     return (sp, dp)

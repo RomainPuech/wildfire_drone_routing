@@ -10,14 +10,14 @@ Coordination: tracking issue [#81](https://github.com/RomainPuech/wildfire_drone
 
 The independent-map stress test is already Table 2 (USFS Burn Probability), where Max-Coverage’s advantage shrinks and Uniform Coverage is often competitive — exactly the comparison the reviewer asks for. We clarify this in §Risk maps, §Results, and Limitations (PR [#84](https://github.com/RomainPuech/wildfire_drone_routing/pull/84)). Leave-one-out reconstruction of Table 3 is unnecessary for the oracle claim and is out of scope for this revision.
 
-### Q2. `load_dataset`-compatible release, public 474-scenario split with per-cell \(n\), and open-source solver path?
+### Q2. `load_dataset`-compatible release, public 471-scenario split with per-cell \(n\), and open-source solver path?
 
-**Yes (local artifacts + dual solver path):**
+**Yes:**
 
 | Request | Delivery |
 |---------|----------|
-| HF packaging | Local `hf_release/` with parquet indices, configs `default` / `tables23`, dataset card, `UPLOAD_INSTRUCTIONS.md` for MasterYoda293 ([#85](https://github.com/RomainPuech/wildfire_drone_routing/pull/85)). We do not push to Hugging Face from this PR. |
-| 474 / 12-layout split | `splits/tables23_layouts.txt`, `splits/tables23_scenarios.csv`, `SELECTION_RULE.md`, `reproduce_tables23.py`. Recovered from the authoritative experiment CSV (`combined_benchmark_resultsKMbm_parallel.csv`, 474 rows / 12 layouts). Per-layout \(n\) and fire bins documented; see `MANIFEST_NOTES.md` for residual metadata gaps on 10 scenarios. |
+| HF packaging | Live anonymous Hugging Face release: [anonymous-submission-neurips26-2831](https://huggingface.co/datasets/anonymoussubmission2/anonymous-submission-neurips26-2831) with Parquet configs `default` / `tables23`, `NOTICE`, and license tag `cc-by-4.0`. Companion packaging also lives under `hf_release/` / `splits/` in the code repository. |
+| 471 / 12-layout split | Published on HF (`tables23` config) and in-repo as `splits/tables23_layouts.txt`, `splits/tables23_scenarios.csv`, `SELECTION_RULE.md`, with `reproduce_tables23.py`. Per-layout \(n\) and fire bins documented. |
 | Open-source solver | Default remains **Julia + Gurobi**. Optional open-source path: **Python + HiGHS** (`WFDRONE_OPT_BACKEND=python`) or **SCIP** (`WFDRONE_OPT_SOLVER=scip`, `pyscipopt`) ([#87](https://github.com/RomainPuech/wildfire_drone_routing/pull/87)). |
 
 ### Q3. Will the framework include a learning-based (RL) baseline?
@@ -33,13 +33,13 @@ Detection uses a **certain-detection radius** (300 m in experiments): once a fir
 ## Point-by-point on weaknesses
 
 ### W1 — HF packaging
-Addressed via `hf_release/` (structured parquet + configs). MasterYoda293 uploads per `UPLOAD_INSTRUCTIONS.md`. Composite license guidance in `NOTICE` / `docs/HF_LICENSE.md` ([#85](https://github.com/RomainPuech/wildfire_drone_routing/pull/85), [#86](https://github.com/RomainPuech/wildfire_drone_routing/pull/86)).
+Addressed on the live HF dataset ([anonymous-submission-neurips26-2831](https://huggingface.co/datasets/anonymoussubmission2/anonymous-submission-neurips26-2831)): structured Parquet + configs, `NOTICE`, license `cc-by-4.0`. Composite-license guidance also in `NOTICE` / `docs/HF_LICENSE.md`.
 
 ### W2 — Reproduce Tables 2/3
-Published exact 12-layout / 474-scenario split + reproduction script + manifest notes ([#85](https://github.com/RomainPuech/wildfire_drone_routing/pull/85)).
+Published exact 12-layout / 471-scenario split on HF and in `splits/`, plus `reproduce_tables23.py` and `MANIFEST_NOTES.md`.
 
 ### W3 — Risk units / JPG masks
-Documented in [`DATASET.md`](DATASET.md) (dtype/units, normalization path, JPG `/255` + threshold ≥ 0.5, NPY preferred) ([#82](https://github.com/RomainPuech/wildfire_drone_routing/pull/82)).
+Documented in [`DATASET.md`](DATASET.md) and on the HF dataset card (BP as FSim × 10 000 → divide by 10 000; JPG `/255` + threshold ≥ 0.5; NPY preferred).
 
 ### W4 — Inconsistencies + configuration-specific drone claim
 - Five strategies (2 + 3), not six ([#83](https://github.com/RomainPuech/wildfire_drone_routing/pull/83)).
@@ -57,7 +57,7 @@ Certain-detection radius justification in Problem Formulation + Limitations ([#8
 **Not leakage: oracle by design.** Emphasized throughout paper and above. Independent evidence: Table 2 (BP) ([#84](https://github.com/RomainPuech/wildfire_drone_routing/pull/84)).
 
 ### License / checklist
-Sim2Real-Fire listed as **Apache-2.0** (not MIT); root `NOTICE` + HF guidance ([#86](https://github.com/RomainPuech/wildfire_drone_routing/pull/86)).
+Sim2Real-Fire listed as **Apache-2.0** (not MIT); root `NOTICE` + HF guidance ([#86](https://github.com/RomainPuech/wildfire_drone_routing/pull/86)). HF tag set to `cc-by-4.0`.
 
 ---
 
@@ -71,8 +71,3 @@ Sim2Real-Fire listed as **Apache-2.0** (not MIT); root `NOTICE` + HF guidance ([
 | [#85](https://github.com/RomainPuech/wildfire_drone_routing/pull/85) | #74 | HF release + Tables 2/3 split |
 | [#86](https://github.com/RomainPuech/wildfire_drone_routing/pull/86) | #79 | NOTICE + checklist license |
 | [#87](https://github.com/RomainPuech/wildfire_drone_routing/pull/87) | #77 | Python MILPs + HiGHS |
-
-## Author follow-ups outside this branch
-
-1. MasterYoda293: upload `hf_release/` per `UPLOAD_INSTRUCTIONS.md` and fix the HF license tag (composite, not pure MIT).
-2. Optional: fill fire size/speed bins for the 10 scenarios missing from `scenario_summary.csv`.
