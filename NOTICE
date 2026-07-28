@@ -1,0 +1,43 @@
+NOTICE — Third-Party Data and Software Attribution
+==================================================
+
+This repository contains WFDroneBench software and documentation, plus
+instructions and metadata for the DroneBench benchmark dataset. The software
+in this repository is released under the MIT License. The benchmark dataset
+is a composite work derived from several third-party sources, each governed
+by its own license. Users must comply with all applicable upstream licenses
+when using, redistributing, or republishing any portion of the data.
+
+Software (this repository)
+--------------------------
+Copyright (c) 2025 MIT OCR
+
+Licensed under the MIT License. See the LICENSE file in this repository for
+the full license text.
+
+Third-party data sources incorporated into DroneBench
+-----------------------------------------------------
+
+Sim2Real-Fire
+  Source: https://github.com/TJU-IDVLab/Sim2Real-Fire
+  License: Apache License 2.0
+  Citation: NeurIPS 2024 (see paper bibliography entry NEURIPS2024_02e978a2)
+
+USFS Burn Probability (BP) / Wildfire Hazard Potential (WHP)
+  Source: USDA Forest Service Research Data Archive
+          https://www.fs.usda.gov/rds/archive/
+          DOI: 10.2737/RDS-2015-0047-4 (WHP v2023, 4th Edition)
+  License: Creative Commons Attribution (CC BY)
+
+Fire Program Analysis Fire-Occurrence Database (FPA FOD)
+  Source: U.S. Forest Service
+          https://data-usfs.hub.arcgis.com/datasets/6059c1a4dca749d393e33ee5f8a0cbaf_9/about
+  License: CC0 1.0 (public domain dedication)
+
+Composite dataset licensing
+---------------------------
+DroneBench combines processed outputs from the sources above. The composite
+release is NOT a pure MIT-licensed dataset. Downstream redistribution must
+preserve upstream attribution and comply with Apache-2.0, CC BY, and CC0
+terms as applicable to the included components. See docs/HF_LICENSE.md for
+Hugging Face release guidance.

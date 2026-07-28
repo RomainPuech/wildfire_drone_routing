@@ -1,11 +1,20 @@
 import random
 import os
-from my_julia_caller import Main as jl
 import json
 import numpy as np
 from dataset import load_scenario, save_burn_map
 import time
 from typing import List, Tuple
+
+# ---------------------------------------------------------------------------
+# Backend selection: WFDRONE_OPT_BACKEND = julia (default) | python
+# ---------------------------------------------------------------------------
+_OPT_BACKEND = os.environ.get("WFDRONE_OPT_BACKEND", "julia").lower()
+
+if _OPT_BACKEND == "julia":
+    from my_julia_caller import Main as jl
+else:
+    import opt as _pyopt
 
 
 ### Utilities ####
@@ -285,7 +294,7 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
     strategy_name = "SensorPlacementOptimization"
     def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
         """
-        Initialize the ground placement strategy using Julia's optimization model.
+        Initialize the ground placement strategy using optimization model.
         
         Args:
             automatic_initialization_parameters: dict with keys:
@@ -296,17 +305,25 @@ class SensorPlacementOptimization(SensorPlacementStrategy):
             custom_initialization_parameters: dict with keys:
                 "burnmap_filename": burn map file name
         """
-        # Initialize empty lists (skip parent's random initialization)
         self.ground_sensor_locations = []
         self.charging_station_locations = []
 
         if "burnmap_filename" not in custom_initialization_parameters:
             raise ValueError("burnmap_filename is not defined")
 
-     
-        # Call the Julia optimization function
-        print("calling julia optimization model")
-        x_vars, y_vars = jl.SENSOR_MAXCOV_STRATEGY(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"])
+        print("calling optimization model (backend=%s)" % _OPT_BACKEND)
+        if _OPT_BACKEND == "julia":
+            x_vars, y_vars = jl.SENSOR_MAXCOV_STRATEGY(
+                custom_initialization_parameters["burnmap_filename"],
+                automatic_initialization_parameters["n_ground_stations"],
+                automatic_initialization_parameters["n_charging_stations"],
+            )
+        else:
+            x_vars, y_vars = _pyopt.sensor_maxcov_strategy(
+                custom_initialization_parameters["burnmap_filename"],
+                automatic_initialization_parameters["n_ground_stations"],
+                automatic_initialization_parameters["n_charging_stations"],
+            )
         print("optimization finished")
         
         self.ground_sensor_locations = list(x_vars)
@@ -354,10 +371,22 @@ class SensorPlacementMaxCoverageGaussianTime(SensorPlacementStrategy):
         # print("kernel=\n", kernel)
 
 
-        # Call the Julia optimization function
-        # print("calling julia optimization model")
-        x_vars, y_vars = jl.Max_Coverage_Kernel(custom_initialization_parameters["burnmap_filename"], automatic_initialization_parameters["n_ground_stations"], automatic_initialization_parameters["n_charging_stations"], automatic_initialization_parameters["n_drones"], kernel, kernel_size_x, kernel_size_y)
-        # print("optimization finished")
+        if _OPT_BACKEND == "julia":
+            x_vars, y_vars = jl.Max_Coverage_Kernel(
+                custom_initialization_parameters["burnmap_filename"],
+                automatic_initialization_parameters["n_ground_stations"],
+                automatic_initialization_parameters["n_charging_stations"],
+                automatic_initialization_parameters["n_drones"],
+                kernel, kernel_size_x, kernel_size_y,
+            )
+        else:
+            x_vars, y_vars = _pyopt.max_coverage_kernel(
+                custom_initialization_parameters["burnmap_filename"],
+                automatic_initialization_parameters["n_ground_stations"],
+                automatic_initialization_parameters["n_charging_stations"],
+                automatic_initialization_parameters["n_drones"],
+                kernel, kernel_size_x, kernel_size_y,
+            )
         
         self.ground_sensor_locations = list(x_vars)
         self.charging_station_locations = list(y_vars)
@@ -431,9 +460,11 @@ class DroneRoutingUniformCoverageResetStatic(DroneRoutingStrategy):
         # Store original charging stations as class attribute
         self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
         
-        # Convert to Julia indexing (Python 0-based → Julia 1-based)
-        self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
-        self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
+        # Station locations – keep 0-based originals; Julia needs 1-based
+        self.charging_stations_0 = list(self.automatic_initialization_parameters["charging_stations_locations"])
+        self.ground_stations_0 = list(self.automatic_initialization_parameters["ground_sensor_locations"])
+        self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.charging_stations_0]
+        self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.ground_stations_0]
         self.execution_time = 0
         self.saving_time = 0
         
@@ -443,49 +474,49 @@ class DroneRoutingUniformCoverageResetStatic(DroneRoutingStrategy):
         and solving the initial routing problem.
         """
         print("Creating initial routing model (reusable)")
-        print("--- parameters for julia (Julia indexing) ---")
-        print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
-        print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
-        print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
-        print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
-        print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
-
         save_burn_map(self.current_burnmap, self.current_burnmap_filename)
 
-        # Create the reusable routing model
         start_time = time.time()
-        self.routing_model = jl.create_index_routing_model(
-            self.current_burnmap_filename,
-            self.automatic_initialization_parameters["n_drones"],
-            self.julia_charging_stations_locations,
-            self.julia_ground_sensor_locations,
-            self.custom_initialization_parameters["optimization_horizon"],
-            self.automatic_initialization_parameters["max_battery_time"],
-        )
+        if _OPT_BACKEND == "julia":
+            self.routing_model = jl.create_index_routing_model(
+                self.current_burnmap_filename,
+                self.automatic_initialization_parameters["n_drones"],
+                self.julia_charging_stations_locations,
+                self.julia_ground_sensor_locations,
+                self.custom_initialization_parameters["optimization_horizon"],
+                self.automatic_initialization_parameters["max_battery_time"],
+            )
+        else:
+            self.routing_model = _pyopt.create_routing_model(
+                self.current_burnmap_filename,
+                self.automatic_initialization_parameters["n_drones"],
+                self.charging_stations_0,
+                self.ground_stations_0,
+                self.custom_initialization_parameters["optimization_horizon"],
+                self.automatic_initialization_parameters["max_battery_time"],
+            )
         self.execution_time += time.time() - start_time
-        # Solve the initial routing problem with the model
+
         start_time = time.time()
-        self.current_solution = jl.solve_index_init_routing(
-            self.routing_model, 
-            self.custom_initialization_parameters["reevaluation_step"]
-        )
+        if _OPT_BACKEND == "julia":
+            self.current_solution = jl.solve_index_init_routing(
+                self.routing_model,
+                self.custom_initialization_parameters["reevaluation_step"]
+            )
+            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y))
+                                     for code, (x, y) in plan] for plan in self.current_solution]
+        else:
+            self.current_solution = _pyopt.solve_init_routing(
+                self.routing_model,
+                self.custom_initialization_parameters["reevaluation_step"],
+            )
         self.execution_time += time.time() - start_time
-        # print(f"current_solution (Julia indexing): {self.current_solution}")
-        
-        # Convert to Python indexing (Julia 1-based → Python 0-based)
-        self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
-                                 for code, (x, y) in plan] for plan in self.current_solution]
-        
-        # Extract initial positions from the first step of the solution
-        # Extract full action tuples from step 0
-        initial_plan = self.current_solution[0]  # list of (code, (x, y))
 
         initial_positions = self.current_solution[0]
         self.call_counter = 0
         
         print("Initial optimization finished")
         print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
-
 
         return initial_positions
 
@@ -502,57 +533,41 @@ class DroneRoutingUniformCoverageResetStatic(DroneRoutingStrategy):
         Returns:
             actions: list of tuples (action_type, action_parameters)
         """
-        # Every reevaluation_step calls, recompute the solution using the existing model
         if self.call_counter == self.reevaluation_step-1:
             self.call_counter = 0
-            # save the current burnmap
             start_time = time.time()
             save_burn_map(self.current_burnmap, self.current_burnmap_filename)
             self.saving_time += time.time() - start_time
-            # print("Solving next move with model reuse (integer indexing)")
-            
-            # Convert drone locations to Julia indexing
-            julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
-            
-            # print("--- parameters for julia (Julia indexing) ---")
-            # print(f"drone_locations: {julia_drone_locations}")
-            # print(f"drone_states: {automatic_step_parameters['drone_states']}")
-            # print(f"drone_batteries: {automatic_step_parameters['drone_batteries']}")
-            # print("--- end of parameters ---")
 
-            # Solve next move with the existing model
             start_time = time.time()
-            self.current_solution = jl.solve_index_next_move_routing(
-                self.routing_model,
-                self.custom_initialization_parameters["reevaluation_step"],
-                julia_drone_locations,
-                automatic_step_parameters["drone_states"],
-                automatic_step_parameters["drone_batteries"],
-                self.t
-            )
+            if _OPT_BACKEND == "julia":
+                julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+                self.current_solution = jl.solve_index_next_move_routing(
+                    self.routing_model,
+                    self.custom_initialization_parameters["reevaluation_step"],
+                    julia_drone_locations,
+                    automatic_step_parameters["drone_states"],
+                    automatic_step_parameters["drone_batteries"],
+                    self.t
+                )
+                self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y))
+                                         for code, (x, y) in plan] for plan in self.current_solution]
+            else:
+                self.current_solution = _pyopt.solve_next_move_routing(
+                    self.routing_model,
+                    self.custom_initialization_parameters["reevaluation_step"],
+                    automatic_step_parameters["drone_locations"],
+                    automatic_step_parameters["drone_states"],
+                    automatic_step_parameters["drone_batteries"],
+                    self.t,
+                )
             self.execution_time += time.time() - start_time
-            #print("Next move optimization finished")
-            # print("current solution (Julia indexing)")
-            # print(self.current_solution)
 
-            # Convert to Python indexing
-            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
-                                     for code, (x, y) in plan] for plan in self.current_solution]
-            # uopdate the burnmap
-
-            
-
-
-        # Return the appropriate step from the pre-computed plan
         self.call_counter += 1
         idx = min(self.call_counter, len(self.current_solution) - 1)
-        # print(f"[debug] returning plan step {self.call_counter} of {len(self.current_solution)}")
-        # update the burnmap: set every visited cell to 0
         for action in self.current_solution[idx]:
             if action[0] == "fly":
-                #print(f"setting burnmap at {action[1]} to 0 at time {self.t}")
                 self.current_burnmap[self.t:self.t+self.reset_time,action[1][0], action[1][1]] = 0
-                #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         self.t += 1
         return self.current_solution[idx]
 
@@ -621,12 +636,12 @@ class DroneRoutingMaxCoverageResetStatic(DroneRoutingStrategy):
        
         self.reset_time = custom_initialization_parameters.get("reset_time", 2*63)
         
-        # Store original charging stations as class attribute
+        # Station locations
         self.charging_stations_locations = automatic_initialization_parameters["charging_stations_locations"]
-        
-        # Convert to Julia indexing (Python 0-based → Julia 1-based)
-        self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["charging_stations_locations"]]
-        self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.automatic_initialization_parameters["ground_sensor_locations"]]
+        self.charging_stations_0 = list(self.charging_stations_locations)
+        self.ground_stations_0 = list(automatic_initialization_parameters["ground_sensor_locations"])
+        self.julia_charging_stations_locations = [(x+1, y+1) for x, y in self.charging_stations_0]
+        self.julia_ground_sensor_locations = [(x+1, y+1) for x, y in self.ground_stations_0]
         self.execution_time = 0
         self.saving_time = 0
         
@@ -636,49 +651,49 @@ class DroneRoutingMaxCoverageResetStatic(DroneRoutingStrategy):
         and solving the initial routing problem.
         """
         print("Creating initial routing model (reusable)")
-        print("--- parameters for julia (Julia indexing) ---")
-        print(f"burnmap_filename: {self.custom_initialization_parameters['burnmap_filename']}")
-        print(f"n_drones: {self.automatic_initialization_parameters['n_drones']}")
-        print(f"charging_stations_locations: {self.julia_charging_stations_locations}")
-        print(f"ground_sensor_locations: {self.julia_ground_sensor_locations}")
-        print(f"optimization_horizon: {self.custom_initialization_parameters['optimization_horizon']}")
-
         save_burn_map(self.current_burnmap, self.current_burnmap_filename)
 
-        # Create the reusable routing model
         start_time = time.time()
-        self.routing_model = jl.create_index_routing_model(
-            self.current_burnmap_filename,
-            self.automatic_initialization_parameters["n_drones"],
-            self.julia_charging_stations_locations,
-            self.julia_ground_sensor_locations,
-            self.custom_initialization_parameters["optimization_horizon"],
-            self.automatic_initialization_parameters["max_battery_time"],
-        )
+        if _OPT_BACKEND == "julia":
+            self.routing_model = jl.create_index_routing_model(
+                self.current_burnmap_filename,
+                self.automatic_initialization_parameters["n_drones"],
+                self.julia_charging_stations_locations,
+                self.julia_ground_sensor_locations,
+                self.custom_initialization_parameters["optimization_horizon"],
+                self.automatic_initialization_parameters["max_battery_time"],
+            )
+        else:
+            self.routing_model = _pyopt.create_routing_model(
+                self.current_burnmap_filename,
+                self.automatic_initialization_parameters["n_drones"],
+                self.charging_stations_0,
+                self.ground_stations_0,
+                self.custom_initialization_parameters["optimization_horizon"],
+                self.automatic_initialization_parameters["max_battery_time"],
+            )
         self.execution_time += time.time() - start_time
-        # Solve the initial routing problem with the model
+
         start_time = time.time()
-        self.current_solution = jl.solve_index_init_routing(
-            self.routing_model, 
-            self.custom_initialization_parameters["reevaluation_step"]
-        )
+        if _OPT_BACKEND == "julia":
+            self.current_solution = jl.solve_index_init_routing(
+                self.routing_model,
+                self.custom_initialization_parameters["reevaluation_step"]
+            )
+            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y))
+                                     for code, (x, y) in plan] for plan in self.current_solution]
+        else:
+            self.current_solution = _pyopt.solve_init_routing(
+                self.routing_model,
+                self.custom_initialization_parameters["reevaluation_step"],
+            )
         self.execution_time += time.time() - start_time
-        # print(f"current_solution (Julia indexing): {self.current_solution}")
-        
-        # Convert to Python indexing (Julia 1-based → Python 0-based)
-        self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
-                                 for code, (x, y) in plan] for plan in self.current_solution]
-        
-        # Extract initial positions from the first step of the solution
-        # Extract full action tuples from step 0
-        initial_plan = self.current_solution[0]  # list of (code, (x, y))
 
         initial_positions = self.current_solution[0]
         self.call_counter = 0
         
         print("Initial optimization finished")
         print(f"\nDEBUG: Available Charging Stations (after model creation): {self.charging_stations_locations}")
-
 
         return initial_positions
 
@@ -696,72 +711,59 @@ class DroneRoutingMaxCoverageResetStatic(DroneRoutingStrategy):
             actions: list of tuples (action_type, action_parameters)
         """
         self.t += 1
-        # Every reevaluation_step calls, recompute the solution using the existing model
         if self.call_counter == self.reevaluation_step-1:
             self.call_counter = 0
-            # save the current burnmap
             start_time = time.time()
             save_burn_map(self.current_burnmap, self.current_burnmap_filename)
             self.saving_time += time.time() - start_time
-            # print("Solving next move with model reuse (integer indexing)")
-            
-            # Convert drone locations to Julia indexing
-            julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
-            
-            # print("--- parameters for julia (Julia indexing) ---")
-            # print(f"drone_locations: {julia_drone_locations}")
-            # print(f"drone_states: {automatic_step_parameters['drone_states']}")
-            # print(f"drone_batteries: {automatic_step_parameters['drone_batteries']}")
-            # print("--- end of parameters ---")
 
-            # Solve next move with the existing model
             start_time = time.time()
-            self.current_solution = jl.solve_index_next_move_routing(
-                self.routing_model,
-                self.custom_initialization_parameters["reevaluation_step"],
-                julia_drone_locations,
-                automatic_step_parameters["drone_states"],
-                automatic_step_parameters["drone_batteries"],
-                self.t
-            )
+            if _OPT_BACKEND == "julia":
+                julia_drone_locations = [(x+1, y+1) for x, y in automatic_step_parameters["drone_locations"]]
+                self.current_solution = jl.solve_index_next_move_routing(
+                    self.routing_model,
+                    self.custom_initialization_parameters["reevaluation_step"],
+                    julia_drone_locations,
+                    automatic_step_parameters["drone_states"],
+                    automatic_step_parameters["drone_batteries"],
+                    self.t
+                )
+                self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y))
+                                         for code, (x, y) in plan] for plan in self.current_solution]
+            else:
+                self.current_solution = _pyopt.solve_next_move_routing(
+                    self.routing_model,
+                    self.custom_initialization_parameters["reevaluation_step"],
+                    automatic_step_parameters["drone_locations"],
+                    automatic_step_parameters["drone_states"],
+                    automatic_step_parameters["drone_batteries"],
+                    self.t,
+                )
             self.execution_time += time.time() - start_time
-            #print("Next move optimization finished")
-            # print("current solution (Julia indexing)")
-            # print(self.current_solution)
 
-            # Convert to Python indexing
-            self.current_solution = [[(code,(x-1, y-1)) if code != "move" else (code, (x, y)) 
-                                     for code, (x, y) in plan] for plan in self.current_solution]
-            # uopdate the burnmap
-
-            
-
-
-        # Return the appropriate step from the pre-computed plan
         self.call_counter += 1
         idx = self.call_counter
-        #assert idx < len(self.current_solution), f"idx={idx} is greater than the number of steps in the solution={len(self.current_solution)}"
-        # print(f"[debug] returning plan step {self.call_counter} of {len(self.current_solution)}")
-        # update the burnmap: set every visited cell to 0
         for action in self.current_solution[idx]:
             if action[0] == "fly":
-                #print(f"setting burnmap at {action[1]} to 0 at time {self.t}")
                 self.current_burnmap[self.t:min(self.t+self.reset_time,self.current_burnmap.shape[0]),action[1][0], action[1][1]] = 0
-                #save_burn_map(self.current_burnmap, self.current_burnmap_filename)
         return self.current_solution[idx]
 
 
 
 ##### TOP STRATEGIES #####
 
-# Drone Routing TOP Strategy in the paper
+# Drone Routing TOP Strategy in the paper  (Julia-only — not ported to Python)
 class DroneRoutingTOP(DroneRoutingStrategy):
     strategy_name = "DroneRoutingTOP"
     burnmap_handeling_type = "fixed_reset"
     """
     Drone routing strategy that uses a Team Orienteering Problem (TOP) approach.
+    Requires ``WFDRONE_OPT_BACKEND=julia`` (this model has not been ported to Python).
     """
     def __init__(self, automatic_initialization_parameters:dict, custom_initialization_parameters:dict):
+        if _OPT_BACKEND != "julia":
+            from my_julia_caller import Main as jl  # noqa: F811
+            globals()["jl"] = jl
         """
         automatic_initialization_parameters: dict with keys:
             "N": Grid height

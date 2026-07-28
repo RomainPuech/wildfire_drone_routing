@@ -85,23 +85,33 @@ def delete_logs_folder(folder_path):
 
 def load_scenario_jpg(folder_path, binary=True, first_frame_only=False):
     """
-    Load a wildfire scenario from a sequence of grayscale JPG images.
+    Load a wildfire scenario from a sequence of grayscale JPG fire-mask frames.
+
+    Encoding (see DATASET.md): each frame is read as 8-bit grayscale, divided by
+    255.0 to obtain values in [0, 1], then optionally binarized with
+    ``(pixel >= 0.5)`` when ``binary=True`` (default). JPG is lossy; prefer
+    preprocessed ``scenarii/*.npy`` when bit-identical masks are required.
 
     Args:
-        folder_path (str): Path to the folder containing the JPG image sequence
-        binary (bool, optional): If True, threshold images at 0.5 to create binary values. Defaults to False.
+        folder_path (str): Path to the folder containing the JPG image sequence.
+        binary (bool, optional): If True (default), threshold at 0.5 to produce
+            a {0, 1} fire mask per cell. If False, return grayscale values in
+            [0, 1] without thresholding.
+        first_frame_only (bool, optional): If True, load only the first frame and
+            return a 2D array (still /255, and thresholded when ``binary=True``).
 
     Returns:
-        numpy.ndarray: TxNxN array representing the fire progression
+        numpy.ndarray: ``(T, N, M)`` fire progression, or ``(N, M)`` when
+            ``first_frame_only=True``.
 
     Raises:
-        FileNotFoundError: If no JPG files found in folder
-        ValueError: If images have inconsistent dimensions
+        FileNotFoundError: If no JPG files found in folder.
+        ValueError: If images have inconsistent dimensions.
 
     Example:
-        >>> scenario = load_scenario_jpg("fire_sequence/")
+        >>> scenario = load_scenario_jpg("Satellite_Images_Mask/0001_00002/")
         >>> print(scenario.shape)
-        (10, 100, 100)
+        (72, 116, 287)
     """
     def natural_sort_key(s):
         """
@@ -402,9 +412,25 @@ def compute_burn_map(folder_name, extension = ".npy", noncumulative = False, con
 
 def load_burn_map(filename, extension = ".npy"):
     """
-    Load a burn map from a npy file.
+    Load a wildfire risk or burn map from disk.
+
+    Reads ``.npy`` arrays unchanged (no unit conversion). Layout files include:
+
+    - ``burn_map.npy``: dynamic ground-truth burn fractions in ``[0, 1]`` (float32).
+    - ``static_risk_bp2024.npy`` / legacy ``static_risk.npy``: USDA FSim burn
+      probability stored as integers (native scale × 10 000; see DATASET.md).
+    - ``static_risk_whp.npy``: USDA Wildfire Hazard Potential integer index.
+
+    Spatial/temporal pooling for optimization is applied later in
+    ``code/benchmark.py``, not in this loader.
+
     Args:
-        filename (str): Path to the npy file containing the burn map
+        filename (str): Path to the ``.npy`` file (or JPG scenario folder if
+            ``extension=".jpg"``).
+        extension (str): ``".npy"`` (default) or ``".jpg"``.
+
+    Returns:
+        numpy.ndarray: ``(T, N, M)`` risk/burn map (``T=1`` for static maps).
     """
     if not extension.startswith("."):
         extension = "." + extension
