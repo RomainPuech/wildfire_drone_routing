@@ -27,6 +27,13 @@ This tells Julia to use the environment located at ./julia_env, which contains `
 
 4. Download/unzip our dataset from the supplementary material.
 
+## Dataset curation
+
+The complete reviewer-facing curation workflow is documented in
+[`code/dataset_curation/README.md`](code/dataset_curation/README.md). It covers
+layout filtering, FPA-FOD/USFS ignition matching, BP/WHP alignment, JPG-to-NPY
+conversion, empirical burn maps, and scenario metadata.
+
 ## ✅ **Reproducing the paper's results**:
 
 ### 1. Preprocessing Dataset
@@ -47,11 +54,20 @@ This makes the code execution faster, but requires Gigabytes of storage for each
 All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
 
 `all_experiments_parallell` takes as input two parameters:
-- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (the drone routing strategies presented in the paper will be run).
 - `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
 
 
 ## 📚 Dataset Structure
+
+### Dataset release
+
+The Tables 2/3 evaluation split and full scenario index are published on the
+anonymous Hugging Face dataset:
+https://huggingface.co/datasets/anonymoussubmission2/anonymous-submission-neurips26-2831
+(`default` = 7 746 scenarios; `tables23` = 471 scenarios / 12 layouts).
+
+
 
 The library works with the following dataset structure:
 ```
@@ -180,7 +196,6 @@ The library includes several pre-implemented strategies:
    - `RandomDroneRoutingStrategy`: Random Brownian drone movements
    - `DroneRoutingMaxCoverageResetStatic`: Max Coverage strategy mentioned in the paper
    - `DroneRoutingUniformCoverageResetStatic`: Uniform Coverage strategy mentioned in the paper
-   - `DroneRoutingTOP`: TOP-based strategy mentioned in the paper
 
 ### Custom Parameters
 
@@ -247,7 +262,7 @@ The clustering wrapper:
 All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
 
 `all_experiments_parallell` takes as input two parameters:
-- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (the drone routing strategies presented in the paper will be run).
 - `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
 
 You can also use the library to run custom tests:
@@ -331,3 +346,26 @@ The library collects the following metrics:
 ## 📄 License
 
 This project is licensed under the MIT License.
+
+
+## Optimization backends (Julia / Python)
+
+Paper baselines (GaussianCov placement, MaxCov routing) can run with either:
+
+| Backend | Env var | Solver |
+|---------|---------|--------|
+| **Julia (default)** | `WFDRONE_OPT_BACKEND=julia` | JuMP + Gurobi (requires a Gurobi license) |
+| Python (optional) | `WFDRONE_OPT_BACKEND=python` | **HiGHS** via Pyomo (`highspy`). Optional: `WFDRONE_OPT_SOLVER=scip` (SCIP / `pyscipopt`) or `gurobi` |
+
+```bash
+# Default: Julia + Gurobi
+export WFDRONE_OPT_BACKEND=julia
+
+# Optional open-source path (no Gurobi license)
+export WFDRONE_OPT_BACKEND=python
+# optional: export WFDRONE_OPT_SOLVER=highs   # default under python
+# optional: export WFDRONE_OPT_SOLVER=scip    # SCIP via pyscipopt
+# then run placement/routing strategies with WFDRONE_OPT_BACKEND=python
+```
+
+See `code/opt/` for the optional Python MILP implementations.

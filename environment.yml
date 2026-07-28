@@ -42,6 +42,7 @@ dependencies:
       - cycler==0.12.1
       - filelock==3.19.1
       - fonttools==4.60.0
+      - geopandas
       - imageio==2.37.0
       - julia==0.6.2
       - juliacall==0.9.28
@@ -55,6 +56,10 @@ dependencies:
       - pillow==11.3.0
       - pyparsing==3.2.5
       - python-dateutil==2.9.0.post0
+      - pyomo>=6.7
+      - pytest
+      - highspy>=1.5
+      - pyscipopt>=5.0
       - pytz==2025.2
       - rasterio==1.4.3
       - scipy==1.15.3

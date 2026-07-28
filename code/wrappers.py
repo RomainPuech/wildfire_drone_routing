@@ -306,7 +306,7 @@ def make_loggable_drone_strategy(strategy_cls):
     return Wrapped
 
 
-from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy, DroneRoutingTOP, TestStrategy, DroneRoutingTOPwarm, DroneRoutingTOPGrowing
+from Strategy import RandomSensorPlacementStrategy, SensorPlacementMaxCoverageGaussianTime, DroneRoutingUniformCoverageResetStatic, DroneRoutingMaxCoverageResetStatic, RandomDroneRoutingStrategy
 from clustering import get_wrapped_clustering_strategy
 
 # Register statically at module load
@@ -317,22 +317,13 @@ SensorPlacementMaxCoverageGaussianTimeLogged = make_loggable_sensor_strategy(Sen
 ClusteredUniformCoverage = get_wrapped_clustering_strategy(DroneRoutingUniformCoverageResetStatic)
 ClusteredMaxCoverage = get_wrapped_clustering_strategy(DroneRoutingMaxCoverageResetStatic)
 ClusteredRandomStrategy = get_wrapped_clustering_strategy(RandomDroneRoutingStrategy)
-ClusteredTOP = get_wrapped_clustering_strategy(DroneRoutingTOP)
-ClusteredTOPwarm = get_wrapped_clustering_strategy(DroneRoutingTOPwarm)
-ClusteredTOPGrowing = get_wrapped_clustering_strategy(DroneRoutingTOPGrowing)
-ClusteredTestStrategy = get_wrapped_clustering_strategy(TestStrategy)
 
 DroneRoutingUniformCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredUniformCoverage)
 DroneRoutingMaxCoverageResetStaticLogged = make_loggable_drone_strategy(ClusteredMaxCoverage)
 RandomDroneRoutingStrategyLogged = make_loggable_drone_strategy(ClusteredRandomStrategy)
-DroneRoutingTOPLogged = make_loggable_drone_strategy(ClusteredTOP)
-TestStrategyLogged = make_loggable_drone_strategy(ClusteredTestStrategy)
-DroneRoutingTOPwarmLogged = make_loggable_drone_strategy(ClusteredTOPwarm)
-DroneRoutingTOPGrowingLogged = make_loggable_drone_strategy(ClusteredTOPGrowing)
 
 # register here the strategies you'd like to use in parallell benchmark 
 globals()["DroneRoutingUniformCoverageResetStatic"] = DroneRoutingUniformCoverageResetStaticLogged
 globals()["DroneRoutingMaxCoverageResetStatic"] = DroneRoutingMaxCoverageResetStaticLogged
 # globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategyLogged
-globals()["DroneRoutingTOP"] = DroneRoutingTOPLogged
 globals()["RandomDroneRoutingStrategy"] = RandomDroneRoutingStrategy # we do not log the random drone routing strategy
