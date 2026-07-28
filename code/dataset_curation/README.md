@@ -7,10 +7,6 @@ does not generate fires: it curates, selects, spatially aligns, and packages
 those simulations.** Every stage is non-destructive: sources are only read and
 all products go to explicit output paths.
 
-The recovered research notebooks and scripts are preserved unchanged in
-[`legacy/`](legacy/README.md). They are provenance records, not supported
-entrypoints.
-
 ## Exact external inputs
 
 1. A **Sim2Real-Fire layout export**, one directory per layout (for example
@@ -28,8 +24,8 @@ entrypoints.
    (WHP) GeoTIFF**. Supply each product separately to `risk`.
 
 The repository-root `config_s2r.json` is the tracked scenario-offset mapping.
-It is intentionally not duplicated here or under `legacy/`; pass it with
-`preprocess --config config_s2r.json`.
+It is intentionally not duplicated here; pass it with `preprocess --config
+config_s2r.json`.
 
 ## Stages and outputs
 
@@ -119,8 +115,6 @@ Matching is independent of filesystem/input ordering. The default tie seed is
   drops records without a valid date.
 - Historical deduplication used exact latitude, longitude, and discovery
   timestamp. That rule is retained, with stable source/ID ordering.
-- The notebooks mixed `(column,row)` and `(row,column)`. Published code always
-  uses NumPy/rasterio `(row,column)`.
 - Historical candidate enumeration used unseeded `random`, mutable default
   exclusion lists, and inconsistent return shapes. Published matching is
   deterministic and typed.
@@ -138,10 +132,10 @@ Matching is independent of filesystem/input ordering. The default tie seed is
 - The original noncumulative map is a mean of frame-to-frame differences and
   can contain negative values if an input mask shrinks; this behavior is
   retained and made explicit.
-- Correcting the recovered row/column and raster-cropping defects can change
-  selected scenario IDs. The published 12-layout/474-scenario Tables 2/3 list
-  in `splits/` is therefore an authoritative recovered experiment manifest,
-  not an output we claim the corrected implementation reproduces bit-for-bit.
+- Raster-cropping differences can change selected scenario IDs. The published
+  12-layout/474-scenario Tables 2/3 list in `splits/` is therefore an
+  authoritative recovered experiment manifest, not an output we claim the
+  implementation reproduces bit-for-bit.
 - The pipeline begins with an already downloaded Sim2Real-Fire export. It does
   not reproduce upstream physical simulations. No producer for the historical
   `config_s2r.json` offsets was recovered; that versioned artifact is consumed

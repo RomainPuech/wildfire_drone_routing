@@ -14,11 +14,10 @@ It covers:
 6. generation of auditable scenario metadata.
 
 The raw physical fire simulations are upstream Sim2Real-Fire outputs; this
-repository curates rather than regenerates them. Original research
-notebooks/scripts are preserved under `code/dataset_curation/legacy/`. The
-supported implementation fixes their row/column, nondeterminism, destructive
-file handling, and raster-alignment defects, so corrected selections may not
-be ID-identical to the historical release.
+repository curates rather than regenerates them. The supported implementation
+uses deterministic selection, non-destructive file handling, and exact-grid
+raster alignment, so selections may not be ID-identical to the historical
+release.
 
 The exact 12-layout/474-scenario paper run list is the authoritative recovered
 experiment manifest under [`splits/`](../splits/), not a claimed bit-for-bit

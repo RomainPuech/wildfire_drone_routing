@@ -23,10 +23,10 @@ dataset.
 3. **Resulting split** — 12 layouts, 474 unique (layout, scenario) pairs.
 
 The checked-in 474-row list is the authoritative recovered experiment
-manifest. Because the corrected reviewer-facing curation code fixes historical
-row/column and raster-alignment defects, we do not claim that rerunning it will
-regenerate this exact list. Seven one-scenario layouts in the run list also
-postdate the frozen 49-layout `scenario_summary.csv`.
+manifest. Because the reviewer-facing curation code changes historical raster
+alignment, we do not claim that rerunning it will regenerate this exact list.
+Seven one-scenario layouts in the run list also postdate the frozen 49-layout
+`scenario_summary.csv`.
 
 ## Authoritative source files
 

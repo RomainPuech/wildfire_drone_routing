@@ -133,6 +133,8 @@ def select_scenarios(
             for _, item in layout_fires.iterrows():
                 xs, ys = transform("EPSG:4326", grid.crs, [item.geometry.x], [item.geometry.y])
                 row, col = rowcol(grid.transform, xs[0], ys[0])
+                if not date_aware:
+                    row, col = col, row
                 discovery = pd.to_datetime(item["discovery_date"], utc=True, errors="coerce")
                 fire_records.append(
                     FireRecord(

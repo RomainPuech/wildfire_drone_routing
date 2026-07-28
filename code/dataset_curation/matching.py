@@ -1,8 +1,4 @@
-"""Pure, deterministic scenario-matching logic.
-
-All grid coordinates in this package are ``(row, column)``.  This fixes the
-mixed row/column convention in the historical notebooks.
-"""
+"""Pure, deterministic scenario-matching logic."""
 
 from __future__ import annotations
 

@@ -174,9 +174,14 @@ def test_georeferenced_selection_uses_portable_grid_path(tmp_path):
     dataset = tmp_path / "raw"
     layout = dataset / "0016_03070"
     vegetation = layout / "Vegetation_Map"
-    masks = layout / "Satellite_Images_Mask" / "0016_00001"
+    masks_root = layout / "Satellite_Images_Mask"
+    space_masks = masks_root / "0016_00001"
+    date_masks = masks_root / "0016_00002"
+    weather = layout / "Weather_Data"
     vegetation.mkdir(parents=True)
-    masks.mkdir(parents=True)
+    space_masks.mkdir(parents=True)
+    date_masks.mkdir(parents=True)
+    weather.mkdir()
     grid_transform = from_origin(500000, 4100000, 30, 30)
     profile = {
         "driver": "GTiff",
@@ -189,9 +194,18 @@ def test_georeferenced_selection_uses_portable_grid_path(tmp_path):
     }
     with rasterio.open(vegetation / "Existing_Vegetation_Cover.tif", "w", **profile) as sink:
         sink.write(np.ones((3, 4), dtype=np.uint8), 1)
-    ignition = np.zeros((3, 4), dtype=np.uint8)
-    ignition[1, 2] = 255
-    Image.fromarray(ignition).save(masks / "out1.jpg", quality=100, subsampling=0)
+    space_ignition = np.zeros((3, 4), dtype=np.uint8)
+    space_ignition[2, 1] = 255
+    Image.fromarray(space_ignition).save(
+        space_masks / "out1.jpg", quality=100, subsampling=0
+    )
+    date_ignition = np.zeros((3, 4), dtype=np.uint8)
+    date_ignition[1, 2] = 255
+    Image.fromarray(date_ignition).save(
+        date_masks / "out1.jpg", quality=100, subsampling=0
+    )
+    (weather / "0016_00001.txt").write_text("2020 07 03 0000\n")
+    (weather / "0016_00002.txt").write_text("2020 07 03 0000\n")
 
     east, north = xy(grid_transform, 1, 2, offset="center")
     lon, lat = transform("EPSG:32611", "EPSG:4326", [east], [north])
@@ -214,5 +228,19 @@ def test_georeferenced_selection_uses_portable_grid_path(tmp_path):
     with manifest.open(newline="") as stream:
         row = next(csv.DictReader(stream))
     assert row["scenario_id"] == "0016_00001"
-    assert row["fire_row"] == row["ignition_row"] == "1"
-    assert row["fire_col"] == row["ignition_col"] == "2"
+    assert row["fire_row"] == row["ignition_row"] == "2"
+    assert row["fire_col"] == row["ignition_col"] == "1"
+
+    historical_manifest = tmp_path / "selection_historical.csv"
+    assert select_scenarios(
+        dataset,
+        fires_path,
+        footprints,
+        historical_manifest,
+        date_aware=True,
+    ) == (1, 1)
+    with historical_manifest.open(newline="") as stream:
+        historical_row = next(csv.DictReader(stream))
+    assert historical_row["scenario_id"] == "0016_00002"
+    assert historical_row["fire_row"] == historical_row["ignition_row"] == "1"
+    assert historical_row["fire_col"] == historical_row["ignition_col"] == "2"
