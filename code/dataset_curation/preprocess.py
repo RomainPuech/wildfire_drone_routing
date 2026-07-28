@@ -71,8 +71,7 @@ def empirical_burn_map(
             )
         stop = offset + len(values)
         total[offset:stop] += values
-        # Offset timesteps are represented as pre-ignition zero frames, as in
-        # the recovered config-aware aggregation.
+        # Offset timesteps are represented as pre-ignition zero frames.
         counts[:stop] += 1
     valid = counts > 0
     total[valid] /= counts[valid, None, None]

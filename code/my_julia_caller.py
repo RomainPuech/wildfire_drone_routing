@@ -43,9 +43,6 @@ def initialize_julia_session():
     print("initializing the drone julia module")
     Main.include("julia/drone_routing_opt.jl")
 
-    print("initializing the TOP julia module")
-    Main.include("julia/TOP.jl")
-
     print("Julia session initialized.")
     _julia_initialized = True
 

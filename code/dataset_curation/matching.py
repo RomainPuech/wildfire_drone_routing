@@ -61,8 +61,8 @@ def match_scenarios(
 
     Input order does not affect results.  Date-aware matching prioritizes day
     difference, then Chebyshev and Manhattan distance.  Space-only matching
-    prioritizes squared Euclidean distance, matching the recovered "closest"
-    behavior. Remaining ties use a seeded stable digest and scenario ID.
+    prioritizes squared Euclidean distance. Remaining ties use a seeded
+    stable digest and scenario ID.
     """
     used = set(excluded_scenarios)
     matched: list[Match] = []

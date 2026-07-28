@@ -9,5 +9,3 @@ Within the Python backend, select the MILP solver via `WFDRONE_OPT_SOLVER`:
 - Default: HiGHS (`WFDRONE_OPT_SOLVER=highs`)
 - Optional open-source: SCIP (`WFDRONE_OPT_SOLVER=scip`, via `pyscipopt` / SCIP)
 - Optional commercial: Gurobi (`WFDRONE_OPT_SOLVER=gurobi`)
-
-**Not ported:** `julia/TOP.jl` / PSO team-orienteering helpers remain Julia-only.

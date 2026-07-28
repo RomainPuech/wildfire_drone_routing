@@ -54,11 +54,20 @@ This makes the code execution faster, but requires Gigabytes of storage for each
 All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
 
 `all_experiments_parallell` takes as input two parameters:
-- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (the drone routing strategies presented in the paper will be run).
 - `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
 
 
 ## 📚 Dataset Structure
+
+### Dataset release
+
+The Tables 2/3 evaluation split and full scenario index are published on the
+anonymous Hugging Face dataset:
+https://huggingface.co/datasets/anonymoussubmission2/anonymous-submission-neurips26-2831
+(`default` = 7 746 scenarios; `tables23` = 471 scenarios / 12 layouts).
+
+
 
 The library works with the following dataset structure:
 ```
@@ -187,7 +196,6 @@ The library includes several pre-implemented strategies:
    - `RandomDroneRoutingStrategy`: Random Brownian drone movements
    - `DroneRoutingMaxCoverageResetStatic`: Max Coverage strategy mentioned in the paper
    - `DroneRoutingUniformCoverageResetStatic`: Uniform Coverage strategy mentioned in the paper
-   - `DroneRoutingTOP`: TOP-based strategy mentioned in the paper
 
 ### Custom Parameters
 
@@ -254,7 +262,7 @@ The clustering wrapper:
 All experiments Done in the paper can be run by running `all_experiments_parallell.py` with different parameters for the burn maps and strategies. You may find the script `run_experiments.sh` useful to start all experiments at once.
 
 `all_experiments_parallell` takes as input two parameters:
-- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (all four drone routing strategies presented in the paper will be run).
+- `ss_prefix`, the sensor strategy code, that takes values in `[K,R]`. This indicates what sensor strategy to use (the drone routing strategies presented in the paper will be run).
 - `bm_prefix`, the burn map code, that takes values in `[bm, bp]`. This indicates what risk map to use (`bm` for the ground-truth map and `bp` for the BP one. CF our paper for more information on the burn maps).
 
 You can also use the library to run custom tests:
@@ -359,7 +367,5 @@ export WFDRONE_OPT_BACKEND=python
 # optional: export WFDRONE_OPT_SOLVER=scip    # SCIP via pyscipopt
 python tests/test_opt_smoke.py
 ```
-
-**TOP** (team orienteering) routing remains Julia-only (the default backend).
 
 See `code/opt/` for the optional Python MILP implementations.

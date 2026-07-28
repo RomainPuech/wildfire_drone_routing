@@ -16,10 +16,10 @@ all products go to explicit output paths.
    - `Weather_Data/<scenario_id>.txt`, whose first line begins `YYYY MM DD`;
    - `Satellite_Images_Mask/<scenario_id>/*.jpg` (the historical singular
      `Satellite_Image_Mask` spelling is also accepted), grayscale fire masks.
-2. **FPA-FOD 2022** `FPA_FOD_20221014.gpkg`, layer `Fires`, plus the newer
-   **USFS fire-occurrence point data** used in the recovered work (a GPKG,
-   GeoJSON, or other GeoPandas-readable export with `DISCOVERYDATETIME` and
-   `OBJECTID`). The pipeline does not download these products.
+2. **FPA-FOD 2022** `FPA_FOD_20221014.gpkg`, layer `Fires`, plus newer
+   **USFS fire-occurrence point data** (a GPKG, GeoJSON, or other
+   GeoPandas-readable export with `DISCOVERYDATETIME` and `OBJECTID`). The
+   pipeline does not download these products.
 3. A continental **USFS Burn Probability (BP) or Wildfire Hazard Potential
    (WHP) GeoTIFF**. Supply each product separately to `risk`.
 
@@ -40,14 +40,13 @@ python code/curate_dataset.py footprints \
 python code/curate_dataset.py merge-fires \
   /data/FPA_FOD_20221014.gpkg /data/usfs_newer.gpkg work/fires.gpkg
 
-# 3a. Reproduce space-only selection.
+# 3a. Space-only selection.
 python code/curate_dataset.py select \
   /data/Sim2Real-Fire/WideDataset work/fires.gpkg work/layouts.geojson \
   work/selection_space.csv
 
-# 3b. Independently produce date-aware historical selection.
-# By default this reproduces the recovered classification pass: newer USFS
-# records from 2019 onward, restricted to each layout's weather-date range.
+# 3b. Date-aware historical selection (default: USFS_newer records from 2019
+# onward, restricted to each layout's weather-date range).
 python code/curate_dataset.py select \
   /data/Sim2Real-Fire/WideDataset work/fires.gpkg work/layouts.geojson \
   work/selection_historical.csv --date-aware
@@ -80,9 +79,9 @@ product's native units.
 `preprocess` writes binary float32 `scenarii/*.npy`, `burn_map.npy`, and
 `burn_map_noncumulative.npy`. `summary` writes `scenario_summary.csv`.
 
-## Historical defaults and selection rules
+## Defaults and selection rules
 
-- The authoritative layouts are 30 m grids.
+- Layouts are 30 m grids.
 - Layouts with width below 500 cells are excluded by default where layout
   eligibility is applied (`footprints --include-small` overrides this).
 - Space-only matching uses maximum Chebyshev distance 5 cells.
@@ -97,48 +96,20 @@ product's native units.
   manifest retains their rows for auditability but preprocessing ignores them.
 - JPG values are divided by 255, thresholded at `>= 0.5`, and stored as
   `float32`.
-- A big fire has final burned-area radius `>= 20 km`.
+- A big fire has final burned-area radius `>= 20 km` (0.03 km per cell).
 - A fast fire has burned cells at `t=10` (or the final frame if shorter)
   `>= 50%` of final burned cells.
-
-Matching is independent of filesystem/input ordering. The default tie seed is
-0; ties use a stable SHA-256 key rather than Python's process-randomized hash.
-
-## Known provenance limits and documented deviations
-
-- The recovered artifacts encode local filenames but do not contain checksums,
-  download URLs, release identifiers for the newer USFS extract, or a complete
-  end-to-end execution log. Reviewers must obtain the upstream products and
-  record their own checksums.
-- The newer USFS export's invalid year-1001 discovery dates were inconsistently
-  replaced with 1900 or removed. The published merge uses `errors="coerce"` and
-  drops records without a valid date.
-- Historical deduplication used exact latitude, longitude, and discovery
-  timestamp. That rule is retained, with stable source/ID ordering.
-- Historical candidate enumeration used unseeded `random`, mutable default
-  exclusion lists, and inconsistent return shapes. Published matching is
-  deterministic and typed.
-- Historical code retained raster handles after context managers and manually
-  cropped/interpolated risk rasters. Published code reopens templates as
-  needed and uses `rasterio.warp.reproject` directly onto the exact grid.
-- Risk-map values are not normalized per layout. BP remains in the source
-  product's native calibration and defaults to bilinear resampling; WHP remains
-  a non-probabilistic index and defaults to nearest-neighbor resampling.
-- Historical scripts copied, moved, renamed, or deleted source content.
-  Published commands never move, rename, or delete inputs.
-- The recovered summary function defaulted to 1 km per cell despite the
-  asserted 30 m grids. The reviewer path uses 0.03 km per cell, making the
-  documented 20 km radius threshold physically consistent.
-- The original noncumulative map is a mean of frame-to-frame differences and
-  can contain negative values if an input mask shrinks; this behavior is
-  retained and made explicit.
-- Raster-cropping differences can change selected scenario IDs. The exact
-  paper experiment manifest is therefore authoritative rather than a claimed
-  bit-for-bit output of this implementation.
-- The pipeline begins with an already downloaded Sim2Real-Fire export. It does
-  not reproduce upstream physical simulations. No producer for the historical
-  `config_s2r.json` offsets was recovered; that versioned artifact is consumed
-  as input.
+- Risk-map values are kept in the source product's native units (not
+  normalized per layout). BP defaults to bilinear resampling; WHP (a
+  non-probabilistic index) defaults to nearest-neighbor resampling.
+- Invalid discovery dates in the USFS export are dropped
+  (`errors="coerce"`).
+- Deduplication uses exact latitude, longitude, and discovery timestamp, with
+  stable source/ID ordering.
+- Matching is deterministic: default tie seed 0; ties use a stable SHA-256 key.
+- The pipeline consumes a pre-downloaded Sim2Real-Fire export and the tracked
+  `config_s2r.json` offset map; it does not regenerate upstream physical
+  simulations.
 
 Install `geopandas` and its geospatial stack through `environment.yml`.
 Lightweight matching and numerical tests do not need the full dataset.

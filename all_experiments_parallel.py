@@ -102,15 +102,17 @@ def run_all_drone_strategies(sensor_strategy, ss_prefix, bm_prefix):
     #         os.remove("tmp_burnmaps/" + file)
 
     run_one_drone_strategy(sensor_strategy, "RandomDroneRoutingStrategy", custom_initialization_parameters_function, f"{ss_prefix}R{bm_prefix}")
-    run_one_drone_strategy(sensor_strategy, "DroneRoutingTOP", init_func, f"{ss_prefix}TOP{bm_prefix}_parallel")
     run_one_drone_strategy(sensor_strategy, "DroneRoutingUniformCoverageResetStatic", init_func, f"{ss_prefix}U{bm_prefix}_parallel")
     run_one_drone_strategy(sensor_strategy, "DroneRoutingMaxCoverageResetStatic", init_func, f"{ss_prefix}M{bm_prefix}_parallel")
      
     
 
 if __name__ == "__main__":
-    from julia import Julia
-    Julia(compiled_modules=False)
+    # Only spin up Julia when using the Julia/Gurobi backend (default).
+    # Set WFDRONE_OPT_BACKEND=python to use HiGHS/SCIP without Julia.
+    if os.environ.get("WFDRONE_OPT_BACKEND", "julia").lower() == "julia":
+        from julia import Julia
+        Julia(compiled_modules=False)
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Run all drone strategy experiments')
     parser.add_argument('--ss_prefix', type=str, required=True, 
