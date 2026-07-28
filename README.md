@@ -365,7 +365,7 @@ export WFDRONE_OPT_BACKEND=julia
 export WFDRONE_OPT_BACKEND=python
 # optional: export WFDRONE_OPT_SOLVER=highs   # default under python
 # optional: export WFDRONE_OPT_SOLVER=scip    # SCIP via pyscipopt
-python tests/test_opt_smoke.py
+# then run placement/routing strategies with WFDRONE_OPT_BACKEND=python
 ```
 
 See `code/opt/` for the optional Python MILP implementations.
