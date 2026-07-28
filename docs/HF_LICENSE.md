@@ -1,6 +1,6 @@
 # Hugging Face dataset licensing (DroneBench)
 
-The [DroneBench Hugging Face dataset](https://huggingface.co/datasets/MasterYoda293/DroneBench) is **not** a pure MIT-licensed release. It is a composite benchmark derived from upstream sources with distinct licenses:
+The [anonymous DroneBench Hugging Face dataset](https://huggingface.co/datasets/anonymoussubmission2/anonymous-submission-neurips26-2831/tree/main) is **not** a pure MIT-licensed release. It is a composite benchmark derived from upstream sources with distinct licenses:
 
 | Component | License |
 |-----------|---------|
